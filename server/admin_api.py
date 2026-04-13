@@ -980,3 +980,300 @@ async def get_stats(
         "times": times,
     }
 
+
+# ── Cookie 管理 API ──
+
+
+def _get_or_create_data_dir() -> Path:
+    """获取或创建 data 目录（用于存储 cookies 等运行时数据）"""
+    data_dir = settings.project_root / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    return data_dir
+
+
+def _get_cookies_storage_path() -> Path:
+    """获取 cookies 存储路径（固定在 data 目录）"""
+    return _get_or_create_data_dir() / "cookies.txt"
+
+
+def _parse_cookies_domains(cookies_path: Path) -> list[str]:
+    """
+    解析 Netscape cookies 文件，提取所有域名。
+
+    Returns:
+        去重后的域名列表。
+    """
+    domains = set()
+    try:
+        with open(cookies_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                # 跳过注释和空行
+                if not line or line.startswith("#"):
+                    continue
+                parts = line.split("\t")
+                if len(parts) >= 1:
+                    domains.add(parts[0])
+    except Exception as e:
+        logger.warning("解析 cookies 域名失败: %s", e)
+    return sorted(domains)
+
+
+def _backup_cookies_file(cookies_path: Path) -> Path | None:
+    """
+    备份现有 cookies 文件。
+
+    Returns:
+        备份文件路径，如果不存在返回 None。
+    """
+    if not cookies_path.exists():
+        return None
+
+    timestamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    backup_path = cookies_path.parent / f"cookies.txt.bak.{timestamp}"
+    try:
+        shutil.copy2(cookies_path, backup_path)
+        logger.info("已备份 cookies 文件: %s", backup_path.name)
+        return backup_path
+    except Exception as e:
+        logger.error("备份 cookies 失败: %s", e)
+        return None
+
+
+def _validate_cookies_format(content: str) -> tuple[bool, str]:
+    """
+    验证 cookies 内容格式（Netscape 格式）。
+
+    Returns:
+        (是否有效, 错误信息)
+    """
+    lines = content.strip().split("\n")
+    valid_lines = 0
+
+    for i, line in enumerate(lines, 1):
+        line = line.strip()
+        # 跳过注释和空行
+        if not line or line.startswith("#"):
+            continue
+
+        parts = line.split("\t")
+        if len(parts) < 6:
+            return False, f"第 {i} 行格式错误：Netscape 格式应包含 6 个制表符分隔字段"
+
+        valid_lines += 1
+
+    if valid_lines == 0:
+        return False, "未找到有效的 cookies 数据"
+
+    return True, ""
+
+
+def _reload_cookies_in_downloader(cookies_path: Path) -> None:
+    """
+    热重载下载器的 cookies 配置。
+
+    调用 Downloader.reload_cookies() 方法。
+    """
+    try:
+        qm = _get_queue_manager()
+        qm.downloader.reload_cookies(cookies_path if cookies_path.exists() else None)
+    except Exception as e:
+        logger.error("热重载 cookies 失败: %s", e)
+        raise HTTPException(status_code=500, detail=f"热重载 cookies 失败: {e}") from e
+
+
+@router.get("/cookies/status")
+async def get_cookies_status(
+    payload: dict = Depends(verify_admin_authorization),
+) -> dict:
+    """
+    获取当前 cookies 状态信息。
+
+    返回：
+    - has_cookies: 是否存在 cookies 文件
+    - file_size: 文件大小（字节）
+    - modified_time: 最后修改时间
+    - domains: 包含的域名列表
+    - source: 来源（.env 配置或上传）
+    """
+    try:
+        # 优先检查 data 目录的 cookies（上传的）
+        data_cookies = _get_cookies_storage_path()
+        env_cookies = settings.get_cookies_file()
+
+        # 确定当前使用的 cookies 文件
+        active_cookies = data_cookies if data_cookies.exists() else env_cookies
+
+        if not active_cookies or not active_cookies.exists():
+            return {
+                "has_cookies": False,
+                "source": "none",
+                "message": "未配置 cookies 文件",
+            }
+
+        # 获取文件信息
+        stat = active_cookies.stat()
+        file_size = stat.st_size
+        modified_time = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat()
+
+        # 解析域名
+        domains = _parse_cookies_domains(active_cookies)
+
+        # 判断来源
+        if active_cookies == data_cookies:
+            source = "upload"
+        else:
+            source = "env_config"
+
+        return {
+            "has_cookies": True,
+            "file_size": file_size,
+            "file_size_human": f"{file_size / 1024:.1f} KB",
+            "modified_time": modified_time,
+            "domains": domains,
+            "domain_count": len(domains),
+            "source": source,
+            "file_path": str(active_cookies.relative_to(settings.project_root)),
+        }
+    except Exception as e:
+        logger.error("获取 cookies 状态失败: %s", e)
+        raise HTTPException(status_code=500, detail=f"获取 cookies 状态失败: {e}") from e
+
+
+@router.post("/cookies/upload")
+async def upload_cookies(
+    request: Request,
+    payload: dict = Depends(verify_admin_authorization),
+) -> dict:
+    """
+    上传/更新 cookies 文件。
+
+    支持两种方式：
+    1. multipart/form-data 文件上传（file 字段）
+    2. JSON 请求体（content 字段，文本内容）
+
+    自动备份旧文件，热重载下载器配置。
+    """
+    cookies_path = _get_cookies_storage_path()
+    content = ""
+
+    try:
+        # 判断请求类型
+        content_type = request.headers.get("Content-Type", "")
+
+        if "multipart/form-data" in content_type:
+            # 文件上传方式
+            form = await request.form()
+            file = form.get("file")
+            if not file:
+                raise HTTPException(status_code=400, detail="缺少 file 字段")
+
+            # 检查文件类型
+            if hasattr(file, "filename") and file.filename:
+                if not file.filename.endswith(".txt"):
+                    raise HTTPException(status_code=400, detail="仅支持 .txt 格式文件")
+
+            # 读取内容
+            if hasattr(file, "file") and hasattr(file.file, "read"):
+                # FastAPI UploadFile 对象
+                content = (await file.read()).decode("utf-8")
+            elif hasattr(file, "read"):
+                # 其他文件对象
+                content = file.read().decode("utf-8")
+            else:
+                content = str(file)
+
+        elif "application/json" in content_type:
+            # JSON 文本方式
+            try:
+                body = await request.json()
+                content = body.get("content", "").strip()
+            except Exception:
+                raise HTTPException(status_code=400, detail="请求体格式错误")
+        else:
+            raise HTTPException(status_code=400, detail="不支持的 Content-Type")
+
+        if not content:
+            raise HTTPException(status_code=400, detail="cookies 内容为空")
+
+        # 验证格式
+        is_valid, error_msg = _validate_cookies_format(content)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=f"cookies 格式无效: {error_msg}")
+
+        # 检查大小限制（1MB）
+        if len(content.encode("utf-8")) > 1024 * 1024:
+            raise HTTPException(status_code=400, detail="cookies 文件过大（最大 1MB）")
+
+        # 备份旧文件
+        backup_path = _backup_cookies_file(cookies_path)
+
+        # 保存新 cookies
+        try:
+            with open(cookies_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            logger.info("cookies 文件已更新: %s (%d bytes)", cookies_path, len(content))
+        except Exception as e:
+            logger.error("保存 cookies 失败: %s", e)
+            raise HTTPException(status_code=500, detail=f"保存 cookies 失败: {e}") from e
+
+        # 热重载下载器
+        _reload_cookies_in_downloader(cookies_path)
+
+        # 解析域名
+        domains = _parse_cookies_domains(cookies_path)
+
+        return {
+            "status": "ok",
+            "message": "cookies 上传成功",
+            "file_size": len(content.encode("utf-8")),
+            "file_size_human": f"{len(content.encode('utf-8')) / 1024:.1f} KB",
+            "domains": domains,
+            "domain_count": len(domains),
+            "backup": backup_path.name if backup_path else None,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("上传 cookies 失败: %s", e)
+        raise HTTPException(status_code=500, detail=f"上传 cookies 失败: {e}") from e
+
+
+@router.delete("/cookies")
+async def delete_cookies(
+    payload: dict = Depends(verify_admin_authorization),
+) -> dict:
+    """
+    删除上传的 cookies 文件，恢复到 .env 配置的路径。
+
+    会自动备份后删除。
+    """
+    cookies_path = _get_cookies_storage_path()
+
+    if not cookies_path.exists():
+        raise HTTPException(status_code=404, detail="未找到上传的 cookies 文件")
+
+    try:
+        # 备份
+        backup_path = _backup_cookies_file(cookies_path)
+
+        # 删除
+        cookies_path.unlink()
+        logger.info("已删除上传的 cookies 文件")
+
+        # 热重载下载器（恢复到 .env 配置）
+        env_cookies = settings.get_cookies_file()
+        _reload_cookies_in_downloader(env_cookies if env_cookies else Path("/nonexistent"))
+
+        return {
+            "status": "ok",
+            "message": "cookies 已删除，恢复到 .env 配置",
+            "backup": backup_path.name if backup_path else None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("删除 cookies 失败: %s", e)
+        raise HTTPException(status_code=500, detail=f"删除 cookies 失败: {e}") from e
+

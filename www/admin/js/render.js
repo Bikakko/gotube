@@ -101,6 +101,11 @@ function renderNavbar() {
                 }) : null,
                 el('button', {
                     className: 'btn btn-secondary',
+                    textContent: '🍪 Cookie 管理',
+                    onClick: () => window.showCookiesManagement(),
+                }),
+                el('button', {
+                    className: 'btn btn-secondary',
                     textContent: '🚪 退出',
                     onClick: handleLogout,
                 }),

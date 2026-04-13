@@ -142,6 +142,21 @@ class Downloader:
         # 启动时清理上次遗留的临时下载文件
         self._cleanup_orphaned_temp_files()
 
+    def reload_cookies(self, cookies_file: Path | None) -> None:
+        """
+        热重载 cookies 文件配置。
+
+        Args:
+            cookies_file: 新的 cookies 文件路径，None 表示清空。
+        """
+        old_file = self.cookies_file
+        self.cookies_file = cookies_file
+
+        if self.cookies_file and self.cookies_file.exists():
+            logger.info("Cookies 文件已热重载: %s -> %s", old_file, self.cookies_file)
+        else:
+            logger.warning("Cookies 文件已清空（旧值: %s）", old_file)
+
     def _check_dependencies(self) -> None:
         """检查运行时依赖（ffmpeg、cookies 文件等）"""
         # 1. 检查 ffmpeg
