@@ -1,0 +1,57 @@
+# 敏感信息 - 每个环境独立管理
+.env
+cookies.txt
+
+# 运行时文件 - 自动生成
+.server.pid
+server.log
+
+# 开发依赖 - 生产不需要
+requirements-dev.txt
+
+# 测试 - 生产不需要
+tests/
+.pytest_cache/
+.ruff_cache/
+
+# 虚拟环境 - 生产独立创建
+venv/
+
+# 运行时数据 - 生产独立存储
+downloads/
+gotube.db
+
+# AI 助手配置 - 开发专用
+QWEN.md
+.qwen/
+
+# 开发调试工具
+view_debug_log.sh
+
+# 开发文档 - 不部署到生产
+www/ADMIN_PLAN.md
+www/DEV_LOG.md
+www/WORKLOG.md
+WORK_LOG.md
+server_code_review_report.md
+CONCEPT_V3.md
+PLAN_V3.md
+REVIEW_20260412.md
+SYNC_PRODUCTION.md
+
+# 备份文件 - 不要部署
+backups/
+*.bak*
+server/*.bak*
+
+# Python 编译产物
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+
+# 操作系统文件
+.DS_Store
+Thumbs.db

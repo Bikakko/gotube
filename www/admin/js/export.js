@@ -1,0 +1,105 @@
+/**
+ * GoTube Admin - 导出功能模块
+ * ZIP、JSON、m3u8 导出
+ */
+
+/**
+ * 导出 ZIP
+ */
+async function handleExportZip() {
+    hideAllDropdowns();
+
+    const useAll = state.selectedVideos.size === 0;
+
+    try {
+        const response = await apiFetch('/export/zip', {
+            method: 'POST',
+            body: JSON.stringify({
+                all: useAll,
+                filenames: useAll ? [] : Array.from(state.selectedVideos),
+            }),
+            rawResponse: true,
+        });
+
+        // 触发下载
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'gotube_export.zip';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+    } catch (err) {
+        console.error('导出 ZIP 失败:', err);
+        alert('导出 ZIP 失败: ' + err.message);
+    }
+}
+
+/**
+ * 导出 JSON
+ */
+async function handleExportJson() {
+    hideAllDropdowns();
+
+    try {
+        const response = await apiFetch('/export/json', {
+            method: 'POST',
+            rawResponse: true,
+        });
+
+        // 触发下载
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'gotube_metadata.json';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+    } catch (err) {
+        console.error('导出 JSON 失败:', err);
+        alert('导出 JSON 失败: ' + err.message);
+    }
+}
+
+/**
+ * 导出 m3u8
+ */
+async function handleExportM3u8() {
+    hideAllDropdowns();
+
+    const useAll = state.selectedVideos.size === 0;
+
+    try {
+        const response = await apiFetch('/export/m3u8', {
+            method: 'POST',
+            body: JSON.stringify({
+                all: useAll,
+                filenames: useAll ? [] : Array.from(state.selectedVideos),
+            }),
+            rawResponse: true,
+        });
+
+        // 触发下载
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'gotube_playlist.m3u8';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+    } catch (err) {
+        console.error('导出 m3u8 失败:', err);
+        alert('导出 m3u8 失败: ' + err.message);
+    }
+}
+
+// 显式挂载到 window，确保全局可见性
+window.handleExportZip = handleExportZip;
+window.handleExportJson = handleExportJson;
+window.handleExportM3u8 = handleExportM3u8;
