@@ -42,6 +42,9 @@ async function loadVideos() {
         // 重新渲染视频网格
         window.renderVideoGrid();
 
+        // 更新批量操作栏
+        window.updateBatchBar();
+
     } catch (err) {
         console.error('加载视频列表失败:', err);
         alert('加载视频列表失败: ' + err.message);
@@ -190,23 +193,65 @@ async function handleBatchDelete() {
     }
 
     try {
-        await apiFetch('/videos/batch-delete', {
+        const result = await apiFetch('/videos/batch-delete', {
             method: 'POST',
             body: JSON.stringify({
                 filenames: Array.from(state.selectedVideos),
             }),
         });
 
-        const count = state.selectedVideos.size;
+        // 检查后端返回的结果
+        const successCount = result.success || 0;
+        const failedCount = result.failed || 0;
+        const results = result.results || [];
 
-        // 清空选中列表
-        state.selectedVideos.clear();
+        // 只从选中列表中移除成功的视频
+        const successFilenames = results
+            .filter(r => r.status === 'deleted')
+            .map(r => r.filename);
+        successFilenames.forEach(f => state.selectedVideos.delete(f));
 
-        // 重新加载
+        // 更新UI
+        window.updateSelectAllCheckbox();
+        window.updateBatchBar();
+
+        // 重新加载视频列表
         await window.loadVideos();
         await window.loadStats();
 
-        showToast(`成功删除 ${count} 个视频`, 'success');
+        // 显示详细的删除结果
+        if (failedCount > 0) {
+            // 获取失败的文件名和原因
+            const failedItems = results
+                .filter(r => r.status !== 'deleted')
+                .map(r => {
+                    const name = r.filename.split('/').pop() || r.filename;
+                    let reason = r.reason || '未知错误';
+                    // 简化常见错误信息
+                    if (reason.includes('WinError 32') || reason.includes('正在使用此文件')) {
+                        reason = '文件被播放器占用，请先关闭播放器';
+                    } else if (reason.includes('权限')) {
+                        reason = '权限不足';
+                    }
+                    return `• ${name}: ${reason}`;
+                });
+
+            if (successCount > 0) {
+                showToast(
+                    `成功删除 ${successCount} 个，失败 ${failedCount} 个\n${failedItems.join('\n')}`,
+                    'warning',
+                    5000
+                );
+            } else {
+                showToast(
+                    `删除失败 (${failedCount} 个)\n${failedItems.join('\n')}`,
+                    'error',
+                    5000
+                );
+            }
+        } else {
+            showToast(`成功删除 ${successCount} 个视频`, 'success');
+        }
     } catch (err) {
         console.error('批量删除失败:', err);
         showToast('批量删除失败: ' + err.message, 'error');

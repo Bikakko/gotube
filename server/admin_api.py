@@ -130,12 +130,12 @@ async def get_db():
 def _extract_source_from_url(url: str) -> str:
     """从视频 URL 提取来源平台"""
     from urllib.parse import urlparse
-    
+
     try:
         hostname = urlparse(url).hostname or ""
     except Exception:
         return "Unknown"
-    
+
     source_map = {
         "youtube.com": "YouTube",
         "youtu.be": "YouTube",
@@ -150,12 +150,18 @@ def _extract_source_from_url(url: str) -> str:
         "qq.com": "腾讯视频",
         "kuaishou.com": "快手",
     }
-    
+
     for domain, source in source_map.items():
         if domain in hostname:
             return source
-    
+
     return hostname or "Unknown"
+
+
+def _get_queue_manager():
+    """运行时获取 queue_manager，避免循环导入"""
+    from .main import app
+    return app.state.queue_manager
 
 
 def _validate_filename(filename: str, download_dir: Path) -> Path:
@@ -365,9 +371,16 @@ async def list_users(
     """获取用户列表 (仅限 admin)"""
     if payload["role"] != "admin":
         raise HTTPException(status_code=403, detail="权限不足")
-    
+
     users = db.query(User).all()
-    return [u.to_dict() for u in users]
+    result = []
+    for u in users:
+        data = u.to_dict()
+        # 标记 admin 权限账号为系统账号
+        if u.role == "admin":
+            data["is_system_account"] = True
+        result.append(data)
+    return result
 
 
 @router.post("/users", response_model=UserResponse)
@@ -379,16 +392,26 @@ async def create_user(
     """创建新用户 (仅限 admin)"""
     if payload["role"] != "admin":
         raise HTTPException(status_code=403, detail="权限不足")
-    
+
+    # 禁止通过网页创建 admin 权限账号
+    if body.role == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="不可通过网页创建管理员账号，请通过 .env 配置文件管理"
+        )
+
     # 检查用户名冲突
     if db.query(User).filter(User.username == body.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
-    
-    from passlib.hash import bcrypt
-    
+
+    import bcrypt
+
+    salt = bcrypt.gensalt()
+    pwd_hash = bcrypt.hashpw(body.password.encode('utf-8'), salt).decode('utf-8')
+
     new_user = User(
         username=body.username,
-        password_hash=bcrypt.hash(body.password),
+        password_hash=pwd_hash,
         role=body.role,
         is_active=True,
     )
@@ -408,24 +431,31 @@ async def update_user(
     """更新用户信息 (仅限 admin)"""
     if payload["role"] != "admin":
         raise HTTPException(status_code=403, detail="权限不足")
-    
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    
+
+    # 保护 admin 权限账号，只能通过 .env 修改
+    if user.role == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="管理员账号不可修改，请通过 .env 配置文件管理"
+        )
+
     if body.username:
         # 检查冲突
         existing = db.query(User).filter(User.username == body.username).first()
         if existing and existing.id != user_id:
             raise HTTPException(status_code=400, detail="用户名已存在")
         user.username = body.username
-    
+
     if body.role:
         user.role = body.role
-    
+
     if body.is_active is not None:
         user.is_active = body.is_active
-    
+
     db.commit()
     return user.to_dict()
 
@@ -439,14 +469,21 @@ async def delete_user(
     """删除用户 (仅限 admin)"""
     if payload["role"] != "admin":
         raise HTTPException(status_code=403, detail="权限不足")
-    
+
     if user_id == payload["user_id"]:
         raise HTTPException(status_code=400, detail="不能删除当前登录账号")
-    
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    
+
+    # 保护 admin 权限账号
+    if user.role == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="管理员账号不可删除，请通过 .env 配置文件管理"
+        )
+
     db.delete(user)
     db.commit()
     return {"status": "ok"}
@@ -462,30 +499,37 @@ async def change_password(
     """修改密码 (本人或 admin)"""
     is_admin = payload["role"] == "admin"
     is_self = payload["user_id"] == user_id
-    
+
     if not (is_admin or is_self):
         raise HTTPException(status_code=403, detail="权限不足")
-    
+
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
-    
+
+    # 保护 admin 权限账号密码
+    if user.role == "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="管理员账号密码不可修改，请通过 .env 配置文件管理"
+        )
+
     import bcrypt
-    
+
     # 如果不是 admin，必须验证旧密码
     if not is_admin:
         if not body.old_password or not bcrypt.checkpw(body.old_password.encode('utf-8'), user.password_hash.encode('utf-8')):
             raise HTTPException(status_code=400, detail="旧密码错误")
-    
+
     salt = bcrypt.gensalt()
     user.password_hash = bcrypt.hashpw(body.new_password.encode('utf-8'), salt).decode('utf-8')
     db.commit()
-    
+
     # 修改密码后使所有 token 失效
     keys_to_del = [t for t, data in _admin_tokens.items() if data["user_id"] == user_id]
     for k in keys_to_del:
         _admin_tokens.pop(k, None)
-        
+
     return {"status": "ok"}
 
 
@@ -606,7 +650,16 @@ async def delete_video(
             logger.info("已删除空目录: %s", parent_dir)
     except OSError as e:
         logger.warning("删除空目录失败 %s: %s", parent_dir, e)
-    
+
+    # 刷新缓存，避免 hash 索引中残留已删除文件的引用
+    try:
+        qm = _get_queue_manager()
+        qm.downloader.invalidate_file_index_cache()
+        qm.downloader.invalidate_hash_index()
+        logger.info("删除视频后已刷新缓存")
+    except Exception as e:
+        logger.warning("删除视频后刷新缓存失败: %s", e)
+
     return {"status": "ok", "deleted_files": deleted_files}
 
 
@@ -671,6 +724,17 @@ async def batch_delete_videos(
             results.append({"filename": filename, "status": "error", "reason": str(e)})
     
     success = sum(1 for r in results if r["status"] == "deleted")
+
+    # 如果有文件被删除，刷新缓存
+    if success > 0:
+        try:
+            qm = _get_queue_manager()
+            qm.downloader.invalidate_file_index_cache()
+            qm.downloader.invalidate_hash_index()
+            logger.info("批量删除后已刷新缓存")
+        except Exception as e:
+            logger.warning("批量删除后刷新缓存失败: %s", e)
+
     return {
         "status": "ok",
         "total": len(filenames),

@@ -20,7 +20,7 @@ from .api import get_queue_manager
 from .api import router as api_router
 from .admin_api import router as admin_api_router
 from .config import settings
-from .db import init_db, get_session, ensure_default_admin
+from .db import init_db, get_session, sync_admins_from_env
 from .downloader import VIDEO_EXTENSIONS, Downloader, DownloadTask
 from .queue_manager import QueueManager
 
@@ -31,14 +31,26 @@ PROJECT_ROOT = settings.project_root
 WWW_DIR = PROJECT_ROOT / "www"
 LOG_FILE = PROJECT_ROOT / "server.log"
 
-# 文件日志处理器（RotatingFileHandler，最大 10MB，保留 3 个备份）
+# 配置根日志级别（从 .env 读取）
+log_level = getattr(logging, settings.log_level, logging.ERROR)
+logging.getLogger().setLevel(log_level)
+
+# 控制台日志处理器（实时输出到终端）
+_ch = logging.StreamHandler()
+_ch.setFormatter(
+    logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+)
+_ch.setLevel(log_level)
+logging.getLogger().addHandler(_ch)
+
+# 文件日志处理器（RotatingFileHandler，只记录 ERROR 级别，最大 5MB，保留 5 个备份）
 _fh = logging.handlers.RotatingFileHandler(
-    LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8"
+    LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
 )
 _fh.setFormatter(
     logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 )
-_fh.setLevel(logging.INFO)
+_fh.setLevel(logging.ERROR)
 logging.getLogger().addHandler(_fh)
 
 
@@ -50,7 +62,7 @@ async def lifespan(app: FastAPI):
     
     # 确保存在默认管理员
     with get_session() as session:
-        ensure_default_admin(session, settings.admin_user, settings.admin_pass)
+        sync_admins_from_env(session, settings.admins)
 
     downloader = Downloader()
     queue_mgr = QueueManager(downloader, max_concurrent=settings.max_concurrent)
@@ -76,7 +88,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GoTube",
     description="自托管多平台视频下载工具",
-    version="3.0.0",
+    version="3.0.1",
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,

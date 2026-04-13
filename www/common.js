@@ -28,6 +28,7 @@ function el(tag, attrs = {}, children = []) {
         if (k === 'className') elem.className = v;
         else if (k === 'innerHTML') elem.innerHTML = v;
         else if (k === 'textContent') elem.textContent = v;
+        else if (k === 'checked') elem.checked = v;
         else if (k.startsWith('on')) elem.addEventListener(k.slice(2).toLowerCase(), v);
         else elem.setAttribute(k, v);
     }

@@ -81,35 +81,36 @@ function renderUsersTable(users) {
         ]),
         el('tbody', {}, users.map(user => {
             const isSelf = state.currentUser && state.currentUser.id === user.id;
-            
+            const isSystemAccount = user.is_system_account || user.role === 'admin';
+
             return el('tr', { className: user.is_active ? '' : 'inactive' }, [
                 el('td', { textContent: user.id }),
-                el('td', { textContent: user.username + (isSelf ? ' (我)' : '') }),
+                el('td', { textContent: isSystemAccount ? `管理员 ${user.username}` : user.username + (isSelf ? ' (我)' : '') }),
                 el('td', { textContent: formatRole(user.role) }),
                 el('td', {}, [
-                    el('span', { 
+                    el('span', {
                         className: `status-badge ${user.is_active ? 'active' : 'inactive'}`,
                         textContent: user.is_active ? '启用' : '禁用'
                     })
                 ]),
                 el('td', { textContent: user.last_login ? new Date(user.last_login).toLocaleString() : '从未登录' }),
                 el('td', { className: 'user-actions' }, [
-                    el('button', {
+                    isSystemAccount ? null : el('button', {
                         className: 'action-btn-sm',
                         textContent: '📝 编辑',
                         onClick: () => showUserEditModal(user),
                     }),
-                    el('button', {
+                    isSystemAccount ? null : el('button', {
                         className: 'action-btn-sm',
                         textContent: '🔑 密码',
                         onClick: () => showChangePasswordModal(user),
                     }),
-                    !isSelf ? el('button', {
+                    !isSelf && !isSystemAccount ? el('button', {
                         className: `action-btn-sm ${user.is_active ? 'danger' : 'success'}`,
                         textContent: user.is_active ? '🚫 禁用' : '✅ 启用',
                         onClick: () => toggleUserActive(user),
                     }) : null,
-                    !isSelf ? el('button', {
+                    !isSelf && !isSystemAccount ? el('button', {
                         className: 'action-btn-sm danger',
                         textContent: '🗑️ 删除',
                         onClick: () => handleDeleteUser(user),
@@ -191,7 +192,7 @@ function showUserEditModal(user = null) {
                         id: 'edit-username',
                         value: user ? user.username : '',
                         placeholder: '请输入用户名',
-                        disabled: isEdit // 编辑时通常不允许改用户名，或按需开启
+                        ...(isEdit ? { disabled: true } : {}),
                     }),
                 ]),
                 !isEdit ? el('div', { className: 'form-group' }, [
@@ -206,7 +207,6 @@ function showUserEditModal(user = null) {
                     el('label', { textContent: '角色' }),
                     el('select', { id: 'edit-role' }, [
                         el('option', { value: 'user', textContent: '普通用户', selected: user ? user.role === 'user' : true }),
-                        el('option', { value: 'admin', textContent: '管理员', selected: user ? user.role === 'admin' : false }),
                         el('option', { value: 'readonly', textContent: '只读用户', selected: user ? user.role === 'readonly' : false }),
                     ]),
                 ]),

@@ -134,6 +134,7 @@ async function handleLogin() {
 
         // 登录成功
         localStorage.setItem('gotube_admin_token', data.token);
+        state.currentUser = data.user;  // 立即更新用户状态
         hideLoginForm();
         window.renderPage();
     } catch (err) {

@@ -366,4 +366,12 @@ async def delete_download(
     except OSError as e:
         logger.warning("删除空目录失败 %s: %s", parent_dir, e)
 
+    # 刷新缓存，避免 hash 索引中残留已删除文件的引用
+    try:
+        qm.downloader.invalidate_file_index_cache()
+        qm.downloader.invalidate_hash_index()
+        logger.info("删除视频后已刷新缓存")
+    except Exception as e:
+        logger.warning("删除视频后刷新缓存失败: %s", e)
+
     return DeleteDownloadResponse(status="ok", deleted_files=deleted_files)

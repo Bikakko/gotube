@@ -73,7 +73,53 @@ function toggleVideoSelection(filename, selected) {
     } else {
         state.selectedVideos.delete(filename);
     }
+    window.updateSelectAllCheckbox();
     window.updateBatchBar();
+}
+
+/**
+ * 全选/取消全选
+ */
+function toggleSelectAll(selectAll) {
+    if (selectAll) {
+        // 全选当前页显示的所有视频
+        state.filteredVideos.forEach(video => {
+            state.selectedVideos.add(video.filename);
+        });
+    } else {
+        // 取消全选
+        state.selectedVideos.clear();
+    }
+    window.updateSelectAllCheckbox();
+    window.updateBatchBar();
+
+    // 重新渲染视频网格以更新所有选择按钮状态
+    window.renderVideoGrid();
+}
+
+/**
+ * 更新全选复选框状态
+ */
+function updateSelectAllCheckbox() {
+    const checkbox = $('#select-all-checkbox');
+    if (!checkbox) return;
+
+    const totalVideos = state.filteredVideos.length;
+    const selectedCount = state.selectedVideos.size;
+
+    if (totalVideos === 0) {
+        checkbox.checked = false;
+        checkbox.indeterminate = false;
+    } else if (selectedCount === 0) {
+        checkbox.checked = false;
+        checkbox.indeterminate = false;
+    } else if (selectedCount >= totalVideos) {
+        checkbox.checked = true;
+        checkbox.indeterminate = false;
+    } else {
+        checkbox.checked = false;
+        checkbox.indeterminate = true; // 部分选中
+    }
 }
 
 /**
@@ -81,12 +127,11 @@ function toggleVideoSelection(filename, selected) {
  */
 function clearSelection() {
     state.selectedVideos.clear();
+    window.updateSelectAllCheckbox();
     window.updateBatchBar();
 
-    // 取消所有复选框
-    document.querySelectorAll('.video-checkbox').forEach(cb => {
-        cb.checked = false;
-    });
+    // 重新渲染视频网格以更新所有选择按钮状态
+    window.renderVideoGrid();
 }
 
 /**
@@ -123,6 +168,8 @@ window.handleTimeChange = handleTimeChange;
 window.handleTagInputKeydown = handleTagInputKeydown;
 window.removeFilterTag = removeFilterTag;
 window.toggleVideoSelection = toggleVideoSelection;
+window.toggleSelectAll = toggleSelectAll;
+window.updateSelectAllCheckbox = updateSelectAllCheckbox;
 window.clearSelection = clearSelection;
 window.toggleDropdown = toggleDropdown;
 window.hideAllDropdowns = hideAllDropdowns;

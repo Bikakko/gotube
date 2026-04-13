@@ -1,8 +1,8 @@
-GoTube v3.0.0
+GoTube v3.0.1
 =============
 
-Version: 3.0.0
-Release Date: 2026-04-12
+Version: 3.0.1
+Release Date: 2026-04-14
 Description: 自托管多平台视频下载工具 - 数据库化升级版
 
 Key Features:
@@ -23,6 +23,7 @@ Tech Stack:
 - Process Management: systemd
 
 Changelog:
+- v3.0.1: Bug fixes and improvements - 2026-04-14
 - v3.0.0: Major architectural upgrade - SQLite database + User system - 2026-04-12
 - v2.3.5: Admin page optimization and bug fixes - 2026-04-12
 - v2.3: Backup release - 2026-04-12

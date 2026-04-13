@@ -136,8 +136,43 @@ class Downloader:
         # hash → 文件路径的索引（避免递归搜索）
         self._hash_index: dict[str, Path] = {}
 
+        # 启动时依赖检查
+        self._check_dependencies()
+
         # 启动时清理上次遗留的临时下载文件
         self._cleanup_orphaned_temp_files()
+
+    def _check_dependencies(self) -> None:
+        """检查运行时依赖（ffmpeg、cookies 文件等）"""
+        # 1. 检查 ffmpeg
+        import shutil as _shutil
+
+        ffmpeg_path = _shutil.which("ffmpeg")
+        if ffmpeg_path:
+            logger.info("ffmpeg 已就绪: %s", ffmpeg_path)
+        else:
+            logger.error(
+                "ffmpeg 未安装或不在 PATH 中。"
+                "视频下载（尤其是分离音视频合并）将失败。"
+                "请安装 ffmpeg: https://ffmpeg.org/download.html"
+            )
+
+        # 2. 检查 cookies 文件
+        if self.cookies_file and self.cookies_file.exists():
+            logger.info("Cookies 文件已加载: %s", self.cookies_file)
+        else:
+            cookie_path_display = self.cookies_file or settings.get_cookies_file()
+            if not cookie_path_display:
+                logger.warning(
+                    "未配置 Cookies 文件。部分视频站点（如 YouTube）可能需要登录认证。"
+                    "如需使用，请在 .env 中配置 GOTUBE_COOKIES_FILE"
+                )
+            else:
+                logger.warning(
+                    "Cookies 文件不存在: %s。"
+                    "部分视频站点（如 YouTube）可能需要登录认证。",
+                    cookie_path_display,
+                )
 
     def _cleanup_orphaned_temp_files(self) -> None:
         """清理下载目录中残留的 temp_* 临时文件和 .temp_ytdlp 目录"""
@@ -290,7 +325,13 @@ class Downloader:
         hash_index = self._build_hash_index()
         # 精确匹配
         if file_hash in hash_index:
-            return hash_index[file_hash]
+            path = hash_index[file_hash]
+            # 验证文件是否仍然存在（可能已被外部删除）
+            if path.is_file():
+                return path
+            # 文件不存在，从缓存中移除
+            logger.warning("hash索引中的文件不存在，已移除: hash=%s, path=%s", file_hash, path)
+            hash_index.pop(file_hash, None)
         # 前缀匹配（降级到递归扫描）
         for f in self.download_dir.rglob("*"):
             if f.is_file() and f.name.startswith(file_hash):
@@ -499,7 +540,7 @@ class Downloader:
                 )
                 task.error = "下载完成但文件无法识别，可能下载不完整"
             else:
-                logger.info("[DEBUG] 文件完整性检查: 通过（包含视频+音频流）")
+                logger.debug("文件完整性检查: 通过（包含视频+音频流）")
         except subprocess.TimeoutExpired:
             logger.warning("[DEBUG] 文件完整性检查超时")
         except FileNotFoundError:
@@ -561,9 +602,9 @@ class Downloader:
             }
         )
 
-        logger.info("[DEBUG] 第一阶段：提取视频信息")
-        logger.info("[DEBUG] URL: %s", url)
-        logger.info("[DEBUG] yt-dlp opts (keys): %s", list(opts.keys()))
+        logger.debug("第一阶段：提取视频信息")
+        logger.debug("URL: %s", url)
+        logger.debug("yt-dlp opts (keys): %s", list(opts.keys()))
 
         # 在线程池中执行同步的 yt-dlp 调用，加超时兜底
         loop = asyncio.get_event_loop()
@@ -582,9 +623,9 @@ class Downloader:
         task.thumbnail = info.get("thumbnail", "")
         task.duration = info.get("duration", 0)
 
-        logger.info("[DEBUG] 提取成功 - title: %s, video_id: %s, duration: %s", task.title, task.video_id, task.duration)
-        logger.info("[DEBUG] 缩略图 URL: %s", task.thumbnail)
-        logger.info("[DEBUG] 信息提取完成: %s", task.title[:50] if task.title else "(空)")
+        logger.debug("提取成功 - title: %s, video_id: %s, duration: %s", task.title, task.video_id, task.duration)
+        logger.debug("缩略图 URL: %s", task.thumbnail)
+        logger.debug("信息提取完成: %s", task.title[:50] if task.title else "(空)")
         return info
 
     async def _do_download(self, url: str, task: DownloadTask,
@@ -650,9 +691,9 @@ class Downloader:
             }
         )
 
-        logger.info("[DEBUG] 第二阶段：开始下载视频")
-        logger.info("[DEBUG] download_dir: %s", self.download_dir)
-        logger.info("[DEBUG] format: %s", opts.get("format"))
+        logger.debug("第二阶段：开始下载视频")
+        logger.debug("download_dir: %s", self.download_dir)
+        logger.debug("format: %s", opts.get("format"))
 
         loop = asyncio.get_event_loop()
 
@@ -660,39 +701,39 @@ class Downloader:
             with yt_dlp.YoutubeDL(opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 
-                logger.info("[DEBUG] yt-dlp 下载完成,开始解析文件路径")
+                logger.debug("yt-dlp 下载完成,开始解析文件路径")
                 
                 # 使用 yt-dlp 官方方法生成最终文件路径
                 # 注意：当使用 paths 时，prepare_filename 会返回最终路径
                 final_path = ydl.prepare_filename(info)
-                logger.info("[DEBUG] prepare_filename 返回: %s", final_path)
-                logger.info("[DEBUG] 文件是否存在: %s", Path(final_path).exists())
+                logger.debug("prepare_filename 返回: %s", final_path)
+                logger.debug("文件是否存在: %s", Path(final_path).exists())
                 
                 if Path(final_path).exists():
                     file_size = Path(final_path).stat().st_size
-                    logger.info("[DEBUG] 文件存在,大小: %.2f MB", file_size / 1024 / 1024)
+                    logger.debug("文件存在,大小: %.2f MB", file_size / 1024 / 1024)
                     return final_path
                 
                 # 如果 prepare_filename 不准确，尝试从 info 获取
-                logger.info("[DEBUG] prepare_filename 路径不存在,尝试 requested_downloads fallback")
+                logger.debug("prepare_filename 路径不存在,尝试 requested_downloads fallback")
                 requested_downloads = info.get("requested_downloads")
-                logger.info("[DEBUG] requested_downloads: %s", requested_downloads is not None)
+                logger.debug("requested_downloads: %s", requested_downloads is not None)
                 
                 if requested_downloads:
                     for i, dl_info in enumerate(requested_downloads):
                         dl_path = dl_info.get("filepath")
-                        logger.info("[DEBUG] requested_downloads[%d] filepath: %s", i, dl_path)
+                        logger.debug("requested_downloads[%d] filepath: %s", i, dl_path)
                         if dl_path:
                             exists = Path(dl_path).exists()
-                            logger.info("[DEBUG]   文件是否存在: %s", exists)
+                            logger.debug("文件是否存在: %s", exists)
                             if exists:
                                 file_size = Path(dl_path).stat().st_size
-                                logger.info("[DEBUG]   文件大小: %.2f MB", file_size / 1024 / 1024)
+                                logger.debug("文件大小: %.2f MB", file_size / 1024 / 1024)
                                 return dl_path
                 
-                logger.error("[DEBUG] 下载完成但文件不存在! final_path: %s", final_path)
-                logger.error("[DEBUG] info 中的 __finaldir: %s", info.get("__finaldir", "未设置"))
-                logger.error("[DEBUG] info 中的 __files_to_move: %s", info.get("__files_to_move", {}))
+                logger.error("下载完成但文件不存在! final_path: %s", final_path)
+                logger.error("info 中的 __finaldir: %s", info.get("__finaldir", "未设置"))
+                logger.error("info 中的 __files_to_move: %s", info.get("__files_to_move", {}))
                 return None
 
         return await asyncio.wait_for(
@@ -715,56 +756,56 @@ class Downloader:
             FileExistsError: 如果是重复文件。
             FileNotFoundError: 如果临时文件不存在。
         """
-        logger.info("[DEBUG] 第三阶段：后处理开始")
-        logger.info("[DEBUG] 输入的 temp_file: %s", temp_file)
-        logger.info("[DEBUG] temp_file 是否存在: %s", Path(temp_file).exists())
+        logger.debug("第三阶段：后处理开始")
+        logger.debug("输入的 temp_file: %s", temp_file)
+        logger.debug("temp_file 是否存在: %s", Path(temp_file).exists())
         
         if not Path(temp_file).exists():
-            logger.error("[DEBUG] temp_file 不存在! 后处理失败!")
+            logger.error("temp_file 不存在! 后处理失败!")
             raise FileNotFoundError(f"临时文件不存在: {temp_file}")
         
         # 计算文件 hash
         file_hash = self.compute_file_hash(temp_file)
         task.file_hash = file_hash
-        logger.info("[DEBUG] 文件 hash: %s", file_hash)
+        logger.debug("文件 hash: %s", file_hash)
 
         # 检查是否已存在相同 hash 的文件（内容去重）
         existing = self.find_hash_file(file_hash)
-        logger.info("[DEBUG] 检查去重 - existing: %s", existing)
+        logger.debug("检查去重 - existing: %s", existing)
         if existing:
-            logger.info("[DEBUG] 发现重复文件,删除 temp_file")
+            logger.debug("发现重复文件,删除 temp_file")
             os.remove(temp_file)
             task.is_duplicate = True
             rel_path = existing.relative_to(self.download_dir)
             task.filename = str(rel_path)
             task.filepath = str(existing)
-            logger.info("[DEBUG] 文件已存在（去重）: %s", rel_path)
+            logger.debug("文件已存在（去重）: %s", rel_path)
             raise FileExistsError(f"重复文件: {existing}")
 
         ext = Path(temp_file).suffix or ".mp4"
-        logger.info("[DEBUG] 文件扩展名: %s", ext)
+        logger.debug("文件扩展名: %s", ext)
 
         # 清理标题中的非法文件名字符
         safe_title = ""
         if task.title:
             safe_title = "".join(c for c in task.title if c not in r'\/:*?"<>|').strip()
-        logger.info("[DEBUG] safe_title (清理后): %s", safe_title)
+        logger.debug("safe_title (清理后): %s", safe_title)
 
         if not safe_title:
             safe_title = file_hash
-            logger.info("[DEBUG] safe_title 为空,使用 hash 作为标题")
+            logger.debug("safe_title 为空,使用 hash 作为标题")
 
         # 构造目录名：标题_指纹
         dir_name = f"{safe_title}_{file_hash}"
         dir_path = self.download_dir / dir_name
-        logger.info("[DEBUG] 目标目录: %s", dir_path)
+        logger.debug("目标目录: %s", dir_path)
 
         # 检查同名冲突
         if dir_path.exists():
-            logger.info("[DEBUG] 目录已存在,检查冲突")
+            logger.debug("目录已存在,检查冲突")
             existing_in_dir = dir_path / f"{file_hash}{ext}"
             if existing_in_dir.exists():
-                logger.info("[DEBUG] 发现同名同 hash 文件,删除 temp_file")
+                logger.debug("发现同名同 hash 文件,删除 temp_file")
                 os.remove(temp_file)
                 task.is_duplicate = True
                 task.filename = f"{dir_name}/{file_hash}{ext}"
@@ -776,7 +817,7 @@ class Downloader:
             while True:
                 new_dir_name = f"{safe_title}_{i}_{file_hash}"
                 new_dir_path = self.download_dir / new_dir_name
-                logger.info("[DEBUG] 尝试新目录名: %s", new_dir_name)
+                logger.debug("尝试新目录名: %s", new_dir_name)
                 if not new_dir_path.exists():
                     dir_name = new_dir_name
                     dir_path = new_dir_path
@@ -785,27 +826,27 @@ class Downloader:
 
         # 创建子目录
         dir_path.mkdir(exist_ok=True)
-        logger.info("[DEBUG] 创建目录: %s", dir_path)
+        logger.debug("创建目录: %s", dir_path)
 
         # 移动文件到子目录
         final_name = f"{file_hash}{ext}"
         final_path = dir_path / final_name
-        logger.info("[DEBUG] 移动文件: %s -> %s", temp_file, final_path)
+        logger.debug("移动文件: %s -> %s", temp_file, final_path)
         shutil.move(temp_file, str(final_path))
-        logger.info("[DEBUG] 文件移动完成")
+        logger.debug("文件移动完成")
 
         # 验证文件完整性（检查是否同时包含视频和音频流）
         self._verify_file_integrity(str(final_path), task)
 
         # 下载缩略图到本地（静默失败，不影响主流程）
         if task.thumbnail:
-            logger.info("[DEBUG] 开始下载缩略图: %s", task.thumbnail)
+            logger.debug("开始下载缩略图: %s", task.thumbnail)
             thumb_ext = Path(urlparse(task.thumbnail).path).suffix or ".jpg"
             thumb_local_name = f"thumbnail{thumb_ext}"
             thumb_path = dir_path / thumb_local_name
             if _download_thumbnail(task.thumbnail, thumb_path):
                 task.thumbnail = thumb_local_name  # 保存相对路径
-                logger.info("[DEBUG] 缩略图下载成功: %s", thumb_local_name)
+                logger.debug("缩略图下载成功: %s", thumb_local_name)
             else:
                 logger.warning("[DEBUG] 缩略图下载失败，保留远程 URL: %s", task.thumbnail)
 
@@ -815,8 +856,8 @@ class Downloader:
         task.filename = f"{dir_name}/{final_name}"
         task.filepath = str(final_path)
 
-        logger.info("[DEBUG] 后处理完成 - filename: %s, filepath: %s", task.filename, task.filepath)
-        logger.info("[DEBUG] 第三阶段：后处理结束")
+        logger.debug("后处理完成 - filename: %s, filepath: %s", task.filename, task.filepath)
+        logger.debug("第三阶段：后处理结束")
         return task.filename, str(final_path)
 
     async def download(self, task: DownloadTask, progress_callback: Callable) -> None:
@@ -828,34 +869,34 @@ class Downloader:
             progress_callback: 进度回调函数，签名为 async callback(task: DownloadTask)。
         """
         task.status = "downloading"
-        logger.info("[DEBUG] ========================================")
-        logger.info("[DEBUG] 下载任务开始 - task_id: %s, url: %s", task.task_id, task.url)
-        logger.info("[DEBUG] ========================================")
+        logger.debug("========================================")
+        logger.debug("下载任务开始 - task_id: %s, url: %s", task.task_id, task.url)
+        logger.debug("========================================")
 
         try:
             # 第一阶段：提取信息
-            logger.info("[DEBUG] 进入第一阶段：信息提取")
+            logger.debug("进入第一阶段：信息提取")
             await self._extract_info(task.url, task)
             await progress_callback(task)
-            logger.info("[DEBUG] 第一阶段完成,进入第二阶段：下载")
+            logger.debug("第一阶段完成,进入第二阶段：下载")
 
             # 第二阶段：下载（yt-dlp 自动管理文件名和临时目录）
             task.status = "downloading"
 
             temp_file = await self._do_download(task.url, task, progress_callback)
-            logger.info("[DEBUG] 第二阶段返回 - temp_file: %s", temp_file)
+            logger.debug("第二阶段返回 - temp_file: %s", temp_file)
             
             if not temp_file:
                 task.status = "failed"
                 task.error = "未找到下载的临时文件"
-                logger.error("[DEBUG] 第二阶段失败: temp_file 为 None")
+                logger.error("第二阶段失败: temp_file 为 None")
                 await progress_callback(task)
                 return
 
             await progress_callback(task)
 
             # 第三阶段：后处理
-            logger.info("[DEBUG] 进入第三阶段：后处理, temp_file: %s", temp_file)
+            logger.debug("进入第三阶段：后处理, temp_file: %s", temp_file)
             with suppress(FileExistsError):
                 await self._post_process(temp_file, task)
 
@@ -863,17 +904,17 @@ class Downloader:
             if task.error:
                 task.status = "failed"
                 task.completed_at = datetime.now(UTC)
-                logger.error("[DEBUG] 后处理检测到文件问题: %s", task.error)
+                logger.error("后处理检测到文件问题: %s", task.error)
                 await progress_callback(task)
                 return
 
             task.status = "completed"
             task.progress = 100.0
             task.completed_at = datetime.now(UTC)
-            logger.info("[DEBUG] ========================================")
-            logger.info("[DEBUG] 下载任务完成! task_id: %s, status: %s", task.task_id, task.status)
-            logger.info("[DEBUG] 最终文件: %s", task.filepath)
-            logger.info("[DEBUG] ========================================")
+            logger.debug("========================================")
+            logger.debug("下载任务完成! task_id: %s, status: %s", task.task_id, task.status)
+            logger.debug("最终文件: %s", task.filepath)
+            logger.debug("========================================")
             # 使缓存失效
             self.invalidate_file_index_cache()
             self.invalidate_hash_index()
@@ -883,13 +924,13 @@ class Downloader:
             task.status = "failed"
             task.error = self._format_error_message(e)
             task.completed_at = datetime.now(UTC)
-            logger.error("[DEBUG] ========================================")
-            logger.error("[DEBUG] 下载失败! task_id: %s", task.task_id)
-            logger.error("[DEBUG] 异常类型: %s", type(e).__name__)
-            logger.error("[DEBUG] 异常信息: %s", e)
+            logger.error("========================================")
+            logger.error("下载失败! task_id: %s", task.task_id)
+            logger.error("异常类型: %s", type(e).__name__)
+            logger.error("异常信息: %s", e)
             import traceback
-            logger.error("[DEBUG] 堆栈跟踪:\n%s", traceback.format_exc())
-            logger.error("[DEBUG] ========================================")
+            logger.error("堆栈跟踪:\n%s", traceback.format_exc())
+            logger.error("========================================")
             # 清理残留临时文件，避免重试时冲突
             self.cleanup_temp_files(task.task_id)
             await progress_callback(task)

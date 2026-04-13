@@ -38,7 +38,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* 主内容区 */
-.main { width: 100%; max-width: 1200px; padding: 30px 20px; }
+.main { width: 100%; max-width: 1200px; padding: 30px 20px 100px; }
 
 /* 管理页面专用样式 */
 .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
@@ -68,28 +68,30 @@ a { color: inherit; text-decoration: none; }
 .stat-label { font-size: 12px; color: var(--text-sec); margin-top: 4px; }
 
 /* 视频网格 */
-.video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; }
-.video-card { background: var(--surface); border-radius: 8px; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; position: relative; }
-.video-card:hover { transform: translateY(-4px); box-shadow: 0 8px 20px rgba(0,0,0,0.4); }
-.video-checkbox { position: absolute; top: 10px; left: 10px; z-index: 10; }
+.video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.video-card { background: var(--surface); border-radius: 6px; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; position: relative; }
+.video-card:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.4); }
 .video-thumb { width: 100%; aspect-ratio: 16/9; background: #333; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
 .video-thumb img { width: 100%; height: 100%; object-fit: cover; }
-.empty-thumb { width: 100%; height: 100%; background: #333; display: flex; align-items: center; justify-content: center; font-size: 48px; }
-.play-icon { position: absolute; font-size: 36px; opacity: 0; background: rgba(0,0,0,0.6); width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; transition: opacity 0.2s; cursor: pointer; }
+.empty-thumb { width: 100%; height: 100%; background: #333; display: flex; align-items: center; justify-content: center; font-size: 36px; }
+.play-icon { position: absolute; font-size: 32px; opacity: 0; background: rgba(0,0,0,0.6); width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; transition: opacity 0.2s; cursor: pointer; }
 .video-card:hover .play-icon { opacity: 0.9; }
-.video-info { padding: 12px; }
-.video-title { font-size: 14px; margin-bottom: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.video-info { padding: 8px 10px; }
+.video-title { font-size: 14px; margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .video-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-sec); }
 .video-source { font-size: 11px; color: var(--info); margin-top: 4px; }
-.video-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 8px; padding: 0 12px 8px; }
-.tag { padding: 2px 8px; background: #333; border-radius: 10px; font-size: 11px; color: var(--text-sec); display: inline-flex; align-items: center; gap: 4px; }
+.video-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; padding: 0 10px 6px; }
+.tag { padding: 2px 6px; background: #333; border-radius: 8px; font-size: 11px; color: var(--text-sec); display: inline-flex; align-items: center; gap: 3px; }
 .tag-remove { cursor: pointer; color: var(--error); }
-.video-actions-bar { display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border); }
-.action-btn { padding: 4px 10px; border: none; border-radius: 4px; font-size: 13px; cursor: pointer; background: #444; color: var(--text); transition: background 0.2s; }
+.video-actions-bar { display: flex; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--border); justify-content: space-between; }
+.video-actions-bar .action-group { display: flex; gap: 6px; align-items: center; }
+.action-btn { padding: 4px 8px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; background: #444; color: var(--text); transition: background 0.2s; }
 .action-btn:hover { background: #555; }
 .action-btn.play { color: var(--info); }
 .action-btn.share { color: var(--success); }
 .action-btn.delete { color: var(--error); }
+.action-btn.select-btn { font-size: 14px; padding: 4px 6px; }
+.action-btn.select-btn.selected { color: var(--primary); background: rgba(230, 33, 23, 0.15); }
 
 /* 分页 */
 .pagination { display: flex; justify-content: center; gap: 8px; margin-top: 20px; align-items: center; }
@@ -177,7 +179,7 @@ a { color: inherit; text-decoration: none; }
     .stat-card { padding: 10px; }
     .stat-value { font-size: 18px; }
 
-    .video-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+    .video-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
     .video-title { font-size: 13px; }
     .video-meta { flex-direction: column; gap: 2px; }
     .video-actions-bar { padding: 6px; gap: 4px; }
@@ -193,7 +195,6 @@ a { color: inherit; text-decoration: none; }
 @media (max-width: 480px) {
     .video-grid { grid-template-columns: 1fr; }
     .video-card { display: flex; flex-direction: row; height: 100px; }
-    .video-checkbox { top: 5px; left: 5px; }
     .video-thumb { width: 140px; height: 100%; aspect-ratio: unset; flex-shrink: 0; }
     .video-info { flex: 1; padding: 8px; min-width: 0; }
     .video-tags, .video-actions-bar { display: none; } /* 极小屏隐藏部分信息，点击进入详情或使用批量操作 */
@@ -201,8 +202,8 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* Toast 提示 */
-.toast-container { position: fixed; top: 20px; right: 20px; z-index: 3000; display: flex; flex-direction: column; gap: 10px; }
-.toast { padding: 12px 20px; border-radius: 6px; color: #fff; font-size: 14px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); animation: toast-in 0.3s ease-out; max-width: 350px; word-break: break-word; }
+.toast-container { position: fixed; top: 80px; left: 50%; transform: translateX(-50%); z-index: 3000; display: flex; flex-direction: column; gap: 10px; align-items: center; pointer-events: none; }
+.toast { padding: 14px 24px; border-radius: 8px; color: #fff; font-size: 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.5); animation: toast-in 0.3s ease-out; max-width: 450px; word-break: break-word; white-space: pre-line; line-height: 1.6; text-align: center; }
 .toast.success { background: var(--success); }
 .toast.error { background: var(--error); }
 .toast.warning { background: var(--warning); color: #000; }

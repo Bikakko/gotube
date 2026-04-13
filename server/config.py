@@ -76,10 +76,26 @@ _cookies_file: str = _s("GOTUBE_COOKIES_FILE")
 _warp_proxy: str = _s("GOTUBE_WARP_PROXY")
 _auth_user: str = _s("GOTUBE_AUTH_USER", required=True)
 _auth_pass: str = _s("GOTUBE_AUTH_PASS", required=True)
-_admin_user: str = _s("GOTUBE_ADMIN_USER", default="admin")
-_admin_pass: str = _s("GOTUBE_ADMIN_PASS", default="admin")
 _db_file: str = _s("GOTUBE_DB_FILE", default="./gotube.db")
+
+# 解析管理员账号列表（格式：用户名1:密码1,用户名2:密码2）
+_raw_admins: str = _s("GOTUBE_ADMINS", required=True)
+_admins: list[dict[str, str]] = []
+if _raw_admins:
+    for pair in _raw_admins.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        parts = pair.split(":", 1)
+        if len(parts) != 2 or not parts[0] or not parts[1]:
+            _errors.append(f"  GOTUBE_ADMINS = '{pair}' (格式错误，应为 用户名:密码)")
+        else:
+            _admins.append({"username": parts[0], "password": parts[1]})
+
+if not _admins:
+    _errors.append("  GOTUBE_ADMINS = (至少需要配置一个管理员账号)")
 _debug: bool = _b("GOTUBE_DEBUG", False)
+_log_level: str = _s("GOTUBE_LOG_LEVEL", default="ERROR").upper()
 
 _china_domains: list[str] = [
     "bilibili.com", "b23.tv", "acfun.cn", "iqiyi.com",
@@ -140,12 +156,8 @@ class _Settings:
         return _auth_pass
 
     @property
-    def admin_user(self) -> str:
-        return _admin_user
-
-    @property
-    def admin_pass(self) -> str:
-        return _admin_pass
+    def admins(self) -> list[dict[str, str]]:
+        return _admins
 
     @property
     def db_file(self) -> Path:
@@ -155,6 +167,10 @@ class _Settings:
     @property
     def debug(self) -> bool:
         return _debug
+
+    @property
+    def log_level(self) -> str:
+        return _log_level
 
     @property
     def china_domains(self) -> list[str]:

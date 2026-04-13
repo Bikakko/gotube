@@ -44,6 +44,9 @@ backups/
 *.bak*
 server/*.bak*
 
+# 密码重置工具 - 安全工具
+reset_admin_password.py
+
 # Python 编译产物
 __pycache__/
 *.pyc

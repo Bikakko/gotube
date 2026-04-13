@@ -193,6 +193,21 @@ function renderFilters() {
     slot.innerHTML = '';
 
     const filtersBar = el('div', { className: 'filters', id: 'filters-bar' }, [
+        // 全选/取消全选
+        el('div', { className: 'filter-group' }, [
+            el('input', {
+                type: 'checkbox',
+                id: 'select-all-checkbox',
+                title: '全选/取消全选',
+                checked: false,
+                onChange: (e) => toggleSelectAll(e.target.checked),
+            }),
+            el('label', {
+                for: 'select-all-checkbox',
+                textContent: '全选',
+                style: 'cursor: pointer; font-size: 13px; color: var(--text-sec);',
+            }),
+        ]),
         // 关键词搜索
         el('div', { className: 'filter-group' }, [
             el('span', { className: 'filter-label', textContent: '🔍' }),
@@ -311,6 +326,7 @@ function renderVideoGrid() {
             el('p', { textContent: '暂无视频' }),
         ]);
         gridSlot.appendChild(emptyState);
+        window.updateSelectAllCheckbox();
         return;
     }
 
@@ -330,6 +346,9 @@ function renderVideoGrid() {
 
     // 渲染分页
     renderPagination();
+
+    // 更新全选复选框状态
+    window.updateSelectAllCheckbox();
 }
 
 /**
@@ -350,14 +369,6 @@ function renderVideoCard(video) {
             onClick: () => window.showPlayerModal(video),
         }),
     ]);
-
-    // 复选框
-    const checkbox = el('input', {
-        className: 'video-checkbox',
-        type: 'checkbox',
-        checked: isSelected,
-        onChange: (e) => toggleVideoSelection(video.filename, e.target.checked),
-    });
 
     // 信息区域
     const info = el('div', { className: 'video-info' }, [
@@ -390,42 +401,66 @@ function renderVideoCard(video) {
         ]));
     });
 
-    // 操作栏
+    // 复选框（作为操作按钮样式）
+    const checkbox = el('button', {
+        className: `action-btn select-btn ${isSelected ? 'selected' : ''}`,
+        textContent: isSelected ? '☑' : '☐',
+        title: isSelected ? '取消选择' : '选择此视频',
+        onClick: (e) => {
+            e.stopPropagation();
+            // 直接从 state 中读取当前选中状态，而不是使用闭包变量
+            const isCurrentlySelected = state.selectedVideos.has(video.filename);
+            const newState = !isCurrentlySelected;
+            toggleVideoSelection(video.filename, newState);
+            // 更新当前按钮状态
+            checkbox.textContent = newState ? '☑' : '☐';
+            checkbox.classList.toggle('selected', newState);
+            // 同步全选框状态
+            window.updateSelectAllCheckbox();
+        },
+    });
+
+    // 操作栏（左边是播放/分享/更多，右边是选择按钮）
     const actionsBar = el('div', { className: 'video-actions-bar' }, [
-        el('button', {
-            className: 'action-btn play',
-            textContent: '▶ 播放',
-            onClick: () => window.showPlayerModal(video),
-        }),
-        el('button', {
-            className: 'action-btn share',
-            textContent: '🔗 分享',
-            onClick: () => window.showShareModal(video),
-        }),
-        state.currentUser && state.currentUser.role !== 'readonly' ? el('div', { className: 'dropdown' }, [
+        el('div', { className: 'action-group' }, [
             el('button', {
-                className: 'action-btn',
-                textContent: '⋮',
-                onClick: () => window.toggleDropdown(`dropdown-${video.file_hash}`),
+                className: 'action-btn play',
+                textContent: '▶ 播放',
+                onClick: () => window.showPlayerModal(video),
             }),
-            el('div', { className: 'dropdown-menu', id: `dropdown-${video.file_hash}` }, [
-                el('div', {
-                    className: 'dropdown-item',
-                    textContent: '🏷️ 管理标签',
-                    onClick: () => window.showTagManagerModal(video),
+            el('button', {
+                className: 'action-btn share',
+                textContent: '🔗 分享',
+                onClick: () => window.showShareModal(video),
+            }),
+            state.currentUser && state.currentUser.role !== 'readonly' ? el('div', { className: 'dropdown' }, [
+                el('button', {
+                    className: 'action-btn',
+                    textContent: '⋮',
+                    onClick: () => window.toggleDropdown(`dropdown-${video.file_hash}`),
                 }),
-                el('div', {
-                    className: 'dropdown-item danger',
-                    textContent: '🗑️ 删除',
-                    onClick: () => window.handleDeleteVideo(video.filename),
-                }),
-            ]),
-        ]) : null,
+                el('div', { className: 'dropdown-menu', id: `dropdown-${video.file_hash}` }, [
+                    el('div', {
+                        className: 'dropdown-item',
+                        textContent: '🏷️ 管理标签',
+                        onClick: () => window.showTagManagerModal(video),
+                    }),
+                    el('div', {
+                        className: 'dropdown-item danger',
+                        textContent: '🗑️ 删除',
+                        onClick: () => window.handleDeleteVideo(video.filename),
+                    }),
+                ]),
+            ]) : null,
+        ]),
+        // 选择按钮放在最右边
+        el('div', { className: 'action-group' }, [
+            checkbox,
+        ]),
     ]);
 
     // 组合卡片
     const card = el('div', { className: 'video-card' }, [
-        checkbox,
         thumb,
         info,
         tagsContainer,
@@ -545,19 +580,27 @@ function updateBatchBar() {
 
     const bar = $('#batch-bar');
     const count = $('#batch-count');
-    const deleteBtn = $('#batch-delete-btn');
-
-    if (!bar) return;
+    const deleteBtnNav = $('#batch-delete-btn'); // 导航栏的删除按钮
+    const buttons = bar ? bar.querySelectorAll('button') : [];
 
     const selectedCount = state.selectedVideos.size;
 
     if (selectedCount > 0) {
-        bar.classList.add('active');
+        // 显示批量操作栏
+        if (bar) bar.classList.add('active');
         if (count) count.textContent = `已选 ${selectedCount} 个`;
-        if (deleteBtn) deleteBtn.disabled = false;
+        
+        // 启用所有按钮（导航栏和批量操作栏的删除按钮）
+        if (deleteBtnNav) deleteBtnNav.disabled = false;
+        buttons.forEach(btn => {
+            btn.disabled = false;
+        });
     } else {
-        bar.classList.remove('active');
-        if (deleteBtn) deleteBtn.disabled = true;
+        // 隐藏批量操作栏
+        if (bar) bar.classList.remove('active');
+        
+        // 禁用导航栏的删除按钮
+        if (deleteBtnNav) deleteBtnNav.disabled = true;
     }
 }
 
