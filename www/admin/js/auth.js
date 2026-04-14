@@ -16,18 +16,38 @@ async function checkAuth() {
         return false;
     }
 
-    try {
-        // 有 token，验证是否有效
-        const data = await apiFetch('/auth/check');
-        // token 有效，保存用户信息
-        state.currentUser = data.user;
-        return true;
-    } catch (err) {
-        // token 无效或过期，清除并显示登录表单
-        localStorage.removeItem('gotube_admin_token');
-        showLoginForm();
-        return false;
+    // 增加重试机制，避免网络波动导致误踢
+    const maxRetries = 2;
+    let lastError = null;
+    
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            // 有 token，验证是否有效
+            const data = await apiFetch('/auth/check');
+            // token 有效，保存用户信息
+            state.currentUser = data.user;
+            return true;
+        } catch (err) {
+            lastError = err;
+            console.warn(`Token 验证失败 (尝试 ${attempt + 1}/${maxRetries + 1}):`, err.message);
+            
+            // 如果不是 UNAUTHORIZED 错误，可能是网络问题，等待后重试
+            if (err.message !== 'UNAUTHORIZED' && attempt < maxRetries) {
+                // 等待 500ms 后重试
+                await new Promise(resolve => setTimeout(resolve, 500));
+                continue;
+            }
+            
+            // UNAUTHORIZED 错误或达到最大重试次数，停止重试
+            break;
+        }
     }
+
+    // 所有重试都失败了，清除 token 并显示登录表单
+    console.error('Token 验证最终失败:', lastError?.message);
+    localStorage.removeItem('gotube_admin_token');
+    showLoginForm();
+    return false;
 }
 
 /**

@@ -47,7 +47,35 @@ async function loadVideos() {
 
     } catch (err) {
         console.error('加载视频列表失败:', err);
-        alert('加载视频列表失败: ' + err.message);
+        
+        // 如果是 UNAUTHORIZED 错误，尝试刷新 token 或提示用户重新登录
+        if (err.message === 'UNAUTHORIZED') {
+            // 清除无效 token
+            localStorage.removeItem('gotube_admin_token');
+            
+            // 显示友好的提示，而不是直接踢出
+            if (typeof showToast === 'function') {
+                showToast('登录已过期，请重新登录', 'error');
+            } else {
+                alert('登录已过期，请重新登录');
+            }
+            
+            // 延迟后显示登录界面
+            setTimeout(() => {
+                if (typeof showLoginForm === 'function') {
+                    showLoginForm();
+                } else {
+                    location.reload();
+                }
+            }, 1000);
+        } else {
+            // 其他错误，显示 Toast 提示
+            if (typeof showToast === 'function') {
+                showToast('加载视频列表失败: ' + err.message, 'error');
+            } else {
+                alert('加载视频列表失败: ' + err.message);
+            }
+        }
     }
 }
 

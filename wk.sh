@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GoTube 生产环境启动脚本 (v2.3.1)
+# GoTube 生产环境启动脚本 (v3.0.1)
 # 使用 gunicorn + uvicorn workers 模式
 
 set -e

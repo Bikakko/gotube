@@ -315,22 +315,74 @@
     }
 
     function connectWS() {
+        // 关闭旧连接
+        if (ws) {
+            ws.close();
+            ws = null;
+        }
+
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
         ws = new WebSocket(`${proto}//${location.host}/ws?client_id=${clientId}`);
+
+        ws.onopen = () => {
+            console.log('WebSocket 连接成功');
+            setStatus('🟢 已连接', '#3fb950');
+            setTimeout(() => setStatus(''), 2000);
+        };
 
         ws.onmessage = (e) => {
             try {
                 const d = JSON.parse(e.data);
-                if (d.type === 'progress') {
-                    tasks[d.task_id] = { ...tasks[d.task_id], ...d };
+                
+                if (d.type === 'connected') {
+                    console.log('WebSocket 连接确认, client_id:', d.client_id);
+                } else if (d.type === 'progress') {
+                    // 更新任务进度
+                    const taskId = d.task_id;
+                    const oldTask = tasks[taskId];
+                    
+                    // 合并进度数据
+                    tasks[taskId] = { ...oldTask, ...d };
+                    
+                    // 重新渲染任务列表
                     renderTasks();
+                    
+                    // 调试日志
+                    if (d.status === 'completed' || d.status === 'failed') {
+                        console.log(`任务 ${taskId} ${d.status}:`, d.title);
+                    }
+                } else if (d.type === 'pong') {
+                    // 心跳响应
+                } else {
+                    console.log('未知消息类型:', d.type, d);
                 }
             } catch (e) {
-                console.error('WS error:', e);
+                console.error('WS 消息解析失败:', e);
             }
         };
 
-        ws.onclose = () => setTimeout(connectWS, 5000);
+        ws.onerror = (e) => {
+            console.error('WebSocket 错误:', e);
+            setStatus('🔴 连接错误', '#f85149');
+        };
+
+        ws.onclose = (e) => {
+            console.warn(`WebSocket 断开: code=${e.code}, reason=${e.reason}`);
+            setStatus('🟡 连接断开，重连中...', '#d29922');
+            
+            // 5秒后重连
+            setTimeout(() => {
+                connectWS();
+            }, 5000);
+        };
+        
+        // 心跳保活：每30秒发送一次ping
+        if (ws._heartbeat) clearInterval(ws._heartbeat);
+        ws._heartbeat = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'ping' }));
+            }
+        }, 30000);
     }
 
     // 绑定事件
