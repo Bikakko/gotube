@@ -74,8 +74,6 @@ _max_concurrent: int = _i("GOTUBE_MAX_CONCURRENT", required=True, min_val=1, max
 _download_dir: str = _s("GOTUBE_DOWNLOAD_DIR", required=True)
 _cookies_file: str = _s("GOTUBE_COOKIES_FILE")
 _warp_proxy: str = _s("GOTUBE_WARP_PROXY")
-_auth_user: str = _s("GOTUBE_AUTH_USER", required=True)
-_auth_pass: str = _s("GOTUBE_AUTH_PASS", required=True)
 _db_file: str = _s("GOTUBE_DB_FILE", default="./gotube.db")
 
 # 解析管理员账号列表（格式：用户名1:密码1,用户名2:密码2）
@@ -146,14 +144,6 @@ class _Settings:
     @property
     def warp_proxy(self) -> str:
         return _warp_proxy
-
-    @property
-    def auth_user(self) -> str:
-        return _auth_user
-
-    @property
-    def auth_pass(self) -> str:
-        return _auth_pass
 
     @property
     def admins(self) -> list[dict[str, str]]:

@@ -115,10 +115,7 @@ gotube/
 | `GOTUBE_MAX_CONCURRENT` | 最大并发下载数 | 5 |
 | `GOTUBE_DOWNLOAD_DIR` | 下载目录 | ./downloads |
 | `GOTUBE_COOKIES_FILE` | Cookies 文件路径 | ./cookies.txt |
-| `GOTUBE_AUTH_USER` | Basic Auth 用户名 | 7777 |
-| `GOTUBE_AUTH_PASS` | Basic Auth 密码 | 7777 |
-| `GOTUBE_ADMIN_USER` | 管理员用户名 | admin |
-| `GOTUBE_ADMIN_PASS` | 管理员密码 | changeme |
+| `GOTUBE_ADMINS` | 管理员账号（用户名:密码） | admin:changeme |
 | `GOTUBE_DEBUG` | 调试模式（1=开启） | 1 |
 | `GOTUBE_DB_FILE` | 数据库文件路径 | ./gotube.db |
 
