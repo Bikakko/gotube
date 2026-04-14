@@ -76,7 +76,12 @@ def verify_token(db: Session, token: str | None) -> dict | None:
         return None
     
     # 检查是否过期
-    if datetime.now(UTC) > auth_token.expires_at:
+    now = datetime.now(UTC)
+    expires_at = auth_token.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+
+    if now > expires_at:
         auth_token.is_active = False
         db.commit()
         return None
@@ -121,39 +126,37 @@ def cleanup_expired_tokens(db: Session) -> None:
         logger.info("清理了 %d 个过期 token", len(expired_tokens))
 
 
-async def verify_admin_authorization(request: Request) -> dict:
+async def get_db():
+    """依赖注入：获取数据库会话"""
+    with get_session() as session:
+        yield session
+
+
+async def verify_admin_authorization(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> dict:
     """
     依赖注入：验证 Authorization Header 中的 Bearer token。
 
     Returns:
         token payload 字典。
     """
-    from fastapi import Depends
-
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="未授权访问")
 
     token = auth_header[7:].strip()
-    
-    # 获取数据库会话
-    db = next(get_db())
-    
+
     # 清理过期token
     cleanup_expired_tokens(db)
-    
+
     # 验证token
     payload = verify_token(db, token)
     if not payload:
         raise HTTPException(status_code=401, detail="Token 无效或已过期")
 
     return payload
-
-
-async def get_db():
-    """依赖注入：获取数据库会话"""
-    with get_session() as session:
-        yield session
 
 
 # ── 辅助函数 ──
