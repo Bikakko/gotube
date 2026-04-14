@@ -72,6 +72,7 @@ _port: int = _i("GOTUBE_PORT", required=True, min_val=1, max_val=65535)
 _hidden_path: str = _s("GOTUBE_HIDDEN_PATH", required=True)
 _max_concurrent: int = _i("GOTUBE_MAX_CONCURRENT", required=True, min_val=1, max_val=20)
 _download_dir: str = _s("GOTUBE_DOWNLOAD_DIR", required=True)
+_www_dir: str = _s("GOTUBE_WWW_DIR", default="www")
 _cookies_file: str = _s("GOTUBE_COOKIES_FILE")
 _warp_proxy: str = _s("GOTUBE_WARP_PROXY")
 _db_file: str = _s("GOTUBE_DB_FILE", default="./gotube.db")
@@ -136,6 +137,10 @@ class _Settings:
     @property
     def download_dir(self) -> str:
         return _download_dir
+
+    @property
+    def www_dir(self) -> str:
+        return _www_dir
 
     @property
     def cookies_file(self) -> str:

@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # 项目路径
 PROJECT_ROOT = settings.project_root
-WWW_DIR = PROJECT_ROOT / "www"
+WWW_DIR = PROJECT_ROOT / settings.www_dir
 LOG_FILE = PROJECT_ROOT / "server.log"
 
 # 配置根日志级别（从 .env 读取）

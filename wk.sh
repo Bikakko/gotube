@@ -104,6 +104,20 @@ get_workers() {
     echo "1"
 }
 
+build_frontend() {
+    echo -e "${GREEN}正在混淆前端代码 (www -> www_dist)...${NC}"
+    if [ ! -d "node_modules" ]; then
+        echo -e "${YELLOW}首次运行，正在安装混淆工具依赖...${NC}"
+        npm install --silent
+    fi
+    node build.js
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}✗ 前端混淆失败，请检查构建日志${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ 混淆完成，离线 Map 已存至 www_maps${NC}"
+}
+
 start() {
     local PORT
     PORT=$(get_port)
@@ -126,6 +140,9 @@ start() {
     if [ -f "$PIDFILE" ]; then
         rm -f "$PIDFILE"
     fi
+
+    # 执行前端混淆
+    build_frontend
 
     echo -e "${GREEN}正在启动 GoTube 生产服务器 (v2.3.1)...${NC}"
     echo -e "  端口:    ${YELLOW}$PORT${NC}"

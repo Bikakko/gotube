@@ -1,9 +1,9 @@
-GoTube v3.0.6
+GoTube v3.0.8
 =============
 
-Version: 3.0.6
+Version: 3.0.8
 Release Date: 2026-04-14
-Description: 自托管多平台视频下载工具 - 修复 admin_api 数据库会话注入和时区比较错误
+Description: 自托管多平台视频下载工具 - 前端混淆支持、播放器优化、用户管理改进
 
 Key Features:
 - Multi-platform video downloading (YouTube, Bilibili, X/Twitter, etc.)
@@ -23,6 +23,8 @@ Tech Stack:
 - Process Management: systemd
 
 Changelog:
+- v3.0.8: Frontend obfuscation support, player improvements, user management enhancements - 2026-04-14
+- v3.0.7: Bug fixes and improvements - 2026-04-14
 - v3.0.6: Fix admin_api DB session injection and timezone comparison bug - 2026-04-14
 - v3.0.5: Fix login token isolation issue in multi-worker mode - 2026-04-14
 - v3.0.4: Bug fixes only - 2026-04-14

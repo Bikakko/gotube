@@ -7,20 +7,29 @@
  * 切换到用户管理视图
  */
 async function showUserManagement() {
+    // 如果已经在用户管理视图，返回视频管理
+    if (state.currentView === 'users') {
+        showVideoManagement();
+        return;
+    }
+
     if (state.currentUser && state.currentUser.role !== 'admin') {
         showToast('权限不足', 'error');
         return;
     }
 
+    // 更新视图状态
+    state.currentView = 'users';
+
     // 更新页面标题和导航状态
     document.title = 'GoTube Admin - 用户管理';
-    
+
     // 清空主内容区
     const main = $('#main-content');
     if (!main) return;
-    
+
     main.innerHTML = '';
-    
+
     // 渲染用户管理布局
     main.appendChild(el('div', { className: 'users-container' }, [
         el('div', { className: 'users-header' }, [
@@ -36,8 +45,49 @@ async function showUserManagement() {
         ]),
     ]));
 
+    // 设置延迟标记，阻止事件冒泡导致立即返回
+    state._justEnteredUsers = true;
+    setTimeout(() => {
+        state._justEnteredUsers = false;
+    }, 0);
+
     // 加载用户数据
     await loadUsers();
+}
+
+/**
+ * 返回视频管理视图
+ */
+function showVideoManagement() {
+    state.currentView = 'videos';
+    document.title = 'GoTube Admin - 视频管理';
+    window.renderPage();
+}
+
+/**
+ * 初始化点击外部区域返回视频管理的事件监听
+ * 注意：这个函数需要在每次渲染页面后调用，因为 renderPage() 会清空 body
+ */
+window._clickOutsideListenerInitialized = false;
+
+function initClickOutsideListener() {
+    // 避免重复绑定
+    if (window._clickOutsideListenerInitialized) return;
+
+    document.addEventListener('click', (e) => {
+        // 只在用户管理视图时生效
+        if (state.currentView !== 'users') return;
+        // 如果刚进入用户管理视图，阻止立即返回
+        if (state._justEnteredUsers) return;
+
+        const usersContainer = document.querySelector('.users-container');
+        // 如果点击的不在用户管理区域内，就返回视频管理
+        if (usersContainer && !usersContainer.contains(e.target)) {
+            showVideoManagement();
+        }
+    });
+
+    window._clickOutsideListenerInitialized = true;
 }
 
 /**
@@ -359,3 +409,4 @@ async function handleChangePassword(user) {
 
 // 导出
 window.showUserManagement = showUserManagement;
+window.showVideoManagement = showVideoManagement;

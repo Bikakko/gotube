@@ -29,6 +29,7 @@ function showPlayerModal(video) {
             ]),
             el('div', { className: 'modal-body' }, [
                 el('video', {
+                    id: 'player-video',
                     controls: true,
                     autoplay: true,
                 }, [
@@ -49,6 +50,12 @@ function showPlayerModal(video) {
     });
 
     document.body.appendChild(overlay);
+
+    // 自动聚焦到 video 元素，使浏览器能处理所有键盘操作（空格暂停、方向键快进快退）
+    const videoEl = overlay.querySelector('#player-video');
+    if (videoEl) {
+        videoEl.focus();
+    }
 }
 
 /**
@@ -234,6 +241,15 @@ function renderModalTags(tags) {
 function closeModal(modalId) {
     const modal = $(`#${modalId}`);
     if (modal) {
+        // 如果是播放器模态框，先停止视频播放
+        if (modalId === 'player-modal') {
+            const videoEl = modal.querySelector('video');
+            if (videoEl) {
+                videoEl.pause();
+                videoEl.src = ''; // 清空源确保完全停止
+                videoEl.load();
+            }
+        }
         modal.remove();
     }
 }

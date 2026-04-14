@@ -30,6 +30,11 @@ async function renderPage() {
 
     // 渲染批量操作栏
     window.renderBatchBar();
+    
+    // 初始化点击外部区域返回视频管理的监听器
+    if (typeof initClickOutsideListener === 'function') {
+        initClickOutsideListener();
+    }
 }
 
 /**
