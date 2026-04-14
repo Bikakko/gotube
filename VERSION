@@ -1,9 +1,9 @@
-GoTube v3.0.4
+GoTube v3.0.5
 =============
 
-Version: 3.0.4
+Version: 3.0.5
 Release Date: 2026-04-14
-Description: 自托管多平台视频下载工具 - 数据库化升级版
+Description: 自托管多平台视频下载工具 - 修复登录 Token 多 Worker 隔离问题
 
 Key Features:
 - Multi-platform video downloading (YouTube, Bilibili, X/Twitter, etc.)
@@ -23,6 +23,7 @@ Tech Stack:
 - Process Management: systemd
 
 Changelog:
+- v3.0.5: Fix login token isolation issue in multi-worker mode - 2026-04-14
 - v3.0.4: Bug fixes only - 2026-04-14
 - v3.0.3: Bug fixes only - 2026-04-14
 - v3.0.2: Bug fixes only - 2026-04-14

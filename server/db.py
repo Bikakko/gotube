@@ -49,6 +49,18 @@ class UserLog(Base):
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
+class AuthToken(Base):
+    __tablename__ = "auth_tokens"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    token = Column(String(128), unique=True, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_used_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+
+
 # ── 数据库初始化 ──
 
 _engine = None

@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from .config import settings
-from .db import User, get_session
+from .db import AuthToken, User, get_session
 from .models import (
     ChangePasswordRequest,
     CreateUserRequest,
@@ -38,83 +38,115 @@ router = APIRouter()
 # ── Token 管理 ──
 
 
-# 内存存储 token: {token: {user_id, username, role, expiry}}
-_admin_tokens: dict[str, dict] = {}
-
 # Token 有效期：120 小时
 _TOKEN_TTL_SECONDS = 120 * 3600
 
 
-def generate_token(user_id: int, username: str, role: str) -> str:
-    """生成包含用户信息的 token 并存入内存"""
+def generate_token(db: Session, user_id: int, username: str, role: str) -> str:
+    """生成 token 并存入数据库"""
     token = secrets.token_hex(32)
-    expiry = time.time() + _TOKEN_TTL_SECONDS
-    _admin_tokens[token] = {
-        "user_id": user_id,
-        "username": username,
-        "role": role,
-        "expiry": expiry,
-    }
-    logger.info("生成 token: user=%s, role=%s, 过期时间: %s", 
-                username, role, datetime.fromtimestamp(expiry, tz=UTC).isoformat())
+    expiry = datetime.now(UTC) + timedelta(seconds=_TOKEN_TTL_SECONDS)
+    
+    auth_token = AuthToken(
+        token=token,
+        user_id=user_id,
+        expires_at=expiry,
+        is_active=True,
+    )
+    db.add(auth_token)
+    db.commit()
+    
+    logger.info("生成 token: user=%s, role=%s, 过期时间: %s",
+                username, role, expiry.isoformat())
     return token
 
 
-def verify_token(token: str | None) -> dict | None:
+def verify_token(db: Session, token: str | None) -> dict | None:
     """验证 token 并返回 payload"""
-    if not token or token not in _admin_tokens:
+    if not token:
+        return None
+
+    # 从数据库查询 token
+    auth_token = db.query(AuthToken).filter(
+        AuthToken.token == token,
+        AuthToken.is_active == True,
+    ).first()
+    
+    if not auth_token:
         return None
     
-    data = _admin_tokens[token]
-    if time.time() > data["expiry"]:
-        _admin_tokens.pop(token, None)
+    # 检查是否过期
+    if datetime.now(UTC) > auth_token.expires_at:
+        auth_token.is_active = False
+        db.commit()
         return None
     
     # 数据库检查用户状态
     try:
-        with get_session() as db:
-            user = db.query(User).filter(User.id == data["user_id"]).first()
-            if not user or not user.is_active:
-                _admin_tokens.pop(token, None)
-                return None
-            # 角色如果变了，同步更新 token 里的角色（可选）
-            if user.role != data["role"]:
-                data["role"] = user.role
+        user = db.query(User).filter(User.id == auth_token.user_id).first()
+        if not user or not user.is_active:
+            auth_token.is_active = False
+            db.commit()
+            return None
+        
+        # 更新 last_used_at
+        auth_token.last_used_at = datetime.now(UTC)
+        db.commit()
+        
+        return {
+            "user_id": user.id,
+            "username": user.username,
+            "role": user.role,
+            "expiry": auth_token.expires_at.timestamp(),
+        }
     except Exception as e:
         logger.error("Token 查库校验失败: %s", e)
         return None
 
-    # 续期
-    data["expiry"] = time.time() + _TOKEN_TTL_SECONDS
-    return data
 
-
-def cleanup_expired_tokens() -> None:
+def cleanup_expired_tokens(db: Session) -> None:
     """清理过期 token"""
-    now = time.time()
-    expired = [t for t, data in _admin_tokens.items() if now > data["expiry"]]
-    for t in expired:
-        _admin_tokens.pop(t, None)
+    now = datetime.now(UTC)
+    expired_tokens = db.query(AuthToken).filter(
+        AuthToken.expires_at < now,
+        AuthToken.is_active == True,
+    ).all()
+    
+    for auth_token in expired_tokens:
+        auth_token.is_active = False
+    
+    db.commit()
+    
+    if expired_tokens:
+        logger.info("清理了 %d 个过期 token", len(expired_tokens))
 
 
 async def verify_admin_authorization(request: Request) -> dict:
     """
     依赖注入：验证 Authorization Header 中的 Bearer token。
-    
+
     Returns:
         token payload 字典。
     """
-    cleanup_expired_tokens()
-    
+    from fastapi import Depends
+
     auth_header = request.headers.get("Authorization", "")
     if not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="未授权访问")
-    
+
     token = auth_header[7:].strip()
-    payload = verify_token(token)
+    
+    # 获取数据库会话
+    db = next(get_db())
+    
+    # 清理过期token
+    cleanup_expired_tokens(db)
+    
+    # 验证token
+    payload = verify_token(db, token)
     if not payload:
         raise HTTPException(status_code=401, detail="Token 无效或已过期")
-    
+
     return payload
 
 
@@ -329,12 +361,12 @@ async def admin_login(
     if not bcrypt.checkpw(body.password.encode('utf-8'), user.password_hash.encode('utf-8')):
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
-    
+
     # 更新最后登录时间
     user.last_login = datetime.now(UTC)
     db.commit()
-    
-    token = generate_token(user.id, user.username, user.role)
+
+    token = generate_token(db, user.id, user.username, user.role)
     return {
         "token": token,
         "user": {
@@ -358,6 +390,32 @@ async def auth_check(payload: dict = Depends(verify_admin_authorization)) -> dic
             "role": payload["role"],
         }
     }
+
+
+@router.post("/auth/logout")
+async def auth_logout(
+    request: Request,
+    payload: dict = Depends(verify_admin_authorization),
+    db: Session = Depends(get_db),
+) -> dict:
+    """
+    登出，使当前 token 失效。
+    """
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header[7:].strip() if auth_header.startswith("Bearer ") else None
+    
+    if token:
+        auth_token = db.query(AuthToken).filter(
+            AuthToken.token == token,
+            AuthToken.is_active == True,
+        ).first()
+        
+        if auth_token:
+            auth_token.is_active = False
+            db.commit()
+            logger.info("用户 %s 主动登出", payload["username"])
+    
+    return {"success": True}
 
 
 # ── 用户管理 API ──
@@ -525,10 +583,12 @@ async def change_password(
     user.password_hash = bcrypt.hashpw(body.new_password.encode('utf-8'), salt).decode('utf-8')
     db.commit()
 
-    # 修改密码后使所有 token 失效
-    keys_to_del = [t for t, data in _admin_tokens.items() if data["user_id"] == user_id]
-    for k in keys_to_del:
-        _admin_tokens.pop(k, None)
+    # 修改密码后使该用户的所有活跃 token 失效（数据库操作）
+    db.query(AuthToken).filter(
+        AuthToken.user_id == user_id,
+        AuthToken.is_active == True,
+    ).update({"is_active": False})
+    db.commit()
 
     return {"status": "ok"}
 

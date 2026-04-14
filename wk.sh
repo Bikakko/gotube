@@ -96,15 +96,12 @@ force_kill_port() {
     return 1
 }
 
-# 获取 worker 数量（CPU 核心数 * 2 + 1，最大 4）
+# 获取 worker 数量
+# 注意：由于下载队列和 WebSocket 进度推送依赖进程内存状态，
+# 多 Worker 会导致状态隔离（任务丢失、进度无法推送）。
+# 因此固定为 1 个 Worker，使用 asyncio 并发处理请求已足够。
 get_workers() {
-    local cores
-    cores=$(nproc 2>/dev/null || echo 2)
-    local workers=$(( cores * 2 + 1 ))
-    if [ "$workers" -gt 4 ]; then
-        workers=4
-    fi
-    echo "$workers"
+    echo "1"
 }
 
 start() {

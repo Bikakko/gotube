@@ -184,8 +184,18 @@ async function handleLogin() {
 /**
  * 退出登录
  */
-function handleLogout() {
+async function handleLogout() {
     if (!confirm('确定要退出管理页面吗？')) return;
+
+    // 尝试调用后端登出 API，使 token 失效
+    const token = localStorage.getItem('gotube_admin_token');
+    if (token) {
+        try {
+            await apiFetch('/auth/logout', { method: 'POST' });
+        } catch (err) {
+            console.warn('登出 API 调用失败:', err.message);
+        }
+    }
 
     localStorage.removeItem('gotube_admin_token');
     location.reload();
