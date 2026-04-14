@@ -7,8 +7,6 @@
  * 显示播放器模态框
  */
 function showPlayerModal(video) {
-    hideAllDropdowns();
-
     console.log('[Player] video object:', JSON.stringify(video));
     console.log('[Player] video.file_hash:', video.file_hash);
     const videoSrc = `/watch?v=${encodeURIComponent(video.file_hash)}`;
@@ -62,8 +60,6 @@ function showPlayerModal(video) {
  * 显示分享模态框
  */
 function showShareModal(video) {
-    hideAllDropdowns();
-
     const shareUrl = `${window.location.origin}/watch?v=${video.file_hash}`;
 
     const overlay = el('div', { className: 'modal active', id: 'share-modal' }, [

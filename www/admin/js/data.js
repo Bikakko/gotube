@@ -1,4 +1,4 @@
-/**
+﻿/**
  * GoTube Admin - 数据操作模块
  * 视频列表加载、删除、批量删除、标签更新
  */
@@ -27,7 +27,7 @@ async function loadVideos() {
 
         state.videos = data.videos;
         state.filteredVideos = data.videos;
-        
+
         // 缓存全局所有来源：只在首次或来源列表变化时更新
         const newSources = data.all_sources || [];
         if (newSources.length > 0) {
@@ -47,13 +47,20 @@ async function loadVideos() {
         }
         // 始终使用缓存的来源列表
         state.allSources = state.cachedAllSources;
-        
+
         state.pagination.total = data.total;
         state.pagination.totalPages = data.total_pages;
         state.pagination.page = data.page;
 
-        // 重新渲染筛选栏（因为来源列表可能变化）
-        window.renderFilters();
+        // 首次加载时渲染整个筛选栏，后续只更新下拉选项（避免搜索框失焦）
+        if (!window._filtersRendered) {
+            window.renderFilters();
+            window._filtersRendered = true;
+        } else {
+            // 只更新下拉菜单选项，不重建整个筛选栏
+            window.updateSourceDropdownOptions();
+            window.updateTimeDropdownOptions();
+        }
 
         // 重新渲染视频网格
         window.renderVideoGrid();
@@ -111,8 +118,6 @@ async function loadStats() {
  * 删除单个视频（入口函数）
  */
 async function handleDeleteVideo(filename) {
-    hideAllDropdowns();
-
     // 查找视频信息
     const video = state.videos.find(v => v.filename === filename);
     if (!video) {
@@ -255,13 +260,13 @@ async function handleBatchDelete() {
             .map(r => r.filename);
         successFilenames.forEach(f => state.selectedVideos.delete(f));
 
-        // 更新UI
-        window.updateSelectAllCheckbox();
-        window.updateBatchBar();
-
-        // 重新加载视频列表
+        // 重新加载视频列表和统计信息
         await window.loadVideos();
         await window.loadStats();
+
+        // 更新 UI（在加载新数据后更新）
+        window.updateSelectAllCheckbox();
+        window.updateBatchBar();
 
         // 显示详细的删除结果
         if (failedCount > 0) {

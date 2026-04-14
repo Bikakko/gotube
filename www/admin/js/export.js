@@ -7,8 +7,6 @@
  * 导出 ZIP
  */
 async function handleExportZip() {
-    hideAllDropdowns();
-
     const useAll = state.selectedVideos.size === 0;
 
     try {
@@ -41,8 +39,6 @@ async function handleExportZip() {
  * 导出 JSON
  */
 async function handleExportJson() {
-    hideAllDropdowns();
-
     try {
         const response = await apiFetch('/export/json', {
             method: 'POST',
@@ -69,8 +65,6 @@ async function handleExportJson() {
  * 导出 m3u8
  */
 async function handleExportM3u8() {
-    hideAllDropdowns();
-
     const useAll = state.selectedVideos.size === 0;
 
     try {

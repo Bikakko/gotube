@@ -58,8 +58,10 @@ function toggleSelectAll(selectAll) {
             state.selectedVideos.add(video.filename);
         });
     } else {
-        // 取消全选
-        state.selectedVideos.clear();
+        // 取消全选：只取消当前页的视频，保留其他页的选择
+        state.filteredVideos.forEach(video => {
+            state.selectedVideos.delete(video.filename);
+        });
     }
     window.updateSelectAllCheckbox();
     window.updateBatchBar();
@@ -106,7 +108,7 @@ function clearSelection() {
 }
 
 /**
- * 切换下拉菜单
+ * 切换下拉菜单（仅用于导出菜单）
  */
 function toggleDropdown(menuId) {
     const menu = $(`#${menuId}`);

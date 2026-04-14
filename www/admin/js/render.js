@@ -126,11 +126,24 @@ function renderNavbar() {
  */
 function renderMainLayout() {
     const main = el('div', { className: 'main', id: 'main-content' }, [
-        el('div', { id: 'stats-slot' }),
-        el('div', { id: 'filters-slot' }),
-        el('div', { id: 'count-slot', className: 'count-container' }),
-        el('div', { id: 'grid-slot' }),
-        el('div', { id: 'pagination-slot' }),
+        // 视频视图容器
+        el('div', { 
+            id: 'video-view-container',
+            style: 'display: block;' 
+        }, [
+            el('div', { id: 'stats-slot' }),
+            el('div', { id: 'filters-slot' }),
+            el('div', { id: 'count-slot', className: 'count-container' }),
+            el('div', { id: 'grid-slot' }),
+            el('div', { id: 'pagination-slot' }),
+        ]),
+        // 用户视图容器
+        el('div', { 
+            id: 'user-view-container',
+            style: 'display: none;' 
+        }, [
+            el('div', { id: 'users-table-slot' }),
+        ]),
     ]);
     document.body.appendChild(main);
 }
@@ -390,20 +403,11 @@ function renderVideoCard(video) {
                 textContent: '🔗 分享',
                 onClick: () => window.showShareModal(video),
             }),
-            state.currentUser && state.currentUser.role !== 'readonly' ? el('div', { className: 'dropdown' }, [
-                el('button', {
-                    className: 'action-btn',
-                    textContent: '⋮',
-                    onClick: () => window.toggleDropdown(`dropdown-${video.file_hash}`),
-                }),
-                el('div', { className: 'dropdown-menu', id: `dropdown-${video.file_hash}` }, [
-                    el('div', {
-                        className: 'dropdown-item danger',
-                        textContent: '🗑️ 删除',
-                        onClick: () => window.handleDeleteVideo(video.filename),
-                    }),
-                ]),
-            ]) : null,
+            state.currentUser && state.currentUser.role !== 'readonly' ? el('button', {
+                className: 'action-btn delete',
+                textContent: '🗑️ 删除',
+                onClick: () => window.handleDeleteVideo(video.filename),
+            }) : null,
         ]),
         // 选择按钮放在最右边
         el('div', { className: 'action-group' }, [

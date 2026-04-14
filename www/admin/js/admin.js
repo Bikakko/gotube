@@ -48,7 +48,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ========== 全局事件监听 ==========
 
-// 点击页面其他地方关闭下拉菜单
+// 点击页面其他地方关闭下拉菜单（仅用于导航栏导出菜单）
 document.addEventListener('click', (e) => {
     if (!e.target.closest('.dropdown')) {
         hideAllDropdowns();

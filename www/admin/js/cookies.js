@@ -9,9 +9,6 @@
  * 显示 Cookie 管理模态框
  */
 function showCookiesManagement() {
-    // 关闭其他下拉菜单
-    hideAllDropdowns();
-
     // 创建模态框
     const modal = el('div', { className: 'modal active', id: 'cookies-modal' }, [
         el('div', { className: 'modal-content', style: 'max-width: 600px;' }, [
