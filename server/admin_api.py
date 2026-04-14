@@ -1019,6 +1019,112 @@ def _parse_cookies_domains(cookies_path: Path) -> list[str]:
     return sorted(domains)
 
 
+def _parse_domains_from_content(content: str) -> list[str]:
+    """
+    从 cookies 内容字符串中解析域名。
+
+    Args:
+        content: cookies 文本内容。
+
+    Returns:
+        去重后的域名列表。
+    """
+    domains = set()
+    for line in content.strip().split("\n"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) >= 1:
+            domains.add(parts[0])
+    return sorted(domains)
+
+
+def _merge_cookies_content(existing_content: str, new_content: str) -> str:
+    """
+    智能合并两个 cookies 内容。
+
+    逻辑：
+    1. 解析现有内容的域名和行
+    2. 解析新内容的域名和行
+    3. 如果新内容包含某个域名，替换该域名的所有行
+    4. 其他域名的行保持不变
+    5. 如果新内容有新域名，追加到末尾
+
+    Args:
+        existing_content: 现有的 cookies 内容。
+        new_content: 新的 cookies 内容。
+
+    Returns:
+        合并后的内容。
+    """
+    # 解析现有内容（按域名分组）
+    existing_lines_by_domain: dict[str, list[str]] = {}
+    existing_header_lines: list[str] = []
+
+    for line in existing_content.strip().split("\n"):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            existing_header_lines.append(line)
+            continue
+
+        parts = stripped.split("\t")
+        if len(parts) >= 1:
+            domain = parts[0]
+            if domain not in existing_lines_by_domain:
+                existing_lines_by_domain[domain] = []
+            existing_lines_by_domain[domain].append(stripped)
+
+    # 解析新内容（按域名分组）
+    new_lines_by_domain: dict[str, list[str]] = {}
+
+    for line in new_content.strip().split("\n"):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        parts = stripped.split("\t")
+        if len(parts) >= 1:
+            domain = parts[0]
+            if domain not in new_lines_by_domain:
+                new_lines_by_domain[domain] = []
+            new_lines_by_domain[domain].append(stripped)
+
+    # 合并：新内容的域名替换，其他保持不变
+    for domain, lines in new_lines_by_domain.items():
+        existing_lines_by_domain[domain] = lines
+
+    # 重新生成内容
+    result_lines = existing_header_lines if existing_header_lines else ["# Netscape HTTP Cookie File"]
+
+    for domain in sorted(existing_lines_by_domain.keys()):
+        result_lines.extend(existing_lines_by_domain[domain])
+
+    return "\n".join(result_lines) + "\n"
+
+
+def _get_active_cookies_content() -> str | None:
+    """
+    获取当前活动的 cookies 文件内容。
+
+    Returns:
+        文件内容，如果不存在返回 None。
+    """
+    data_cookies = _get_cookies_storage_path()
+    env_cookies = settings.get_cookies_file()
+    active_cookies = data_cookies if data_cookies.exists() else env_cookies
+
+    if not active_cookies or not active_cookies.exists():
+        return None
+
+    try:
+        with open(active_cookies, encoding="utf-8") as f:
+            return f.read()
+    except Exception as e:
+        logger.warning("读取 cookies 内容失败: %s", e)
+        return None
+
+
 def _backup_cookies_file(cookies_path: Path) -> Path | None:
     """
     备份现有 cookies 文件。
@@ -1044,10 +1150,21 @@ def _validate_cookies_format(content: str) -> tuple[bool, str]:
     """
     验证 cookies 内容格式（Netscape 格式）。
 
+    Netscape 格式要求：
+    - 第一行必须是 `# Netscape HTTP Cookie File`
+    - 每行 7 个字段，制表符分隔
+    - 字段：domain, include_subdomains, path, https_only, expires_at, name, value
+
     Returns:
         (是否有效, 错误信息)
     """
     lines = content.strip().split("\n")
+    
+    # 检查第一行注释头
+    first_line = lines[0].strip() if lines else ""
+    if first_line != "# Netscape HTTP Cookie File":
+        return False, "第一行必须是 '# Netscape HTTP Cookie File' 注释头"
+
     valid_lines = 0
 
     for i, line in enumerate(lines, 1):
@@ -1057,8 +1174,8 @@ def _validate_cookies_format(content: str) -> tuple[bool, str]:
             continue
 
         parts = line.split("\t")
-        if len(parts) < 6:
-            return False, f"第 {i} 行格式错误：Netscape 格式应包含 6 个制表符分隔字段"
+        if len(parts) < 7:
+            return False, f"第 {i} 行格式错误：Netscape 格式应包含 7 个制表符分隔字段（当前 {len(parts)} 个）"
 
         valid_lines += 1
 
@@ -1140,9 +1257,82 @@ async def get_cookies_status(
         raise HTTPException(status_code=500, detail=f"获取 cookies 状态失败: {e}") from e
 
 
+@router.post("/cookies/check_merge")
+async def check_cookies_merge(
+    request: Request,
+    payload: dict = Depends(verify_admin_authorization),
+) -> dict:
+    """
+    预检查上传的 cookies 内容，返回将影响的域名。
+
+    用于前端显示确认对话框，不实际保存文件。
+    """
+    try:
+        content_type = request.headers.get("Content-Type", "")
+        content = ""
+
+        # 解析内容（与 upload_cookies 相同逻辑）
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            file = form.get("file")
+            if not file:
+                raise HTTPException(status_code=400, detail="缺少 file 字段")
+            if hasattr(file, "file") and hasattr(file.file, "read"):
+                content = (await file.read()).decode("utf-8")
+            elif hasattr(file, "read"):
+                content = file.read().decode("utf-8")
+            else:
+                content = str(file)
+        elif "application/json" in content_type:
+            body = await request.json()
+            content = body.get("content", "").strip()
+        else:
+            raise HTTPException(status_code=400, detail="不支持的 Content-Type")
+
+        if not content:
+            raise HTTPException(status_code=400, detail="cookies 内容为空")
+
+        # 验证格式
+        is_valid, error_msg = _validate_cookies_format(content)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=f"cookies 格式无效: {error_msg}")
+
+        # 解析新内容的域名
+        new_domains = _parse_domains_from_content(content)
+
+        # 获取现有内容的域名
+        existing_content = _get_active_cookies_content()
+        existing_domains = _parse_domains_from_content(existing_content) if existing_content else []
+
+        # 对比
+        new_domains_set = set(new_domains)
+        existing_domains_set = set(existing_domains)
+
+        will_replace = sorted(new_domains_set & existing_domains_set)  # 将替换的域名
+        will_add = sorted(new_domains_set - existing_domains_set)  # 将新增的域名
+
+        return {
+            "status": "ok",
+            "new_domains": new_domains,
+            "existing_domains": existing_domains,
+            "will_replace": will_replace,
+            "will_add": will_add,
+            "replace_count": len(will_replace),
+            "add_count": len(will_add),
+            "will_affect_other_domains": len(existing_domains_set - new_domains_set) > 0,
+            "unchanged_domains": sorted(existing_domains_set - new_domains_set),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("预检查 cookies 失败: %s", e)
+        raise HTTPException(status_code=500, detail=f"预检查失败: {e}") from e
+
+
 @router.post("/cookies/upload")
 async def upload_cookies(
     request: Request,
+    mode: str = Query(default="replace", description="上传模式：replace（替换整个文件）或 merge（智能合并）"),
     payload: dict = Depends(verify_admin_authorization),
 ) -> dict:
     """
@@ -1151,6 +1341,10 @@ async def upload_cookies(
     支持两种方式：
     1. multipart/form-data 文件上传（file 字段）
     2. JSON 请求体（content 字段，文本内容）
+
+    模式：
+    - replace: 完全替换现有 cookies 文件（默认）
+    - merge: 智能合并，按域名替换，不影响其他平台
 
     自动备份旧文件，热重载下载器配置。
     """
@@ -1205,14 +1399,29 @@ async def upload_cookies(
         if len(content.encode("utf-8")) > 1024 * 1024:
             raise HTTPException(status_code=400, detail="cookies 文件过大（最大 1MB）")
 
+        # 根据模式处理内容
+        final_content = content
+        mode_message = "完全替换模式"
+
+        if mode == "merge":
+            # 智能合并模式
+            existing_content = _get_active_cookies_content()
+            if existing_content:
+                final_content = _merge_cookies_content(existing_content, content)
+                new_domains = _parse_domains_from_content(content)
+                mode_message = f"智能合并模式（更新了 {len(new_domains)} 个域名）"
+            else:
+                # 没有现有文件，直接保存
+                mode_message = "智能合并模式（新文件）"
+
         # 备份旧文件
         backup_path = _backup_cookies_file(cookies_path)
 
-        # 保存新 cookies
+        # 保存 cookies
         try:
             with open(cookies_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            logger.info("cookies 文件已更新: %s (%d bytes)", cookies_path, len(content))
+                f.write(final_content)
+            logger.info("cookies 文件已更新: %s (%d bytes, %s)", cookies_path, len(final_content), mode_message)
         except Exception as e:
             logger.error("保存 cookies 失败: %s", e)
             raise HTTPException(status_code=500, detail=f"保存 cookies 失败: {e}") from e
@@ -1220,14 +1429,15 @@ async def upload_cookies(
         # 热重载下载器
         _reload_cookies_in_downloader(cookies_path)
 
-        # 解析域名
-        domains = _parse_cookies_domains(cookies_path)
+        # 解析最终域名
+        domains = _parse_domains_from_content(final_content)
 
         return {
             "status": "ok",
-            "message": "cookies 上传成功",
-            "file_size": len(content.encode("utf-8")),
-            "file_size_human": f"{len(content.encode('utf-8')) / 1024:.1f} KB",
+            "message": f"cookies {mode_message}成功",
+            "mode": mode,
+            "file_size": len(final_content.encode("utf-8")),
+            "file_size_human": f"{len(final_content.encode('utf-8')) / 1024:.1f} KB",
             "domains": domains,
             "domain_count": len(domains),
             "backup": backup_path.name if backup_path else None,

@@ -188,6 +188,15 @@ function renderUploadArea() {
         <div style="padding: 20px; background: var(--surface); border-radius: 8px;">
             <div style="font-size: 16px; font-weight: bold; margin-bottom: 15px;">📤 上传/更新 Cookies</div>
             
+            <!-- 模式选择 -->
+            <div style="margin-bottom: 20px; padding: 15px; background: rgba(33, 150, 243, 0.1); border-radius: 6px; border-left: 3px solid var(--info);">
+                <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: var(--info);">💡 智能合并模式</div>
+                <div style="font-size: 13px; color: var(--text-sec); line-height: 1.6;">
+                    当前默认使用<strong>智能合并模式</strong>：上传新 cookies 时只会替换匹配的域名，不影响其他平台的配置。<br>
+                    例如：上传只包含 youtube.com 的 cookies，只会更新 youtube.com，bilibili.com 等其他平台不受影响。
+                </div>
+            </div>
+            
             <!-- 文件上传 -->
             <div style="margin-bottom: 20px;">
                 <label style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-sec);">
@@ -217,7 +226,8 @@ function renderUploadArea() {
                 <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: var(--warning);">⚠️ 注意事项</div>
                 <ul style="font-size: 13px; color: var(--text-sec); margin-left: 20px; line-height: 1.8;">
                     <li>Cookies 文件应为 Netscape 格式（从浏览器插件导出）</li>
-                    <li>一个文件可包含多个网站的 cookies，yt-dlp 会自动匹配对应域名</li>
+                    <li>智能合并会按域名匹配替换，不影响其他平台</li>
+                    <li>上传前会显示确认对话框，列出将影响的域名</li>
                     <li>上传后会自动热重载，无需重启服务</li>
                     <li>旧 cookies 文件会自动备份到 data 目录</li>
                     <li>文件大小限制：最大 1MB</li>
@@ -254,13 +264,46 @@ async function uploadCookiesFile() {
         return;
     }
 
-    const formData = new FormData();
-    formData.append('file', file);
-
     try {
+        // 先读取文件内容用于预检查
+        const content = await readFileAsText(file);
+        if (!content.trim()) {
+            showToast('文件内容为空', 'warning');
+            return;
+        }
+
+        showToast('正在检查 cookies...', 'info');
+
+        // 预检查
+        const checkResponse = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies/check_merge`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ content }),
+        });
+
+        const checkData = await checkResponse.json();
+
+        if (!checkResponse.ok) {
+            throw new Error(checkData.detail || '预检查失败');
+        }
+
+        // 显示确认对话框
+        const confirmed = await showMergeConfirmDialog(checkData);
+        if (!confirmed) {
+            showToast('已取消上传', 'info');
+            return;
+        }
+
+        // 用户确认，执行上传
         showToast('正在上传 cookies...', 'info');
 
-        const response = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies/upload`, {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const response = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies/upload?mode=merge`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -274,7 +317,7 @@ async function uploadCookiesFile() {
             throw new Error(data.detail || '上传失败');
         }
 
-        showToast(`✅ ${data.message}\n包含 ${data.domain_count} 个域名`, 'success');
+        showToast(`✅ ${data.message}\n当前共 ${data.domain_count} 个域名`, 'success');
         
         // 刷新状态
         await loadCookiesStatus();
@@ -282,6 +325,53 @@ async function uploadCookiesFile() {
         console.error('上传 cookies 失败:', error);
         showToast(`❌ 上传失败: ${error.message}`, 'error');
     }
+}
+
+/**
+ * 读取文件为文本
+ */
+function readFileAsText(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.onerror = (e) => reject(new Error('读取文件失败'));
+        reader.readAsText(file);
+    });
+}
+
+/**
+ * 显示智能合并确认对话框
+ */
+function showMergeConfirmDialog(checkData) {
+    return new Promise((resolve) => {
+        const { will_replace, will_add, replace_count, add_count, unchanged_domains } = checkData;
+
+        let message = '📋 上传确认\n\n';
+        
+        if (replace_count > 0) {
+            message += `🔄 将替换 ${replace_count} 个域名：\n`;
+            message += will_replace.join(', ') + '\n\n';
+        }
+        
+        if (add_count > 0) {
+            message += `➕ 将新增 ${add_count} 个域名：\n`;
+            message += will_add.join(', ') + '\n\n';
+        }
+        
+        if (unchanged_domains.length > 0) {
+            message += `✅ 不影响 ${unchanged_domains.length} 个域名：\n`;
+            message += unchanged_domains.slice(0, 10).join(', ');
+            if (unchanged_domains.length > 10) {
+                message += ` 等${unchanged_domains.length}个`;
+            }
+            message += '\n\n';
+        }
+
+        message += '是否继续？';
+
+        const confirmed = confirm(message);
+        resolve(confirmed);
+    });
 }
 
 /**
@@ -303,9 +393,35 @@ async function uploadCookiesText() {
     const content = textarea.value.trim();
 
     try {
+        showToast('正在检查 cookies...', 'info');
+
+        // 预检查
+        const checkResponse = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies/check_merge`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ content }),
+        });
+
+        const checkData = await checkResponse.json();
+
+        if (!checkResponse.ok) {
+            throw new Error(checkData.detail || '预检查失败');
+        }
+
+        // 显示确认对话框
+        const confirmed = await showMergeConfirmDialog(checkData);
+        if (!confirmed) {
+            showToast('已取消提交', 'info');
+            return;
+        }
+
+        // 用户确认，执行提交
         showToast('正在提交 cookies...', 'info');
 
-        const response = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies/upload`, {
+        const response = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies/upload?mode=merge`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -320,7 +436,7 @@ async function uploadCookiesText() {
             throw new Error(data.detail || '提交失败');
         }
 
-        showToast(`✅ ${data.message}\n包含 ${data.domain_count} 个域名`, 'success');
+        showToast(`✅ ${data.message}\n当前共 ${data.domain_count} 个域名`, 'success');
         
         // 清空输入框
         textarea.value = '';
