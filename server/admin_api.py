@@ -13,6 +13,7 @@ import time
 import zipfile
 from collections import Counter
 from datetime import UTC, datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any
 
@@ -320,27 +321,91 @@ def _update_meta_in_dir(dir_path: Path, updates: dict) -> None:
 
 
 def _classify_video_time(created_at_str: str) -> str:
-    """根据创建时间分类视频"""
+    """根据创建时间分类视频（使用本地时区）"""
     try:
+        # 使用本地时区（Asia/Shanghai）
+        local_tz = ZoneInfo("Asia/Shanghai")
         created_at = datetime.fromisoformat(created_at_str)
-        now = datetime.now(UTC)
-        
-        # 转换为同一时区比较
+        now = datetime.now(local_tz)
+
+        # 转换为本地时区比较
         if created_at.tzinfo is None:
-            created_at = created_at.replace(tzinfo=UTC)
-        
-        delta = now - created_at
-        
-        if delta.days == 0:
-            return "today"
-        elif delta.days <= 7:
-            return "week"
-        elif delta.days <= 30:
+            created_at = created_at.replace(tzinfo=local_tz)
+        else:
+            created_at = created_at.astimezone(local_tz)
+
+        # 从宽到窄判断：先判断大范围，再判断小范围
+        # 本自然月（从1号开始）
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        if created_at >= month_start:
+            # 在本月内，再判断是否在本周
+            today_weekday = now.weekday()  # 0=周一, 6=周日
+            week_start = now - timedelta(days=today_weekday)
+            week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+            if created_at >= week_start:
+                # 在本周内，再判断是否是今天（用日期比较而不是时间差）
+                today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+                if created_at >= today_start:
+                    return "today"
+                return "week"
             return "month"
         else:
             return "earlier"
     except Exception:
         return "earlier"
+
+
+def _filter_videos_by_time_range(videos: list, time_filter: str) -> list:
+    """
+    按时间范围筛选视频（包含范围，而非互斥分类）。
+    
+    - today: 今天（从0点开始）
+    - week: 本周（从周一0点开始，包含今天）
+    - month: 本月（从1号0点开始，包含本周和今天）
+    - earlier: 更早（本月1号0点之前的所有视频）
+    """
+    try:
+        local_tz = get_local_timezone()
+        now = datetime.now(local_tz)
+        
+        # 计算各时间范围的起始点
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        today_weekday = now.weekday()  # 0=周一, 6=周日
+        week_start = now - timedelta(days=today_weekday)
+        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
+        # 根据筛选条件确定起始时间
+        if time_filter == "today":
+            threshold = today_start
+        elif time_filter == "week":
+            threshold = week_start
+        elif time_filter == "month":
+            threshold = month_start
+        elif time_filter == "earlier":
+            # earlier 是本月之前的，所以筛选条件是 < month_start
+            return [v for v in videos if _get_video_local_time(v["created_at"]) < month_start]
+        else:
+            return videos
+        
+        # 包含范围筛选：created_at >= threshold
+        return [v for v in videos if _get_video_local_time(v["created_at"]) >= threshold]
+    except Exception:
+        return videos
+
+
+def _get_video_local_time(created_at: datetime) -> datetime:
+    """
+    获取视频创建时间的本地时区表示。
+    """
+    local_tz = get_local_timezone()
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=local_tz)
+    else:
+        created_at = created_at.astimezone(local_tz)
+    return created_at
 
 
 # ── 认证 API ──
@@ -604,7 +669,6 @@ async def get_videos(
     keyword: str | None = Query(None, description="关键词搜索"),
     source: str | None = Query(None, description="来源平台"),
     time: str | None = Query("all", description="时间范围: all/today/week/month/earlier"),
-    tags: str | None = Query(None, description="标签过滤，逗号分隔"),
     page: int = Query(1, ge=1, description="页码"),
     per_page: int = Query(20, ge=1, le=100, description="每页数量"),
     payload: dict = Depends(verify_admin_authorization),
@@ -614,45 +678,34 @@ async def get_videos(
     """
     download_dir = settings.get_download_dir()
     videos = _list_all_videos(download_dir)
-    
+
     # 筛选
     if keyword:
         keyword_lower = keyword.lower()
         videos = [v for v in videos if keyword_lower in v["title"].lower()]
-    
+
     if source:
         videos = [v for v in videos if v["source"] == source]
-    
+
     if time and time != "all":
-        videos = [v for v in videos if _classify_video_time(v["created_at"]) == time]
-    
-    if tags:
-        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
-        if tag_list:
-            videos = [v for v in videos if any(t in v.get("tags", []) for t in tag_list)]
-    
+        videos = _filter_videos_by_time_range(videos, time)
+
     total = len(videos)
     
     # 分页
     start = (page - 1) * per_page
     end = start + per_page
     page_videos = videos[start:end]
-    
-    # 获取所有可用的标签列表（用于前端标签筛选下拉）
-    all_tags = set()
-    for v in videos:
-        all_tags.update(v.get("tags", []))
-    
+
     # 获取所有来源列表
     all_sources = list({v["source"] for v in videos})
-    
+
     return {
         "total": total,
         "page": page,
         "per_page": per_page,
         "total_pages": (total + per_page - 1) // per_page if per_page > 0 else 0,
         "videos": page_videos,
-        "all_tags": sorted(all_tags),
         "all_sources": sorted(all_sources),
     }
 

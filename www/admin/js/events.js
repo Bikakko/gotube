@@ -36,35 +36,6 @@ function handleTimeChange(time) {
 }
 
 /**
- * 标签输入框键盘事件
- */
-function handleTagInputKeydown(e) {
-    if (e.key === 'Enter') {
-        e.preventDefault();
-        const input = e.target;
-        const tag = input.value.trim();
-
-        if (tag && !state.filters.tags.includes(tag)) {
-            state.filters.tags.push(tag);
-            input.value = '';
-            window.renderSelectedTags();
-            state.pagination.page = 1;
-            window.loadVideos();
-        }
-    }
-}
-
-/**
- * 移除筛选标签
- */
-function removeFilterTag(tag) {
-    state.filters.tags = state.filters.tags.filter(t => t !== tag);
-    window.renderSelectedTags();
-    state.pagination.page = 1;
-    window.loadVideos();
-}
-
-/**
  * 切换视频选择状态
  */
 function toggleVideoSelection(filename, selected) {
@@ -165,8 +136,6 @@ function hideAllDropdowns() {
 window.handleKeywordChange = handleKeywordChange;
 window.handleSourceChange = handleSourceChange;
 window.handleTimeChange = handleTimeChange;
-window.handleTagInputKeydown = handleTagInputKeydown;
-window.removeFilterTag = removeFilterTag;
 window.toggleVideoSelection = toggleVideoSelection;
 window.toggleSelectAll = toggleSelectAll;
 window.updateSelectAllCheckbox = updateSelectAllCheckbox;

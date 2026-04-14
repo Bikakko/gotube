@@ -4,7 +4,7 @@
  */
 
 /**
- * 切换到用户管理视图
+ * 切换到用户管理视图（CSS 显示/隐藏，无布局抖动）
  */
 async function showUserManagement() {
     // 如果已经在用户管理视图，返回视频管理
@@ -18,55 +18,100 @@ async function showUserManagement() {
         return;
     }
 
+    // 防止重复切换
+    if (state.isTransitioning) return;
+    state.isTransitioning = true;
+
     // 更新视图状态
     state.currentView = 'users';
-
-    // 更新页面标题和导航状态
     document.title = 'GoTube Admin - 用户管理';
 
-    // 清空主内容区
-    const main = $('#main-content');
-    if (!main) return;
+    // 获取两个视图容器
+    const videoContainer = $('#video-view-container');
+    const userContainer = $('#user-view-container');
 
-    main.innerHTML = '';
+    if (!videoContainer || !userContainer) {
+        state.isTransitioning = false;
+        return;
+    }
 
-    // 渲染用户管理布局
-    main.appendChild(el('div', { className: 'users-container' }, [
-        el('div', { className: 'users-header' }, [
-            el('h2', { textContent: '👥 用户管理' }),
-            el('button', {
-                className: 'btn btn-primary',
-                textContent: '+ 新增用户',
-                onClick: () => showUserEditModal(),
-            }),
-        ]),
-        el('div', { id: 'users-table-slot', className: 'users-table-container' }, [
-            el('div', { className: 'loading', textContent: '加载中...' })
-        ]),
-    ]));
+    // 添加淡出效果
+    videoContainer.style.opacity = '0';
+    videoContainer.style.transition = 'opacity 0.15s ease';
 
-    // 设置延迟标记，阻止事件冒泡导致立即返回
-    state._justEnteredUsers = true;
+    // 等待淡出完成后切换视图
     setTimeout(() => {
-        state._justEnteredUsers = false;
-    }, 0);
+        // 隐藏视频视图，显示用户视图
+        videoContainer.style.display = 'none';
+        userContainer.style.display = 'block';
+        userContainer.style.opacity = '0';
 
-    // 加载用户数据
-    await loadUsers();
+        // 强制重排后淡入
+        requestAnimationFrame(() => {
+            userContainer.style.transition = 'opacity 0.15s ease';
+            userContainer.style.opacity = '1';
+        });
+
+        // 重置过渡状态
+        setTimeout(() => {
+            state.isTransitioning = false;
+        }, 150);
+
+        // 加载用户数据（使用缓存）
+        loadUsers();
+    }, 150);
 }
 
 /**
- * 返回视频管理视图
+ * 返回视频管理视图（CSS 显示/隐藏，无布局抖动）
  */
 function showVideoManagement() {
+    // 如果已经在视频管理视图，直接返回
+    if (state.currentView === 'videos') return;
+
+    // 防止重复切换
+    if (state.isTransitioning) return;
+    state.isTransitioning = true;
+
+    // 更新视图状态
     state.currentView = 'videos';
     document.title = 'GoTube Admin - 视频管理';
-    window.renderPage();
+
+    // 获取两个视图容器
+    const videoContainer = $('#video-view-container');
+    const userContainer = $('#user-view-container');
+
+    if (!videoContainer || !userContainer) {
+        state.isTransitioning = false;
+        return;
+    }
+
+    // 添加淡出效果
+    userContainer.style.opacity = '0';
+    userContainer.style.transition = 'opacity 0.15s ease';
+
+    // 等待淡出完成后切换视图
+    setTimeout(() => {
+        // 隐藏用户视图，显示视频视图
+        userContainer.style.display = 'none';
+        videoContainer.style.display = 'block';
+        videoContainer.style.opacity = '0';
+
+        // 强制重排后淡入
+        requestAnimationFrame(() => {
+            videoContainer.style.transition = 'opacity 0.15s ease';
+            videoContainer.style.opacity = '1';
+        });
+
+        // 重置过渡状态
+        setTimeout(() => {
+            state.isTransitioning = false;
+        }, 150);
+    }, 150);
 }
 
 /**
  * 初始化点击外部区域返回视频管理的事件监听
- * 注意：这个函数需要在每次渲染页面后调用，因为 renderPage() 会清空 body
  */
 window._clickOutsideListenerInitialized = false;
 
@@ -77,12 +122,12 @@ function initClickOutsideListener() {
     document.addEventListener('click', (e) => {
         // 只在用户管理视图时生效
         if (state.currentView !== 'users') return;
-        // 如果刚进入用户管理视图，阻止立即返回
-        if (state._justEnteredUsers) return;
+        // 如果正在过渡中，阻止立即返回
+        if (state.isTransitioning) return;
 
-        const usersContainer = document.querySelector('.users-container');
+        const userContainer = $('#user-view-container');
         // 如果点击的不在用户管理区域内，就返回视频管理
-        if (usersContainer && !usersContainer.contains(e.target)) {
+        if (userContainer && !userContainer.contains(e.target)) {
             showVideoManagement();
         }
     });
@@ -91,15 +136,28 @@ function initClickOutsideListener() {
 }
 
 /**
- * 加载用户列表
+ * 加载用户列表（支持缓存）
  */
-async function loadUsers() {
+async function loadUsers(forceReload = false) {
+    // 如果有缓存且不强制重新加载，直接使用缓存
+    if (state.usersLoaded && !forceReload && state.users.length > 0) {
+        renderUsersTable(state.users);
+        return;
+    }
+
+    // 显示加载状态
+    const slot = $('#users-table-slot');
+    if (slot) {
+        slot.innerHTML = '<div class="loading">加载中</div>';
+    }
+
     try {
         const users = await apiFetch('/users');
+        state.users = users;
+        state.usersLoaded = true;
         renderUsersTable(users);
     } catch (err) {
         console.error('加载用户列表失败:', err);
-        const slot = $('#users-table-slot');
         if (slot) {
             slot.innerHTML = `<div class="error">加载失败: ${err.message}</div>`;
         }
@@ -196,7 +254,9 @@ async function toggleUserActive(user) {
             body: JSON.stringify({ is_active: !user.is_active })
         });
         showToast(`用户已${user.is_active ? '禁用' : '启用'}`, 'success');
-        await loadUsers();
+        // 使缓存失效并重新加载
+        invalidateUserCache();
+        await loadUsers(true);
     } catch (err) {
         showToast('操作失败: ' + err.message, 'error');
     }
@@ -211,7 +271,9 @@ async function handleDeleteUser(user) {
     try {
         await apiFetch(`/users/${user.id}`, { method: 'DELETE' });
         showToast('用户已删除', 'success');
-        await loadUsers();
+        // 使缓存失效并重新加载
+        invalidateUserCache();
+        await loadUsers(true);
     } catch (err) {
         showToast('删除失败: ' + err.message, 'error');
     }
@@ -286,7 +348,7 @@ async function handleSaveUser(user) {
     const isEdit = !!user;
     const username = $('#edit-username').value.trim();
     const role = $('#edit-role').value;
-    
+
     if (!username) {
         showToast('请输入用户名', 'warning');
         return;
@@ -312,7 +374,9 @@ async function handleSaveUser(user) {
             showToast('创建成功', 'success');
         }
         closeModal('user-edit-modal');
-        await loadUsers();
+        // 使缓存失效并重新加载
+        invalidateUserCache();
+        await loadUsers(true);
     } catch (err) {
         showToast('操作失败: ' + err.message, 'error');
     }

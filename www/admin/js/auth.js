@@ -200,3 +200,10 @@ async function handleLogout() {
     localStorage.removeItem('gotube_admin_token');
     location.reload();
 }
+
+// 显式挂载到 window，确保全局可见性
+window.checkAuth = checkAuth;
+window.showLoginForm = showLoginForm;
+window.hideLoginForm = hideLoginForm;
+window.handleLogin = handleLogin;
+window.handleLogout = handleLogout;

@@ -230,90 +230,51 @@ function renderFilters() {
                 onInput: (e) => handleKeywordChange(e.target.value),
             }),
         ]),
-        // 来源筛选
+        // 来源筛选（自定义下拉）
         el('div', { className: 'filter-group' }, [
             el('span', { className: 'filter-label', textContent: '来源:' }),
-            el('select', {
-                className: 'filter-select',
-                id: 'source-select',
-                onChange: (e) => handleSourceChange(e.target.value),
-            }, [
-                el('option', { value: '', textContent: '全部' }),
-                ...state.allSources.map(s =>
-                    el('option', {
-                        value: s,
-                        textContent: s,
-                        selected: state.filters.source === s,
-                    })
-                ),
+            el('div', { className: 'custom-dropdown', id: 'source-dropdown' }, [
+                el('button', {
+                    className: 'custom-dropdown-btn',
+                    onClick: (e) => { e.stopPropagation(); window.toggleCustomDropdown('source-dropdown'); },
+                }, [
+                    el('span', { className: 'dropdown-text', id: 'source-dropdown-text', textContent: '全部' }),
+                    el('span', { className: 'dropdown-arrow', textContent: '▼' }),
+                ]),
+                el('div', { className: 'custom-dropdown-menu', id: 'source-dropdown-menu' }),
             ]),
         ]),
-        // 时间筛选
+        // 时间筛选（自定义下拉）
         el('div', { className: 'filter-group' }, [
             el('span', { className: 'filter-label', textContent: '时间:' }),
-            el('select', {
-                className: 'filter-select',
-                id: 'time-select',
-                onChange: (e) => handleTimeChange(e.target.value),
-            }, [
-                el('option', { value: 'all', textContent: '全部' }),
-                el('option', { value: 'today', textContent: '今天' }),
-                el('option', { value: 'week', textContent: '本周' }),
-                el('option', { value: 'month', textContent: '本月' }),
-                el('option', { value: 'earlier', textContent: '更早' }),
-            ]),
-        ]),
-        // 标签筛选
-        el('div', { className: 'filter-group' }, [
-            el('span', { className: 'filter-label', textContent: '标签:' }),
-            el('div', { className: 'tag-input-container', id: 'tags-filter-container' }, [
-                el('input', {
-                    className: 'tag-input',
-                    id: 'tag-input',
-                    type: 'text',
-                    placeholder: '输入标签回车添加...',
-                    onKeyDown: (e) => handleTagInputKeydown(e),
-                }),
+            el('div', { className: 'custom-dropdown', id: 'time-dropdown' }, [
+                el('button', {
+                    className: 'custom-dropdown-btn',
+                    onClick: (e) => { e.stopPropagation(); window.toggleCustomDropdown('time-dropdown'); },
+                }, [
+                    el('span', { className: 'dropdown-text', id: 'time-dropdown-text', textContent: '全部' }),
+                    el('span', { className: 'dropdown-arrow', textContent: '▼' }),
+                ]),
+                el('div', { className: 'custom-dropdown-menu', id: 'time-dropdown-menu' }),
             ]),
         ]),
     ]);
 
     slot.appendChild(filtersBar);
 
-    // 设置时间筛选的默认值
-    const timeSelect = $('#time-select');
-    if (timeSelect) {
-        timeSelect.value = state.filters.time;
+    // 初始化自定义下拉菜单点击外部关闭监听器
+    if (!window._customDropdownListenerAdded) {
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.custom-dropdown')) {
+                window.hideAllCustomDropdowns();
+            }
+        });
+        window._customDropdownListenerAdded = true;
     }
 
-    // 显示已选标签
-    renderSelectedTags();
-}
-
-/**
- * 渲染已选标签
- */
-function renderSelectedTags() {
-    const container = $('#tags-filter-container');
-    if (!container) return;
-
-    // 清除已有的标签元素（保留 input）
-    const existingTags = container.querySelectorAll('.tag');
-    existingTags.forEach(t => t.remove());
-
-    // 在 input 前添加标签
-    const input = $('#tag-input');
-    state.filters.tags.forEach(tag => {
-        const tagEl = el('span', { className: 'tag' }, [
-            document.createTextNode(tag),
-            el('span', {
-                className: 'tag-remove',
-                textContent: '×',
-                onClick: () => removeFilterTag(tag),
-            }),
-        ]);
-        container.insertBefore(tagEl, input);
-    });
+    // 初始化下拉菜单选项
+    window.updateSourceDropdownOptions();
+    window.updateTimeDropdownOptions();
 }
 
 /**
@@ -397,20 +358,6 @@ function renderVideoCard(video) {
         }),
     ]);
 
-    // 标签区域
-    const tagsContainer = el('div', { className: 'video-tags', id: `tags-${video.file_hash}` });
-    const tags = video.tags || [];
-    tags.forEach(tag => {
-        tagsContainer.appendChild(el('span', { className: 'tag' }, [
-            document.createTextNode(tag),
-            el('span', {
-                className: 'tag-remove',
-                textContent: '×',
-                onClick: () => removeVideoTag(video.filename, tag),
-            }),
-        ]));
-    });
-
     // 复选框（作为操作按钮样式）
     const checkbox = el('button', {
         className: `action-btn select-btn ${isSelected ? 'selected' : ''}`,
@@ -451,11 +398,6 @@ function renderVideoCard(video) {
                 }),
                 el('div', { className: 'dropdown-menu', id: `dropdown-${video.file_hash}` }, [
                     el('div', {
-                        className: 'dropdown-item',
-                        textContent: '🏷️ 管理标签',
-                        onClick: () => window.showTagManagerModal(video),
-                    }),
-                    el('div', {
                         className: 'dropdown-item danger',
                         textContent: '🗑️ 删除',
                         onClick: () => window.handleDeleteVideo(video.filename),
@@ -473,7 +415,6 @@ function renderVideoCard(video) {
     const card = el('div', { className: 'video-card' }, [
         thumb,
         info,
-        tagsContainer,
         actionsBar,
     ]);
 
@@ -621,9 +562,166 @@ window.renderMainLayout = renderMainLayout;
 window.renderStatsPanel = renderStatsPanel;
 window.toggleStatsPanel = toggleStatsPanel;
 window.renderFilters = renderFilters;
-window.renderSelectedTags = renderSelectedTags;
 window.renderVideoGrid = renderVideoGrid;
 window.renderVideoCard = renderVideoCard;
 window.renderPagination = renderPagination;
 window.renderBatchBar = renderBatchBar;
 window.updateBatchBar = updateBatchBar;
+
+// ========== 自定义下拉菜单辅助函数 ==========
+
+/**
+ * 创建下拉菜单项
+ */
+function _createDropdownItem(value, text, filterType) {
+    return el('div', {
+        className: 'custom-dropdown-item',
+        'data-value': value,
+        onClick: (e) => {
+            e.stopPropagation();
+            if (filterType === 'source') {
+                handleSourceChange(value);
+                window.setCustomDropdownValue('source-dropdown', value, text);
+            } else if (filterType === 'time') {
+                handleTimeChange(value);
+                window.setCustomDropdownValue('time-dropdown', value, text);
+            }
+            window.hideAllCustomDropdowns();
+        },
+    }, [document.createTextNode(text)]);
+}
+
+/**
+ * 切换自定义下拉菜单显示/隐藏
+ */
+function toggleCustomDropdown(dropdownId) {
+    const dropdown = $(`#${dropdownId}`);
+    if (!dropdown) return;
+
+    const menu = dropdown.querySelector('.custom-dropdown-menu');
+    if (!menu) return;
+
+    const isOpen = menu.classList.contains('show');
+
+    // 先关闭所有菜单
+    hideAllCustomDropdowns();
+
+    // 如果原来是关闭的，现在打开它
+    if (!isOpen) {
+        menu.classList.add('show');
+    }
+}
+
+/**
+ * 隐藏所有自定义下拉菜单
+ */
+function hideAllCustomDropdowns() {
+    document.querySelectorAll('.custom-dropdown-menu.show').forEach(menu => {
+        menu.classList.remove('show');
+    });
+}
+
+/**
+ * 设置自定义下拉菜单的选中值
+ */
+function setCustomDropdownValue(dropdownId, value, text) {
+    const dropdown = $(`#${dropdownId}`);
+    if (!dropdown) return;
+
+    const textEl = dropdown.querySelector('.dropdown-text');
+    if (textEl) {
+        textEl.textContent = text;
+    }
+
+    // 更新选中项样式
+    const menu = dropdown.querySelector('.custom-dropdown-menu');
+    if (menu) {
+        menu.querySelectorAll('.custom-dropdown-item').forEach(item => {
+            if (item.getAttribute('data-value') === value) {
+                item.classList.add('selected');
+            } else {
+                item.classList.remove('selected');
+            }
+        });
+    }
+}
+
+/**
+ * 更新来源下拉菜单选项
+ */
+function updateSourceDropdownOptions() {
+    const menu = $('#source-dropdown-menu');
+    if (!menu) return;
+
+    // 清空并重建选项
+    menu.innerHTML = '';
+    menu.appendChild(_createDropdownItem('', '全部', 'source'));
+
+    state.allSources.forEach(s => {
+        menu.appendChild(_createDropdownItem(s, s, 'source'));
+    });
+
+    // 设置当前选中项
+    const currentValue = state.filters.source || '';
+    let currentText = '全部';
+    menu.querySelectorAll('.custom-dropdown-item').forEach(item => {
+        if (item.getAttribute('data-value') === currentValue) {
+            item.classList.add('selected');
+            currentText = item.textContent;
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+
+    // 更新按钮显示文本
+    const textEl = $('#source-dropdown-text');
+    if (textEl) {
+        textEl.textContent = currentText;
+    }
+}
+
+/**
+ * 更新时间下拉菜单选项
+ */
+function updateTimeDropdownOptions() {
+    const menu = $('#time-dropdown-menu');
+    if (!menu) return;
+
+    // 清空并重建选项
+    menu.innerHTML = '';
+    const timeOptions = [
+        { value: 'all', text: '全部' },
+        { value: 'today', text: '今天' },
+        { value: 'week', text: '本周' },
+        { value: 'month', text: '本月' },
+        { value: 'earlier', text: '更早' },
+    ];
+    timeOptions.forEach(opt => {
+        menu.appendChild(_createDropdownItem(opt.value, opt.text, 'time'));
+    });
+
+    // 设置当前选中项
+    const currentValue = state.filters.time || 'all';
+    let currentText = '全部';
+    menu.querySelectorAll('.custom-dropdown-item').forEach(item => {
+        if (item.getAttribute('data-value') === currentValue) {
+            item.classList.add('selected');
+            currentText = item.textContent;
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+
+    // 更新按钮显示文本
+    const textEl = $('#time-dropdown-text');
+    if (textEl) {
+        textEl.textContent = currentText;
+    }
+}
+
+// 挂载自定义下拉菜单函数到 window
+window.toggleCustomDropdown = toggleCustomDropdown;
+window.hideAllCustomDropdowns = hideAllCustomDropdowns;
+window.setCustomDropdownValue = setCustomDropdownValue;
+window.updateSourceDropdownOptions = updateSourceDropdownOptions;
+window.updateTimeDropdownOptions = updateTimeDropdownOptions;

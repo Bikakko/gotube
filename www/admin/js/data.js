@@ -22,16 +22,32 @@ async function loadVideos() {
         if (state.filters.time !== 'all') {
             params.set('time', state.filters.time);
         }
-        if (state.filters.tags.length > 0) {
-            params.set('tags', state.filters.tags.join(','));
-        }
 
         const data = await apiFetch(`/videos?${params}`);
 
         state.videos = data.videos;
         state.filteredVideos = data.videos;
-        state.allTags = data.all_tags || [];
-        state.allSources = data.all_sources || [];
+        
+        // 缓存全局所有来源：只在首次或来源列表变化时更新
+        const newSources = data.all_sources || [];
+        if (newSources.length > 0) {
+            // 如果缓存为空，或者新来源包含缓存中没有的来源，则更新缓存
+            if (state.cachedAllSources.length === 0) {
+                state.cachedAllSources = newSources;
+            } else {
+                // 合并新来源到缓存中（去重）
+                const merged = [...state.cachedAllSources];
+                newSources.forEach(s => {
+                    if (!merged.includes(s)) {
+                        merged.push(s);
+                    }
+                });
+                state.cachedAllSources = merged;
+            }
+        }
+        // 始终使用缓存的来源列表
+        state.allSources = state.cachedAllSources;
+        
         state.pagination.total = data.total;
         state.pagination.totalPages = data.total_pages;
         state.pagination.page = data.page;
@@ -47,19 +63,19 @@ async function loadVideos() {
 
     } catch (err) {
         console.error('加载视频列表失败:', err);
-        
+
         // 如果是 UNAUTHORIZED 错误，尝试刷新 token 或提示用户重新登录
         if (err.message === 'UNAUTHORIZED') {
             // 清除无效 token
             localStorage.removeItem('gotube_admin_token');
-            
+
             // 显示友好的提示，而不是直接踢出
             if (typeof showToast === 'function') {
                 showToast('登录已过期，请重新登录', 'error');
             } else {
                 alert('登录已过期，请重新登录');
             }
-            
+
             // 延迟后显示登录界面
             setTimeout(() => {
                 if (typeof showLoginForm === 'function') {
@@ -291,40 +307,9 @@ async function handleBatchDelete() {
     }
 }
 
-/**
- * 更新视频标签
- */
-async function updateTags(filename, tags) {
-    try {
-        await apiFetch(`/videos/${encodeURIComponent(filename)}/tags`, {
-            method: 'PUT',
-            body: JSON.stringify({ tags }),
-        });
-
-        // 重新加载视频列表
-        await window.loadVideos();
-    } catch (err) {
-        console.error('更新标签失败:', err);
-        alert('更新标签失败: ' + err.message);
-    }
-}
-
-/**
- * 删除视频的某个标签
- */
-function removeVideoTag(filename, tag) {
-    const video = state.videos.find(v => v.filename === filename);
-    if (!video) return;
-
-    const newTags = (video.tags || []).filter(t => t !== tag);
-    updateTags(filename, newTags);
-}
-
 // 显式挂载到 window，确保全局可见性
 window.loadVideos = loadVideos;
 window.loadStats = loadStats;
 window.handleDeleteVideo = handleDeleteVideo;
 window.showDeleteConfirmModal = showDeleteConfirmModal;
 window.handleBatchDelete = handleBatchDelete;
-window.updateTags = updateTags;
-window.removeVideoTag = removeVideoTag;

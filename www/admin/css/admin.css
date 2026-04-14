@@ -38,7 +38,12 @@ a { color: inherit; text-decoration: none; }
 }
 
 /* 主内容区 */
-.main { width: 100%; max-width: 1200px; padding: 30px 20px 100px; }
+.main { width: 100%; max-width: 1200px; padding: 15px 20px 100px; }
+
+/* 视图容器 - 用于 CSS 显示/隐藏切换，避免布局抖动 */
+.view-container { width: 100%; transition: opacity 0.15s ease; }
+.video-view { display: block; }
+.user-view { display: none; }
 
 /* 管理页面专用样式 */
 .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
@@ -60,6 +65,21 @@ a { color: inherit; text-decoration: none; }
 .filter-label { font-size: 13px; color: var(--text-sec); }
 .filter-select { padding: 6px 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 4px; font-size: 14px; }
 .search-input { padding: 8px 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 4px; font-size: 14px; min-width: 200px; }
+
+/* 自定义下拉组件（筛选栏专用） */
+.custom-dropdown { position: relative; display: inline-block; min-width: 120px; }
+.custom-dropdown-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 6px; font-size: 14px; cursor: pointer; transition: all 0.15s ease; width: 100%; }
+.custom-dropdown-btn:hover { background: var(--surface-hover); border-color: var(--text-sec); }
+.custom-dropdown-btn:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(230, 33, 23, 0.2); }
+.dropdown-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dropdown-arrow { font-size: 10px; color: var(--text-sec); transition: transform 0.2s ease; }
+.custom-dropdown-menu { position: absolute; top: calc(100% + 6px); left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05); overflow: hidden; z-index: 100; display: none; animation: dropdownFadeIn 0.2s ease; max-height: 300px; overflow-y: auto; }
+.custom-dropdown-menu.show { display: block; }
+.custom-dropdown-item { padding: 10px 14px; font-size: 14px; cursor: pointer; transition: all 0.15s ease; color: var(--text); border-bottom: 1px solid rgba(255,255,255,0.03); display: flex; align-items: center; }
+.custom-dropdown-item:last-child { border-bottom: none; }
+.custom-dropdown-item:hover { background: var(--surface-hover); padding-left: 18px; }
+.custom-dropdown-item.selected { background: rgba(230, 33, 23, 0.12); color: var(--primary); font-weight: 500; }
+.custom-dropdown-item.selected::before { content: '✓'; margin-right: 8px; font-size: 12px; }
 
 /* 统计面板 */
 .stats-panel { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 20px; }
@@ -143,10 +163,41 @@ a { color: inherit; text-decoration: none; }
 
 /* 下拉菜单 */
 .dropdown { position: relative; display: inline-block; }
-.dropdown-menu { position: absolute; top: 100%; right: 0; margin-top: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); overflow: hidden; z-index: 50; min-width: 120px; display: none; }
+.dropdown-menu { 
+    position: absolute; 
+    top: calc(100% + 8px); 
+    right: 0; 
+    background: var(--surface); 
+    border: 1px solid var(--border); 
+    border-radius: 10px; 
+    box-shadow: 0 8px 24px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05); 
+    overflow: hidden; 
+    z-index: 50; 
+    min-width: 180px; 
+    display: none;
+    animation: dropdownFadeIn 0.2s ease;
+}
+@keyframes dropdownFadeIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 .dropdown-menu.show { display: block; }
-.dropdown-item { padding: 8px 16px; font-size: 13px; cursor: pointer; transition: background 0.15s; display: flex; align-items: center; gap: 8px; color: var(--text); }
-.dropdown-item:hover { background: var(--surface-hover); }
+.dropdown-item { 
+    padding: 14px 22px; 
+    font-size: 15px; 
+    cursor: pointer; 
+    transition: all 0.15s ease; 
+    display: flex; 
+    align-items: center; 
+    gap: 12px; 
+    color: var(--text);
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.dropdown-item:last-child { border-bottom: none; }
+.dropdown-item:hover { 
+    background: var(--surface-hover);
+    padding-left: 26px;
+}
 .dropdown-item.danger { color: var(--error); }
 
 /* 标签输入 */
@@ -235,7 +286,45 @@ a { color: inherit; text-decoration: none; }
 .users-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
 .users-header h2 { font-size: 20px; }
 
-.users-table-container { overflow-x: auto; }
+.users-table-container { overflow-x: auto; min-height: 200px; position: relative; }
+
+/* 加载动画 */
+.loading { text-align: center; padding: 40px; color: var(--text-sec); font-size: 14px; }
+.loading::after {
+    content: '';
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-left: 10px;
+    vertical-align: middle;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* 错误提示 */
+.error { text-align: center; padding: 40px; color: var(--error); font-size: 14px; }
+
+/* 表格行动画 */
+.users-table tbody tr {
+    animation: fadeInRow 0.3s ease-out;
+}
+
+@keyframes fadeInRow {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 .users-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
 .users-table th, .users-table td { padding: 12px 15px; text-align: left; border-bottom: 1px solid var(--border); }
 .users-table th { background: rgba(255,255,255,0.03); font-weight: 600; font-size: 14px; color: var(--text-sec); }
