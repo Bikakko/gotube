@@ -9,6 +9,18 @@
     let clientId = sessionStorage.getItem('gotube_client_id') || 'c_' + Math.random().toString(36).substr(2, 9);
     sessionStorage.setItem('gotube_client_id', clientId);
 
+    // ── 匿名用户 Session 管理 ──
+    // 使用 localStorage 持久化，刷新页面时复用
+    const GUEST_SESSION_STORAGE_KEY = 'gotube_guest_session_id';
+    let guestSessionId = localStorage.getItem(GUEST_SESSION_STORAGE_KEY);
+    if (!guestSessionId) {
+        guestSessionId = 'guest_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
+        localStorage.setItem(GUEST_SESSION_STORAGE_KEY, guestSessionId);
+        console.log('[Session] 创建新 session:', guestSessionId);
+    } else {
+        console.log('[Session] 复用已有 session:', guestSessionId);
+    }
+
     const tasks = {};
     let ws = null;
 
@@ -137,11 +149,20 @@
         const t = tasks[id];
         if (!t || !t.file_hash) return;
 
-        const url = `/watch?v=${t.file_hash}`;
+        // 根据是否为 guest 文件选择 URL
+        let videoUrl;
+        if (t.filename && t.filename.startsWith('temp_guest/')) {
+            // guest 文件：去掉 temp_guest/{session_id}/ 前缀
+            const relativePath = t.filename.replace(/^temp_guest\/[^\/]+\//, '');
+            videoUrl = `/api/guest-downloads/stream/${guestSessionId}/${encodeURIComponent(relativePath)}`;
+        } else {
+            videoUrl = `/watch?v=${t.file_hash}`;
+        }
+        
         const shareUrl = `${location.origin}/watch?v=${t.file_hash}`;
 
         $('#modal-title').textContent = t.title || '未知标题';
-        $('#modal-video').innerHTML = `<video src="${url}" controls autoplay style="width:100%;background:#000"></video>`;
+        $('#modal-video').innerHTML = `<video src="${videoUrl}" controls autoplay style="width:100%;background:#000"></video>`;
         $('#copy-btn').dataset.shareUrl = shareUrl;
 
         $('#modal').classList.add('active');
@@ -254,7 +275,10 @@
             const res = await fetch(`/api/tasks?client_id=${clientId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url })
+                body: JSON.stringify({ 
+                    url,
+                    session_id: guestSessionId
+                })
             });
 
             if (!res.ok) {
@@ -322,7 +346,7 @@
         }
 
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        ws = new WebSocket(`${proto}//${location.host}/ws?client_id=${clientId}`);
+        ws = new WebSocket(`${proto}//${location.host}/ws?client_id=${clientId}&session_id=${guestSessionId}`);
 
         ws.onopen = () => {
             console.log('WebSocket 连接成功');
