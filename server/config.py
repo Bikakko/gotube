@@ -96,6 +96,8 @@ if not _admins:
 _debug: bool = _b("GOTUBE_DEBUG", False)
 _log_level: str = _s("GOTUBE_LOG_LEVEL", default="ERROR").upper()
 _allow_guest_download: bool = _b("GOTUBE_ALLOW_GUEST_DOWNLOAD", True)
+_allow_playlist_download: bool = _b("GOTUBE_ALLOW_PLAYLIST_DOWNLOAD", False)
+_max_video_size_mb: int = _i("GOTUBE_MAX_VIDEO_SIZE_MB", required=False, default=0, min_val=0)
 
 _china_domains: list[str] = [
     "bilibili.com", "b23.tv", "acfun.cn", "iqiyi.com",
@@ -172,6 +174,16 @@ class _Settings:
     def allow_guest_download(self) -> bool:
         """是否允许匿名用户下载"""
         return _allow_guest_download
+
+    @property
+    def allow_playlist_download(self) -> bool:
+        """是否允许播放列表/用户空间URL下载"""
+        return _allow_playlist_download
+
+    @property
+    def max_video_size_mb(self) -> int:
+        """单个视频最大大小限制（MB），0=不限制"""
+        return _max_video_size_mb
 
     @property
     def china_domains(self) -> list[str]:

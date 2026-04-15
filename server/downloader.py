@@ -754,6 +754,46 @@ class Downloader:
             opts["cookiefile"] = str(self.cookies_file)
         return opts
 
+    def _check_playlist_url(self, info: dict, url: str) -> None:
+        """
+        检查 URL 是否为播放列表/用户空间等多视频链接。
+        
+        如果配置禁止播放列表下载且检测到多视频链接，抛出异常。
+        
+        Args:
+            info: yt-dlp 提取的视频信息字典。
+            url: 原始 URL。
+            
+        Raises:
+            ValueError: 当禁止播放列表下载且检测到多视频时抛出。
+        """
+        # 如果允许播放列表下载，直接返回
+        if settings.allow_playlist_download:
+            return
+        
+        entry_type = info.get("_type")
+        
+        # 情况1：明确标记为 playlist
+        if entry_type == "playlist":
+            n_entries = info.get("n_entries")
+            if n_entries is None:
+                entries = info.get("entries")
+                n_entries = len(entries) if entries else 0
+            
+            if n_entries > 1:
+                raise ValueError(
+                    f"不支持播放列表或用户空间URL（包含 {n_entries} 个视频）。"
+                    f"请提交单个视频链接。"
+                )
+        
+        # 情况2：有 entries 字段但 _type 不是 playlist（某些 extractor 行为）
+        elif info.get("entries") and len(info["entries"]) > 1:
+            n_entries = len(info["entries"])
+            raise ValueError(
+                f"检测到多视频链接（包含 {n_entries} 个视频）。"
+                f"请提交单个视频链接。"
+            )
+
     def _save_metadata(self, dir_path: Path, task: DownloadTask) -> None:
         """保存视频元数据到 meta.json"""
         meta = {
@@ -899,6 +939,9 @@ class Downloader:
             timeout=7200,  # 2 小时超时兜底
         )
 
+        # 检查是否为播放列表/多视频链接
+        self._check_playlist_url(info, url)
+
         task.video_id = info.get("id", "")
         task.title = info.get("title", "")
         task.thumbnail = info.get("thumbnail", "")
@@ -971,6 +1014,12 @@ class Downloader:
                 },
             }
         )
+
+        # 添加文件大小限制（yt-dlp 原生功能，单位：字节）
+        if settings.max_video_size_mb > 0:
+            max_size_bytes = settings.max_video_size_mb * 1024 * 1024
+            opts["max_filesize"] = max_size_bytes
+            logger.debug("已设置文件大小限制: %d MB (%d 字节)", settings.max_video_size_mb, max_size_bytes)
 
         logger.debug("第二阶段：开始下载视频")
         logger.debug("download_dir: %s", self.download_dir)
@@ -1261,6 +1310,10 @@ class Downloader:
 
         if "Blocked" in error_str and "country" in error_str.lower():
             return "该视频在您的地区不可用"
+
+        # 播放列表/多视频检测
+        if isinstance(error, ValueError) and ("播放列表" in error_str or "多视频" in error_str):
+            return error_str
 
         # URL/网站支持
         if "Unsupported URL" in error_str or "No supported URL" in error_str:
