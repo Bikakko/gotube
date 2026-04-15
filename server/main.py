@@ -4,11 +4,13 @@ GoTube FastAPI 服务入口
 负责应用初始化、生命周期管理、页面路由和 WebSocket 连接。
 """
 
+import asyncio
 import json
 import logging
 import logging.handlers
 import uuid
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
@@ -288,10 +290,12 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     客户端连接后会被注册到 queue_manager，
     之后所有该客户端的任务进度变更都会通过此连接推送。
+    匿名用户断开时会清理临时文件。
     """
     await websocket.accept()
 
     client_id = websocket.query_params.get("client_id", str(uuid.uuid4())[:8])
+    session_id = websocket.query_params.get("session_id", "")  # 获取 session_id
     queue_mgr = _get_queue_manager()
 
     # 注册客户端
@@ -324,9 +328,31 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             except json.JSONDecodeError:
                 pass
     except WebSocketDisconnect:
-        logger.debug("WebSocket 断开连接: %s", client_id)
+        logger.debug("WebSocket 断开连接: %s, session_id=%s", client_id, session_id)
     finally:
         queue_mgr.unregister_client(client_id)
+        
+        # 匿名用户断开：延迟清理临时文件
+        if session_id:
+            # 区分"刷新"和"关闭"：
+            # - 刷新：断开后很快重连（间隔 < 10 秒）
+            # - 关闭：断开后不重连
+            # 策略：延迟 10 秒清理，如果在延迟期间有新连接则取消清理
+            async def _delayed_cleanup():
+                await asyncio.sleep(10)
+                # 检查客户端是否已重新连接（通过检查是否有活跃任务）
+                client_tasks = queue_mgr.get_client_tasks(client_id)
+                has_active_tasks = any(t.status in ("pending", "downloading") for t in client_tasks)
+                
+                if not has_active_tasks:
+                    logger.info("WebSocket 断开 10 秒后无活跃任务，清理 guest session: %s", session_id)
+                    cleaned = queue_mgr.downloader.cleanup_guest_session(session_id)
+                    logger.info("已清理 %d 个 guest session 目录", cleaned)
+                else:
+                    logger.info("WebSocket 断开但仍有活跃任务，保留 guest session: %s", session_id)
+            
+            # 启动后台清理任务
+            asyncio.create_task(_delayed_cleanup())
 
 
 async def _on_progress(task: DownloadTask, websocket: WebSocket) -> None:
