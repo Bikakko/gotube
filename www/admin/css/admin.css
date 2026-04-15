@@ -94,8 +94,6 @@ a { color: inherit; text-decoration: none; }
 .video-thumb { width: 100%; aspect-ratio: 16/9; background: #333; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
 .video-thumb img { width: 100%; height: 100%; object-fit: cover; }
 .empty-thumb { width: 100%; height: 100%; background: #333; display: flex; align-items: center; justify-content: center; font-size: 36px; }
-.play-icon { position: absolute; font-size: 32px; opacity: 0; background: rgba(0,0,0,0.6); width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; transition: opacity 0.2s; cursor: pointer; }
-.video-card:hover .play-icon { opacity: 0.9; }
 .video-info { padding: 8px 10px; }
 .video-title { font-size: 14px; margin-bottom: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .video-meta { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-sec); }
@@ -108,10 +106,9 @@ a { color: inherit; text-decoration: none; }
 .action-btn { padding: 6px 10px; border: none; border-radius: 4px; font-size: 13px; cursor: pointer; background: #444; color: var(--text); transition: all 0.2s; min-width: 36px; }
 .action-btn:hover { background: #555; transform: translateY(-1px); }
 .action-btn:active { transform: translateY(0); }
-.action-btn.play { color: var(--info); }
 .action-btn.share { color: var(--success); }
 .action-btn.delete { color: var(--error); }
-.action-btn.select-btn { font-size: 18px; padding: 6px 8px; min-width: 42px; line-height: 1; }
+.action-btn.select-btn { font-size: 16px; padding: 6px 10px; min-width: 36px; line-height: 1; }
 .action-btn.select-btn.selected { color: var(--primary); background: rgba(230, 33, 23, 0.15); font-weight: bold; }
 
 /* 分页 */
@@ -245,10 +242,14 @@ a { color: inherit; text-decoration: none; }
 
 @media (max-width: 480px) {
     .video-grid { grid-template-columns: 1fr; }
-    .video-card { display: flex; flex-direction: row; height: 100px; }
-    .video-thumb { width: 140px; height: 100%; aspect-ratio: unset; flex-shrink: 0; }
+    .video-card { display: flex; flex-direction: column; height: auto; }
+    .video-thumb { width: 100%; height: auto; aspect-ratio: 16/9; flex-shrink: 0; }
     .video-info { flex: 1; padding: 8px; min-width: 0; }
-    .video-tags, .video-actions-bar { display: none; } /* 极小屏隐藏部分信息，点击进入详情或使用批量操作 */
+    .video-tags { display: none; }
+    .video-actions-bar { display: flex; padding: 6px 8px; gap: 4px; border-top: 1px solid var(--border); }
+    .video-actions-bar .action-group { gap: 4px; }
+    .action-btn { padding: 6px 8px; font-size: 12px; min-width: 32px; }
+    .action-btn.select-btn { font-size: 14px; padding: 6px 8px; }
     .video-card { cursor: pointer; }
 }
 

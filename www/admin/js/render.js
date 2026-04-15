@@ -347,11 +347,6 @@ function renderVideoCard(video) {
         hasThumbnail
             ? el('img', { src: video.thumbnail, alt: video.title, loading: 'lazy' })
             : el('div', { className: 'empty-thumb', textContent: '🎬' }),
-        el('div', {
-            className: 'play-icon',
-            textContent: '▶',
-            onClick: () => window.showPlayerModal(video),
-        }),
     ]);
 
     // 信息区域
@@ -390,23 +385,24 @@ function renderVideoCard(video) {
         },
     });
 
-    // 操作栏（左边是播放/分享/更多，右边是选择按钮）
+    // 操作栏（左边是分享/删除/选择按钮）
     const actionsBar = el('div', { className: 'video-actions-bar' }, [
         el('div', { className: 'action-group' }, [
             el('button', {
-                className: 'action-btn play',
-                textContent: '▶ 播放',
-                onClick: () => window.showPlayerModal(video),
-            }),
-            el('button', {
                 className: 'action-btn share',
                 textContent: '🔗 分享',
-                onClick: () => window.showShareModal(video),
+                onClick: (e) => {
+                    e.stopPropagation();
+                    window.showShareModal(video);
+                },
             }),
             state.currentUser && state.currentUser.role !== 'readonly' ? el('button', {
                 className: 'action-btn delete',
                 textContent: '🗑️ 删除',
-                onClick: () => window.handleDeleteVideo(video.filename),
+                onClick: (e) => {
+                    e.stopPropagation();
+                    window.handleDeleteVideo(video.filename);
+                },
             }) : null,
         ]),
         // 选择按钮放在最右边
@@ -421,6 +417,13 @@ function renderVideoCard(video) {
         info,
         actionsBar,
     ]);
+
+    // 点击整个卡片播放（排除按钮和复选框）
+    card.addEventListener('click', (e) => {
+        if (!e.target.closest('.action-btn') && !e.target.closest('.video-actions-bar')) {
+            window.showPlayerModal(video);
+        }
+    });
 
     return card;
 }
