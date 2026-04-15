@@ -50,7 +50,7 @@ class QueueManager:
         self._progress_callbacks.pop(client_id, None)
         logger.info("客户端已注销: %s", client_id)
 
-    async def add_task(self, url: str, client_id: str) -> DownloadTask | None:
+    async def add_task(self, url: str, client_id: str, session_id: str | None = None) -> DownloadTask | None:
         """
         添加下载任务并启动下载（受信号量控制并发）。
 
@@ -59,6 +59,7 @@ class QueueManager:
         Args:
             url: 视频链接。
             client_id: 客户端标识。
+            session_id: 匿名用户会话 ID（可选）。
 
         Returns:
             新创建或已有的 DownloadTask 对象，如果URL重复且不可重试则返回None。
@@ -71,10 +72,15 @@ class QueueManager:
 
         task = self.downloader.create_task(url, client_id)
 
+        # 设置 guest 标识
+        if session_id:
+            task.is_guest = True
+            task.session_id = session_id
+
         # 启动下载（受信号量控制并发数）
         asyncio.create_task(self._execute_with_semaphore(task), name=f"download-{task.task_id}")
 
-        logger.info("任务已加入队列: %s, client=%s", task.task_id, client_id)
+        logger.info("任务已加入队列: %s, client=%s, is_guest=%s", task.task_id, client_id, bool(session_id))
         return task
 
     def _find_task_by_url(self, client_id: str, url: str) -> DownloadTask | None:
