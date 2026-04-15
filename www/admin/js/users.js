@@ -7,9 +7,9 @@
  * 切换到用户管理视图（CSS 显示/隐藏，无布局抖动）
  */
 async function showUserManagement() {
-    // 如果已经在用户管理视图，返回视频管理
+    // 如果已经在用户管理视图，刷新用户列表
     if (state.currentView === 'users') {
-        showVideoManagement();
+        loadUsers(true);
         return;
     }
 
@@ -124,6 +124,8 @@ function initClickOutsideListener() {
         if (state.currentView !== 'users') return;
         // 如果正在过渡中，阻止立即返回
         if (state.isTransitioning) return;
+        // 如果有模态框打开，不触发返回
+        if (document.querySelector('.modal.active')) return;
 
         const userContainer = $('#user-view-container');
         // 如果点击的不在用户管理区域内，就返回视频管理
@@ -176,6 +178,18 @@ function renderUsersTable(users) {
         return;
     }
 
+    // 创建容器，包含新增按钮和表格
+    const container = el('div', { className: 'user-table-wrapper' });
+
+    // 新增用户按钮
+    const addButton = el('button', {
+        className: 'btn btn-primary',
+        textContent: '➕ 新增用户',
+        onClick: () => showUserEditModal(),
+        style: 'margin-bottom: 16px;'
+    });
+    container.appendChild(addButton);
+
     const table = el('table', { className: 'users-table' }, [
         el('thead', {}, [
             el('tr', {}, [
@@ -206,22 +220,34 @@ function renderUsersTable(users) {
                     isSystemAccount ? null : el('button', {
                         className: 'action-btn-sm',
                         textContent: '📝 编辑',
-                        onClick: () => showUserEditModal(user),
+                        onClick: (e) => {
+                            e.stopPropagation();
+                            showUserEditModal(user);
+                        },
                     }),
                     isSystemAccount ? null : el('button', {
                         className: 'action-btn-sm',
                         textContent: '🔑 密码',
-                        onClick: () => showChangePasswordModal(user),
+                        onClick: (e) => {
+                            e.stopPropagation();
+                            showChangePasswordModal(user);
+                        },
                     }),
                     !isSelf && !isSystemAccount ? el('button', {
                         className: `action-btn-sm ${user.is_active ? 'danger' : 'success'}`,
                         textContent: user.is_active ? '🚫 禁用' : '✅ 启用',
-                        onClick: () => toggleUserActive(user),
+                        onClick: (e) => {
+                            e.stopPropagation();
+                            toggleUserActive(user);
+                        },
                     }) : null,
                     !isSelf && !isSystemAccount ? el('button', {
                         className: 'action-btn-sm danger',
                         textContent: '🗑️ 删除',
-                        onClick: () => handleDeleteUser(user),
+                        onClick: (e) => {
+                            e.stopPropagation();
+                            handleDeleteUser(user);
+                        },
                     }) : null,
                 ])
             ]);
@@ -229,7 +255,8 @@ function renderUsersTable(users) {
     ]);
 
     slot.innerHTML = '';
-    slot.appendChild(table);
+    container.appendChild(table);
+    slot.appendChild(container);
 }
 
 /**
@@ -361,6 +388,7 @@ async function handleSaveUser(user) {
                 body: JSON.stringify({ username, role })
             });
             showToast('更新成功', 'success');
+            closeModal('user-edit-modal');
         } else {
             const password = $('#edit-password').value;
             if (!password) {
@@ -372,13 +400,15 @@ async function handleSaveUser(user) {
                 body: JSON.stringify({ username, password, role })
             });
             showToast('创建成功', 'success');
+            closeModal('user-edit-modal');
         }
-        closeModal('user-edit-modal');
         // 使缓存失效并重新加载
         invalidateUserCache();
         await loadUsers(true);
     } catch (err) {
-        showToast('操作失败: ' + err.message, 'error');
+        // 错误时不关闭模态框，显示详细错误信息
+        const errorMsg = err.message || '操作失败';
+        showToast(errorMsg, 'error');
     }
 }
 

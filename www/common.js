@@ -150,8 +150,14 @@ async function apiFetch(endpoint, options = {}) {
     }
     
     if (!response.ok) {
-        const error = await response.json().catch(() => ({ detail: '请求失败' }));
-        throw new Error(error.detail || `HTTP ${response.status}`);
+        let errorMsg = '请求失败';
+        try {
+            const errorData = await response.json();
+            errorMsg = errorData.detail || errorData.message || `HTTP ${response.status}`;
+        } catch (e) {
+            errorMsg = `HTTP ${response.status} - ${response.statusText}`;
+        }
+        throw new Error(errorMsg);
     }
     
     // 如果是下载响应（zip/json/m3u8），返回 response 对象

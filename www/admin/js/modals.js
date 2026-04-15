@@ -57,62 +57,35 @@ function showPlayerModal(video) {
 }
 
 /**
- * 显示分享模态框
+ * 显示分享模态框 - 直接复制链接并提示
  */
 function showShareModal(video) {
     const shareUrl = `${window.location.origin}/watch?v=${video.file_hash}`;
 
-    const overlay = el('div', { className: 'modal active', id: 'share-modal' }, [
-        el('div', { className: 'modal-content' }, [
-            el('div', { className: 'modal-header' }, [
-                el('div', { className: 'modal-title', textContent: '分享视频' }),
-                el('button', {
-                    className: 'modal-close',
-                    textContent: '×',
-                    onClick: () => closeModal('share-modal'),
-                }),
-            ]),
-            el('div', { className: 'modal-body' }, [
-                el('p', { textContent: '视频标题：' + (video.title || '未命名视频'), style: 'margin-bottom: 10px;' }),
-                el('p', { textContent: '分享链接：', style: 'margin-bottom: 10px;' }),
-                el('input', {
-                    type: 'text',
-                    value: shareUrl,
-                    readonly: true,
-                    id: 'share-link',
-                    style: 'width: 100%; padding: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 4px;',
-                }),
-            ]),
-            el('div', { className: 'modal-footer' }, [
-                el('button', {
-                    className: 'btn btn-primary',
-                    textContent: '复制链接',
-                    onClick: () => {
-                        const input = $('#share-link');
-                        if (input) {
-                            input.select();
-                            document.execCommand('copy');
-                            alert('链接已复制到剪贴板');
-                        }
-                    },
-                }),
-                el('button', {
-                    className: 'btn btn-secondary',
-                    textContent: '关闭',
-                    onClick: () => closeModal('share-modal'),
-                }),
-            ]),
-        ]),
-    ]);
+    // 直接复制链接，不弹窗
+    navigator.clipboard.writeText(shareUrl).then(() => {
+        if (typeof showToast === 'function') {
+            showToast('✅ 链接已复制到剪贴板', 'success');
+        } else {
+            alert('链接已复制到剪贴板');
+        }
+    }).catch(() => {
+        // Fallback: 使用 execCommand 兼容旧浏览器
+        const input = document.createElement('input');
+        input.value = shareUrl;
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
 
-    // 点击背景关闭
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
-            closeModal('share-modal');
+        if (typeof showToast === 'function') {
+            showToast('✅ 链接已复制到剪贴板', 'success');
+        } else {
+            alert('链接已复制到剪贴板');
         }
     });
-
-    document.body.appendChild(overlay);
 }
 
 /**
