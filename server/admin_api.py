@@ -253,13 +253,22 @@ def _list_all_videos(download_dir: Path) -> list[dict[str, Any]]:
     from .downloader import VIDEO_EXTENSIONS
     
     videos = []
-    
+
     for video_file in download_dir.rglob("*"):
         if not video_file.is_file():
             continue
         if video_file.suffix.lower() not in VIDEO_EXTENSIONS:
             continue
-        
+
+        # 跳过 guest 临时文件
+        try:
+            rel = video_file.relative_to(download_dir)
+            rel_str = str(rel)
+            if rel_str.startswith("temp_guest/") or rel_str.startswith("temp_guest\\"):
+                continue
+        except ValueError:
+            pass
+
         meta = _read_meta_from_dir(video_file.parent)
         if not meta:
             continue

@@ -282,6 +282,9 @@ async def catch_all(
 
 # ── WebSocket ──
 
+# 记录 guest session_id 的最近连接时间，用于区分"刷新"和"关闭"
+_guest_connections: dict[str, float] = {}
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket) -> None:
@@ -297,6 +300,11 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     client_id = websocket.query_params.get("client_id", str(uuid.uuid4())[:8])
     session_id = websocket.query_params.get("session_id", "")  # 获取 session_id
     queue_mgr = _get_queue_manager()
+
+    # 记录 guest 连接时间
+    if session_id:
+        import time
+        _guest_connections[session_id] = time.monotonic()
 
     # 注册客户端
     queue_mgr.register_client(client_id, lambda task: _on_progress(task, websocket))
@@ -335,22 +343,24 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         # 匿名用户断开：延迟清理临时文件
         if session_id:
             # 区分"刷新"和"关闭"：
-            # - 刷新：断开后很快重连（间隔 < 10 秒）
+            # - 刷新：断开后很快重连（高延迟网络可能需要 10-20 秒）
             # - 关闭：断开后不重连
-            # 策略：延迟 10 秒清理，如果在延迟期间有新连接则取消清理
+            # 策略：延迟 30 秒清理，检查 session_id 是否在延迟期间有新连接
             async def _delayed_cleanup():
-                await asyncio.sleep(10)
-                # 检查客户端是否已重新连接（通过检查是否有活跃任务）
-                client_tasks = queue_mgr.get_client_tasks(client_id)
-                has_active_tasks = any(t.status in ("pending", "downloading") for t in client_tasks)
-                
-                if not has_active_tasks:
-                    logger.info("WebSocket 断开 10 秒后无活跃任务，清理 guest session: %s", session_id)
+                import time
+                await asyncio.sleep(30)
+
+                # 检查 session_id 是否在 30 秒内有新连接
+                last_connect = _guest_connections.get(session_id, 0)
+                if time.monotonic() - last_connect < 30:
+                    logger.info("session 在延迟期间有新连接，保留 guest session: %s", session_id)
+                else:
+                    logger.info("session 无新连接，清理 guest session: %s", session_id)
                     cleaned = queue_mgr.downloader.cleanup_guest_session(session_id)
                     logger.info("已清理 %d 个 guest session 目录", cleaned)
-                else:
-                    logger.info("WebSocket 断开但仍有活跃任务，保留 guest session: %s", session_id)
-            
+                    # 清理连接记录
+                    _guest_connections.pop(session_id, None)
+
             # 启动后台清理任务
             asyncio.create_task(_delayed_cleanup())
 

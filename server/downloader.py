@@ -280,9 +280,12 @@ class Downloader:
         self._file_index_cache.clear()
         for f in self.download_dir.rglob("*"):
             if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
+                rel_path = f.relative_to(self.download_dir)
+                # 跳过 guest 临时文件
+                if str(rel_path).startswith("temp_guest/") or str(rel_path).startswith("temp_guest" + os.sep):
+                    continue
                 abs_path = str(f.resolve())
                 stat = f.stat()
-                rel_path = f.relative_to(self.download_dir)
                 file_info: dict = {
                     "filename": str(rel_path),
                     "filepath": str(f),
@@ -470,8 +473,8 @@ class Downloader:
                     # 使用最后修改时间判断
                     if now - stat.st_mtime > max_age_seconds:
                         shutil.rmtree(session_dir)
-                        logger.info("清理过期 guest session: %s (最后修改: %s)", 
-                                   session_dir.name, 
+                        logger.info("清理过期 guest session: %s (最后修改: %s)",
+                                   session_dir.name,
                                    datetime.fromtimestamp(stat.st_mtime).isoformat())
                         count += 1
                 except OSError as e:
@@ -481,6 +484,169 @@ class Downloader:
             logger.info("已清理 %d 个过期 guest session", count)
 
         return count
+
+    def get_guest_download_count(self, session_id: str) -> int:
+        """
+        获取指定 session 下已完成的视频数量。
+
+        Args:
+            session_id: 游客 session ID。
+
+        Returns:
+            视频文件数量。
+        """
+        if not session_id:
+            return 0
+
+        session_dir = self.guest_download_dir / session_id
+        if not session_dir.exists():
+            return 0
+
+        count = 0
+        for f in session_dir.rglob("*"):
+            if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
+                count += 1
+
+        return count
+
+    def transfer_guest_session(self, session_id: str, client_id: str | None = None) -> dict:
+        """
+        将游客 session 下的所有视频转移到主下载目录。
+
+        Args:
+            session_id: 游客 session ID。
+            client_id: 客户端标识（可选，用于返回更新后的任务数据）。
+
+        Returns:
+            转移结果字典，包含转移数量、文件列表和更新后的任务数据。
+
+        Raises:
+            ValueError: 如果 session 不存在或没有视频。
+        """
+        if not session_id:
+            raise ValueError("session_id 不能为空")
+
+        session_dir = self.guest_download_dir / session_id
+        if not session_dir.exists():
+            raise ValueError(f"游客 session 不存在: {session_id}")
+
+        # 收集所有视频文件
+        video_files = []
+        for f in session_dir.rglob("*"):
+            if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
+                video_files.append(f)
+
+        if not video_files:
+            raise ValueError("该 session 下没有视频文件")
+
+        transferred = []
+        errors = []
+
+        for video_file in video_files:
+            try:
+                # 读取视频的 meta.json（如果存在）
+                meta = _read_meta_from_dir(video_file.parent)
+
+                # 构造目标路径：直接使用原有的目录结构
+                # 从 temp_guest/{session_id}/{title}_{hash}/{hash}.mp4
+                # 转移到 {title}_{hash}/{hash}.mp4
+                relative_to_session = video_file.relative_to(session_dir)
+                # relative_to_session 类似: "{title}_{hash}/{hash}.mp4"
+                target_path = self.download_dir / relative_to_session
+
+                # 检查目标是否已存在（避免重复转移）
+                if target_path.exists():
+                    logger.info("目标文件已存在，跳过: %s", target_path)
+                    transferred.append(str(relative_to_session))
+                    continue
+
+                # 创建目标目录
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+
+                # 移动文件
+                shutil.move(str(video_file), str(target_path))
+                logger.info("转移视频: %s -> %s", video_file, target_path)
+
+                # 如果有 meta.json，也一起转移
+                meta_path = video_file.parent / "meta.json"
+                if meta_path.exists():
+                    target_meta = target_path.parent / "meta.json"
+                    if not target_meta.exists():
+                        shutil.move(str(meta_path), str(target_meta))
+                        logger.info("转移元数据: %s", target_meta)
+
+                transferred.append(str(relative_to_session))
+
+            except Exception as e:
+                logger.error("转移文件失败 %s: %s", video_file, e)
+                errors.append({"file": str(video_file), "error": str(e)})
+
+        # 清理空的 session 目录
+        try:
+            if session_dir.exists():
+                # 删除空的子目录
+                for sub_dir in session_dir.iterdir():
+                    if sub_dir.is_dir() and not any(sub_dir.iterdir()):
+                        sub_dir.rmdir()
+                        logger.info("删除空子目录: %s", sub_dir)
+
+                # 如果 session 目录为空，删除它
+                if not any(session_dir.iterdir()):
+                    session_dir.rmdir()
+                    logger.info("session 目录已清空，已删除: %s", session_dir)
+        except OSError as e:
+            logger.warning("清理 session 目录失败 %s: %s", session_dir, e)
+
+        # 使缓存失效
+        self.invalidate_file_index_cache()
+        self.invalidate_hash_index()
+
+        # 如果提供了 client_id，获取更新后的任务数据
+        updated_tasks = []
+        if client_id:
+            tasks = self.get_tasks_by_client(client_id)
+            for task in tasks:
+                # 将 guest 任务的 filename 更新为新路径
+                if task.is_guest and task.session_id == session_id and task.filename:
+                    # 去掉 temp_guest/{session_id}/ 前缀
+                    task.filename = task.filename.replace(f"temp_guest/{session_id}/", "")
+                    task.is_guest = False
+                    task.session_id = ""
+                
+                # 转换为字典格式
+                task_dict = {
+                    "task_id": task.task_id,
+                    "url": task.url,
+                    "status": task.status,
+                    "progress": task.progress,
+                    "speed": task.speed,
+                    "eta": task.eta,
+                    "filename": task.filename,
+                    "error": task.error,
+                    "title": task.title,
+                    "thumbnail": task.thumbnail,
+                    "duration": task.duration,
+                    "video_id": task.video_id,
+                    "file_hash": task.file_hash,
+                    "is_duplicate": task.is_duplicate,
+                    "created_at": task.created_at.isoformat(),
+                    "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+                }
+                updated_tasks.append(task_dict)
+
+        result = {
+            "status": "ok",
+            "session_id": session_id,
+            "transferred_count": len(transferred),
+            "transferred_files": transferred,
+            "errors": errors,
+            "updated_tasks": updated_tasks,
+        }
+
+        logger.info("游客视频转移完成: session=%s, 转移=%d, 错误=%d",
+                   session_id, len(transferred), len(errors))
+
+        return result
 
     def retry_task(self, task: DownloadTask, progress_callback: Callable) -> asyncio.Task:
         """

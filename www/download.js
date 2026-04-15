@@ -99,7 +99,14 @@
             let actions = '<div class="task-actions">';
             if (t.status === 'completed' && t.filename) {
                 actions += `<button class="task-btn play" onclick="window.DownloadPage.openModal('${t.task_id}')">▶ 播放</button>`;
-                actions += `<button class="task-btn share" onclick="window.DownloadPage.copyShareLink('${t.task_id}')">🔗 分享</button>`;
+                // 游客文件：显示下载按钮（分享无意义，关闭即删除）
+                // 登录用户文件：显示分享按钮
+                const isGuestFile = t.filename.startsWith('temp_guest/');
+                if (isGuestFile) {
+                    actions += `<button class="task-btn download" onclick="window.DownloadPage.downloadGuest('${t.task_id}')">⬇ 下载</button>`;
+                } else {
+                    actions += `<button class="task-btn share" onclick="window.DownloadPage.copyShareLink('${t.task_id}')">🔗 分享</button>`;
+                }
             }
             if (t.status === 'failed') {
                 actions += `<button class="task-btn retry" onclick="window.DownloadPage.retryTask('${t.task_id}')">🔄 重试</button>`;
@@ -272,13 +279,16 @@
         setStatus('添加任务中...', '#58a6ff');
 
         try {
+            // 已登录用户不传 session_id，下载至主目录；游客传 session_id，下载至临时目录
+            const body = { url };
+            if (!isLoggedIn) {
+                body.session_id = guestSessionId;
+            }
+
             const res = await fetch(`/api/tasks?client_id=${clientId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    url,
-                    session_id: guestSessionId
-                })
+                body: JSON.stringify(body)
             });
 
             if (!res.ok) {
@@ -393,11 +403,11 @@
         ws.onclose = (e) => {
             console.warn(`WebSocket 断开: code=${e.code}, reason=${e.reason}`);
             setStatus('🟡 连接断开，重连中...', '#d29922');
-            
-            // 5秒后重连
+
+            // 3秒后重连（高延迟网络下更快尝试重连）
             setTimeout(() => {
                 connectWS();
-            }, 5000);
+            }, 3000);
         };
         
         // 心跳保活：每30秒发送一次ping
@@ -427,6 +437,26 @@
     connectWS();
     checkLoginStatus();
 
+    /**
+     * 下载 guest 临时文件
+     */
+    function downloadGuest(id) {
+        const t = tasks[id];
+        if (!t || !t.filename) return;
+
+        // 去掉 temp_guest/{session_id}/ 前缀
+        const relativePath = t.filename.replace(/^temp_guest\/[^\/]+\//, '');
+        const downloadUrl = `/api/guest-downloads/stream/${guestSessionId}/${encodeURIComponent(relativePath)}`;
+
+        // 触发浏览器下载
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = t.title || 'video';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    }
+
     // 暴露全局 API
     window.DownloadPage = {
         retryTask,
@@ -434,7 +464,9 @@
         closeModal,
         copyShare,
         copyShareLink,
-        closeLoginModal
+        downloadGuest,
+        closeLoginModal,
+        checkAndTransferGuestDownloads
     };
 
     // ========== 登录相关功能 ==========
@@ -556,12 +588,111 @@
             isLoggedIn = true;
             updateLogoStyle();
             closeLoginModal();
+
+            // 登录后检测是否有游客临时下载
+            await checkAndTransferGuestDownloads();
         } catch (err) {
             errorEl.textContent = err.message || '登录失败，请重试';
         } finally {
             btn.disabled = false;
             btn.textContent = '登录';
         }
+    }
+
+    /**
+     * 检测并转移游客临时下载
+     */
+    async function checkAndTransferGuestDownloads() {
+        try {
+            // 获取当前 session 的下载数量
+            const countRes = await fetch(`/api/guest-downloads/${guestSessionId}/count`);
+            if (!countRes.ok) {
+                console.warn('获取游客下载数量失败');
+                return;
+            }
+
+            const countData = await countRes.json();
+            const count = countData.count;
+
+            if (count === 0) {
+                console.log('没有游客临时下载，无需转移');
+                return;
+            }
+
+            setStatus('🔄 正在转移视频到视频库...', '#58a6ff');
+
+            // 调用转移 API
+            const transferRes = await fetch(`/api/guest-downloads/${guestSessionId}/transfer?client_id=${clientId}`, {
+                method: 'POST',
+            });
+
+            if (!transferRes.ok) {
+                const errData = await transferRes.json();
+                throw new Error(errData.detail || '转移失败');
+            }
+
+            const transferData = await transferRes.json();
+            const transferredCount = transferData.transferred_count;
+
+            // 使用后端返回的 updated_tasks 更新本地任务数据
+            if (transferData.updated_tasks && transferData.updated_tasks.length > 0) {
+                transferData.updated_tasks.forEach(updatedTask => {
+                    if (tasks[updatedTask.task_id]) {
+                        tasks[updatedTask.task_id] = updatedTask;
+                    }
+                });
+                // 重新渲染任务列表
+                renderTasks();
+            } else {
+                // 如果没有返回 updated_tasks，刷新整个任务列表
+                await loadTasks();
+            }
+
+            // 显示 Toast 提示
+            showToast(`✅ 已转移 ${transferredCount} 个视频到视频库`, '#3fb950');
+
+        } catch (err) {
+            console.error('转移游客下载失败:', err);
+            showToast('⚠️ 转移失败: ' + err.message, '#d29922');
+        }
+    }
+
+    /**
+     * 显示不打断操作的 Toast 提示
+     */
+    function showToast(message, color = '#3fb950', duration = 3000) {
+        // 创建 Toast 元素
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            color: ${color};
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 10000;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        `;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+
+        // 淡入
+        requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+        });
+
+        // 自动消失
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => {
+                document.body.removeChild(toast);
+            }, 300);
+        }, duration);
     }
 
 })();

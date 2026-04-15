@@ -133,7 +133,7 @@ async def add_task(
     # 验证 URL 格式（必须 http/https 开头）
     _validate_url_format(req.url)
 
-    # 检查是否为匿名用户
+    # 检查是否为匿名用户（未登录用户传递 session_id，登录用户不传）
     is_guest = bool(req.session_id)
     if is_guest and not settings.allow_guest_download:
         raise HTTPException(status_code=403, detail="匿名用户下载功能已禁用")
@@ -145,6 +145,42 @@ async def add_task(
 
     logger.info("添加任务: %s, client=%s, is_guest=%s", task.task_id, client_id, is_guest)
     return _task_to_response(task)
+
+
+@router.post("/guest-downloads/{session_id}/transfer")
+async def transfer_guest_downloads(
+    session_id: str,
+    client_id: str = Query(..., description="客户端标识"),
+    qm: QueueManager = Depends(get_queue_manager),
+):
+    """
+    将游客临时视频转移到视频库。
+    
+    游客登录后调用，将指定 session_id 下所有已完成的视频转移到主下载目录。
+    返回更新后的任务数据，前端可直接刷新。
+    """
+    try:
+        result = qm.downloader.transfer_guest_session(session_id, client_id=client_id)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.error("转移游客视频失败: %s, 错误: %s", session_id, e)
+        raise HTTPException(status_code=500, detail=f"转移失败: {str(e)}") from e
+
+
+@router.get("/guest-downloads/{session_id}/count")
+async def get_guest_download_count(
+    session_id: str,
+    qm: QueueManager = Depends(get_queue_manager),
+):
+    """
+    获取游客 session 下的已完成视频数量。
+    
+    用于登录后判断是否需要提示转移。
+    """
+    count = qm.downloader.get_guest_download_count(session_id)
+    return {"session_id": session_id, "count": count}
 
 
 @router.get("/tasks", response_model=list[TaskResponse])
