@@ -102,6 +102,8 @@ class DownloadTask:
         self.video_id = ""
         self.file_hash = ""
         self.is_duplicate = False
+        self.is_guest = False  # 是否为匿名用户下载
+        self.session_id = ""   # 匿名用户会话 ID
 
 
 class Downloader:
@@ -136,11 +138,18 @@ class Downloader:
         # hash → 文件路径的索引（避免递归搜索）
         self._hash_index: dict[str, Path] = {}
 
+        # 匿名用户临时下载目录
+        self.guest_download_dir = self.download_dir / "temp_guest"
+        self.guest_download_dir.mkdir(parents=True, exist_ok=True)
+
         # 启动时依赖检查
         self._check_dependencies()
 
         # 启动时清理上次遗留的临时下载文件
         self._cleanup_orphaned_temp_files()
+
+        # 启动时清理过期的 guest session（超过 24 小时）
+        self.cleanup_expired_guest_sessions(max_age_hours=24.0)
 
     def reload_cookies(self, cookies_file: Path | None) -> None:
         """
@@ -397,6 +406,80 @@ class Downloader:
                         logger.warning("删除临时文件失败 %s: %s", f.name, e)
         if count:
             logger.info("已清理 %d 个临时文件 (task_id=%s)", count, task_id)
+        return count
+
+    def cleanup_guest_session(self, session_id: str) -> int:
+        """
+        清理指定 session 的所有匿名用户临时文件。
+
+        Args:
+            session_id: 匿名用户会话 ID。
+
+        Returns:
+            清理的目录数量。
+        """
+        if not session_id:
+            return 0
+
+        session_dir = self.guest_download_dir / session_id
+        if not session_dir.exists():
+            logger.info("Guest session 目录不存在，无需清理: %s", session_id)
+            return 0
+
+        count = 0
+        try:
+            # 删除整个 session 目录
+            shutil.rmtree(session_dir)
+            logger.info("已清理 guest session 临时文件: %s", session_id)
+            count += 1
+        except OSError as e:
+            logger.warning("清理 guest session 失败 %s: %s", session_id, e)
+
+        # 尝试清理空的 guest_download_dir
+        try:
+            if self.guest_download_dir.exists() and not any(self.guest_download_dir.iterdir()):
+                self.guest_download_dir.rmdir()
+                logger.info("guest_download_dir 为空，已删除")
+        except OSError:
+            pass
+
+        return count
+
+    def cleanup_expired_guest_sessions(self, max_age_hours: float = 24.0) -> int:
+        """
+        启动时清理过期的 guest session（超过指定时间的目录）。
+
+        Args:
+            max_age_hours: 最大保留时长（小时）。
+
+        Returns:
+            清理的 session 数量。
+        """
+        if not self.guest_download_dir.exists():
+            return 0
+
+        import time
+        now = time.time()
+        max_age_seconds = max_age_hours * 3600
+        count = 0
+
+        for session_dir in self.guest_download_dir.iterdir():
+            if session_dir.is_dir():
+                try:
+                    stat = session_dir.stat()
+                    # 使用最后修改时间判断
+                    if now - stat.st_mtime > max_age_seconds:
+                        shutil.rmtree(session_dir)
+                        logger.info("清理过期 guest session: %s (最后修改: %s)", 
+                                   session_dir.name, 
+                                   datetime.fromtimestamp(stat.st_mtime).isoformat())
+                        count += 1
+                except OSError as e:
+                    logger.warning("清理过期 guest session 失败 %s: %s", session_dir.name, e)
+
+        if count > 0:
+            logger.info("已清理 %d 个过期 guest session", count)
+
         return count
 
     def retry_task(self, task: DownloadTask, progress_callback: Callable) -> asyncio.Task:
@@ -810,10 +893,17 @@ class Downloader:
             safe_title = file_hash
             logger.debug("safe_title 为空,使用 hash 作为标题")
 
+        # 根据是否为匿名用户决定目录路径
+        if task.is_guest and task.session_id:
+            base_dir = self.guest_download_dir / task.session_id
+            base_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            base_dir = self.download_dir
+
         # 构造目录名：标题_指纹
         dir_name = f"{safe_title}_{file_hash}"
-        dir_path = self.download_dir / dir_name
-        logger.debug("目标目录: %s", dir_path)
+        dir_path = base_dir / dir_name
+        logger.debug("目标目录: %s, base_dir: %s", dir_path, base_dir)
 
         # 检查同名冲突
         if dir_path.exists():
@@ -823,7 +913,10 @@ class Downloader:
                 logger.debug("发现同名同 hash 文件,删除 temp_file")
                 os.remove(temp_file)
                 task.is_duplicate = True
-                task.filename = f"{dir_name}/{file_hash}{ext}"
+                if task.is_guest:
+                    task.filename = f"temp_guest/{task.session_id}/{dir_name}/{file_hash}{ext}"
+                else:
+                    task.filename = f"{dir_name}/{file_hash}{ext}"
                 task.filepath = str(existing_in_dir)
                 raise FileExistsError(f"重复文件: {existing_in_dir}")
 
@@ -831,7 +924,7 @@ class Downloader:
             i = 1
             while True:
                 new_dir_name = f"{safe_title}_{i}_{file_hash}"
-                new_dir_path = self.download_dir / new_dir_name
+                new_dir_path = base_dir / new_dir_name
                 logger.debug("尝试新目录名: %s", new_dir_name)
                 if not new_dir_path.exists():
                     dir_name = new_dir_name
@@ -868,7 +961,10 @@ class Downloader:
         # 保存元数据
         self._save_metadata(dir_path, task)
 
-        task.filename = f"{dir_name}/{final_name}"
+        if task.is_guest:
+            task.filename = f"temp_guest/{task.session_id}/{dir_name}/{final_name}"
+        else:
+            task.filename = f"{dir_name}/{final_name}"
         task.filepath = str(final_path)
 
         logger.debug("后处理完成 - filename: %s, filepath: %s", task.filename, task.filepath)
