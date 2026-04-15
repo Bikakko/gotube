@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse
 from .downloader import VIDEO_EXTENSIONS, _read_meta_from_dir
 from .models import AddTaskRequest, DeleteDownloadResponse, TaskResponse
 from .queue_manager import QueueManager
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -132,12 +133,17 @@ async def add_task(
     # 验证 URL 格式（必须 http/https 开头）
     _validate_url_format(req.url)
 
-    task = await qm.add_task(req.url, client_id)
+    # 检查是否为匿名用户
+    is_guest = bool(req.session_id)
+    if is_guest and not settings.allow_guest_download:
+        raise HTTPException(status_code=403, detail="匿名用户下载功能已禁用")
+
+    task = await qm.add_task(req.url, client_id, session_id=req.session_id)
     if task is None:
         # 同客户端相同URL且不可重试
         raise HTTPException(status_code=409, detail="该链接已在下载中或已完成，请勿重复提交")
 
-    logger.info("添加任务: %s, client=%s", task.task_id, client_id)
+    logger.info("添加任务: %s, client=%s, is_guest=%s", task.task_id, client_id, is_guest)
     return _task_to_response(task)
 
 
@@ -215,6 +221,39 @@ async def stream_video(
         raise HTTPException(status_code=404, detail="文件不存在")
 
     logger.info("[/api/downloads/stream] returning video: path=%s, size=%d", filepath, filepath.stat().st_size)
+    return FileResponse(
+        filepath,
+        media_type="video/mp4",
+        filename=filepath.name,
+        headers={"Content-Disposition": f'inline; filename="{filepath.name}"'},
+    )
+
+
+@router.get("/guest-downloads/stream/{session_id}/{filename:path}")
+async def stream_guest_video(
+    session_id: str,
+    filename: str,
+    qm: QueueManager = Depends(get_queue_manager),
+):
+    """匿名用户视频文件下载（仅限自己的 session）"""
+    download_dir = qm.downloader.guest_download_dir
+    filepath = download_dir / session_id / filename
+
+    logger.info("[/api/guest-downloads/stream] request session=%s filename=%s, resolved path=%s", 
+                session_id, filename, filepath)
+
+    # 防止路径遍历攻击
+    try:
+        filepath.resolve().relative_to((download_dir / session_id).resolve())
+    except ValueError as e:
+        logger.warning("[/api/guest-downloads/stream] illegal path: %s, error=%s", filepath, e)
+        raise HTTPException(status_code=403, detail="非法文件路径") from e
+
+    if not filepath.is_file():
+        logger.warning("[/api/guest-downloads/stream] file not found: %s", filepath)
+        raise HTTPException(status_code=404, detail="文件不存在")
+
+    logger.info("[/api/guest-downloads/stream] returning video: path=%s, size=%d", filepath, filepath.stat().st_size)
     return FileResponse(
         filepath,
         media_type="video/mp4",
