@@ -544,9 +544,6 @@ class Downloader:
 
         for video_file in video_files:
             try:
-                # 读取视频的 meta.json（如果存在）
-                meta = _read_meta_from_dir(video_file.parent)
-
                 # 构造目标路径：直接使用原有的目录结构
                 # 从 temp_guest/{session_id}/{title}_{hash}/{hash}.mp4
                 # 转移到 {title}_{hash}/{hash}.mp4
@@ -560,22 +557,32 @@ class Downloader:
                     transferred.append(str(relative_to_session))
                     continue
 
+                # 获取视频所在目录（包含 meta.json 和缩略图）
+                video_dir = video_file.parent
+
                 # 创建目标目录
                 target_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # 移动文件
-                shutil.move(str(video_file), str(target_path))
-                logger.info("转移视频: %s -> %s", video_file, target_path)
+                # 移动整个目录（视频 + meta.json + 缩略图）
+                if video_dir.exists():
+                    # 使用 shutil.move 移动整个目录
+                    target_dir = target_path.parent
+                    if target_dir.exists():
+                        # 目标目录已存在，逐个移动文件
+                        for item in video_dir.iterdir():
+                            target_item = target_dir / item.name
+                            if not target_item.exists():
+                                shutil.move(str(item), str(target_item))
+                                logger.info("转移文件: %s -> %s", item.name, target_dir)
+                            else:
+                                logger.info("目标文件已存在，跳过: %s", target_item)
+                    else:
+                        shutil.move(str(video_dir), str(target_dir))
+                        logger.info("转移目录: %s -> %s", video_dir.name, target_dir.parent)
 
-                # 如果有 meta.json，也一起转移
-                meta_path = video_file.parent / "meta.json"
-                if meta_path.exists():
-                    target_meta = target_path.parent / "meta.json"
-                    if not target_meta.exists():
-                        shutil.move(str(meta_path), str(target_meta))
-                        logger.info("转移元数据: %s", target_meta)
-
-                transferred.append(str(relative_to_session))
+                    transferred.append(str(relative_to_session))
+                else:
+                    logger.warning("视频目录不存在: %s", video_dir)
 
             except Exception as e:
                 logger.error("转移文件失败 %s: %s", video_file, e)
