@@ -615,10 +615,20 @@ class Downloader:
             for task in tasks:
                 # 将 guest 任务的 filename 更新为新路径
                 if task.is_guest and task.session_id == session_id and task.filename:
-                    # 去掉 temp_guest/{session_id}/ 前缀
-                    task.filename = task.filename.replace(f"temp_guest/{session_id}/", "")
-                    task.is_guest = False
-                    task.session_id = ""
+                    # 检查是否为去重文件（DUPLICATE/ 标记）
+                    if '/DUPLICATE/' in task.filename:
+                        # 去重文件：文件已在主视频库，只需移除游客标识
+                        # 提取 DUPLICATE/ 后面的实际路径
+                        actual_path = task.filename.split('/DUPLICATE/', 1)[1]
+                        task.filename = actual_path
+                        task.is_guest = False
+                        task.session_id = ""
+                        logger.info("去重文件转移（文件已在主库）: %s", actual_path)
+                    else:
+                        # 普通文件：去掉 temp_guest/{session_id}/ 前缀
+                        task.filename = task.filename.replace(f"temp_guest/{session_id}/", "")
+                        task.is_guest = False
+                        task.session_id = ""
                 
                 # 转换为字典格式
                 task_dict = {
@@ -1048,7 +1058,12 @@ class Downloader:
             os.remove(temp_file)
             task.is_duplicate = True
             rel_path = existing.relative_to(self.download_dir)
-            task.filename = str(rel_path)
+            # 游客任务保留 temp_guest/ 前缀，但添加 DUPLICATE/ 标记
+            # filepath 指向主视频库的已存在文件
+            if task.is_guest:
+                task.filename = f"temp_guest/{task.session_id}/DUPLICATE/{rel_path}"
+            else:
+                task.filename = str(rel_path)
             task.filepath = str(existing)
             logger.debug("文件已存在（去重）: %s", rel_path)
             raise FileExistsError(f"重复文件: {existing}")

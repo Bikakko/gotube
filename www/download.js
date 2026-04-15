@@ -159,9 +159,16 @@
         // 根据是否为 guest 文件选择 URL
         let videoUrl;
         if (t.filename && t.filename.startsWith('temp_guest/')) {
-            // guest 文件：去掉 temp_guest/{session_id}/ 前缀
-            const relativePath = t.filename.replace(/^temp_guest\/[^\/]+\//, '');
-            videoUrl = `/api/guest-downloads/stream/${guestSessionId}/${encodeURIComponent(relativePath)}`;
+            // 检查是否为去重文件（DUPLICATE/ 标记）
+            const isDuplicate = t.filename.includes('/DUPLICATE/');
+            if (isDuplicate) {
+                // 去重文件：直接使用主视频库的 hash URL
+                videoUrl = `/watch?v=${t.file_hash}`;
+            } else {
+                // guest 文件：去掉 temp_guest/{session_id}/ 前缀
+                const relativePath = t.filename.replace(/^temp_guest\/[^\/]+\//, '');
+                videoUrl = `/api/guest-downloads/stream/${guestSessionId}/${encodeURIComponent(relativePath)}`;
+            }
         } else {
             videoUrl = `/watch?v=${t.file_hash}`;
         }
@@ -443,6 +450,20 @@
     function downloadGuest(id) {
         const t = tasks[id];
         if (!t || !t.filename) return;
+
+        // 检查是否为去重文件（DUPLICATE/ 标记）
+        const isDuplicate = t.filename.includes('/DUPLICATE/');
+        if (isDuplicate) {
+            // 去重文件：使用主视频库的下载 API
+            const downloadUrl = `/watch?v=${t.file_hash}`;
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = t.title || 'video';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            return;
+        }
 
         // 去掉 temp_guest/{session_id}/ 前缀
         const relativePath = t.filename.replace(/^temp_guest\/[^\/]+\//, '');
