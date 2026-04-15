@@ -95,6 +95,7 @@ if not _admins:
     _errors.append("  GOTUBE_ADMINS = (至少需要配置一个管理员账号)")
 _debug: bool = _b("GOTUBE_DEBUG", False)
 _log_level: str = _s("GOTUBE_LOG_LEVEL", default="ERROR").upper()
+_allow_guest_download: bool = _b("GOTUBE_ALLOW_GUEST_DOWNLOAD", True)
 
 _china_domains: list[str] = [
     "bilibili.com", "b23.tv", "acfun.cn", "iqiyi.com",
@@ -166,6 +167,11 @@ class _Settings:
     @property
     def log_level(self) -> str:
         return _log_level
+
+    @property
+    def allow_guest_download(self) -> bool:
+        """是否允许匿名用户下载"""
+        return _allow_guest_download
 
     @property
     def china_domains(self) -> list[str]:

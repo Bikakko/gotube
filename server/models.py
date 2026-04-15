@@ -11,6 +11,7 @@ class AddTaskRequest(BaseModel):
     """添加下载任务请求"""
 
     url: str
+    session_id: str | None = None  # 匿名用户会话标识
 
 
 class TaskResponse(BaseModel):
