@@ -123,6 +123,12 @@ class RegisterRequest(BaseModel):
     invite_code: str
 
 
+class UpdateShareRequest(BaseModel):
+    """当前用户更新视频分享状态请求"""
+
+    share_enabled: bool
+
+
 class CreateInviteRequest(BaseModel):
     """管理员创建邀请码请求"""
 

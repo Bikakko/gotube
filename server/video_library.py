@@ -215,7 +215,7 @@ def delete_user_video_item(
     item = session.query(UserVideoItem).filter(UserVideoItem.id == item_id).first()
     if not item or item.deleted_at is not None:
         raise HTTPException(status_code=404, detail="视频不存在")
-    if user.role != "admin" and item.owner_user_id != user.id:
+    if item.owner_user_id != user.id:
         raise HTTPException(status_code=403, detail="权限不足")
 
     asset = session.query(MediaAsset).filter(MediaAsset.id == item.media_asset_id).first()
@@ -245,6 +245,28 @@ def delete_user_video_item(
         "physical_deleted": physical_deleted,
         "deleted_files": deleted_files,
     }
+
+
+def set_user_video_share_enabled(
+    session: Session,
+    user: User,
+    item_id: int,
+    share_enabled: bool,
+) -> dict[str, Any]:
+    """Enable or disable sharing for one visible user library item."""
+    item, asset = _get_visible_item_asset(session, user, item_id)
+    item.share_enabled = share_enabled
+    session.flush()
+    return _item_to_dict(item, asset, user)
+
+
+def get_user_video_asset_for_download(
+    session: Session,
+    user: User,
+    item_id: int,
+) -> tuple[UserVideoItem, MediaAsset]:
+    """Resolve one visible user library item to a live media asset for download."""
+    return _get_visible_item_asset(session, user, item_id, require_file=True)
 
 
 def admin_delete_media_asset(
@@ -302,6 +324,32 @@ def resolve_share_token(session: Session, share_token: str) -> tuple[UserVideoIt
     item, asset, _owner = row
     if not Path(asset.filepath).is_file():
         return None
+    return item, asset
+
+
+def _get_visible_item_asset(
+    session: Session,
+    user: User,
+    item_id: int,
+    *,
+    require_file: bool = False,
+) -> tuple[UserVideoItem, MediaAsset]:
+    row = (
+        session.query(UserVideoItem, MediaAsset)
+        .join(MediaAsset, MediaAsset.id == UserVideoItem.media_asset_id)
+        .filter(
+            UserVideoItem.id == item_id,
+            UserVideoItem.deleted_at.is_(None),
+        )
+        .first()
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="视频不存在")
+    item, asset = row
+    if item.owner_user_id != user.id:
+        raise HTTPException(status_code=403, detail="权限不足")
+    if require_file and not Path(asset.filepath).is_file():
+        raise HTTPException(status_code=404, detail="视频文件不存在")
     return item, asset
 
 

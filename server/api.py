@@ -17,7 +17,7 @@ from .auth import get_current_user, get_db, get_optional_current_user
 from .db import User
 from .downloader import _read_meta_from_dir
 from .invites import register_user_with_invite
-from .models import AddTaskRequest, RegisterRequest, TaskResponse
+from .models import AddTaskRequest, RegisterRequest, TaskResponse, UpdateShareRequest
 from .path_utils import resolve_inside
 from .quota import get_effective_quota_bytes, refresh_user_storage_usage
 from .queue_manager import QueueManager
@@ -26,8 +26,10 @@ from .security import validate_guest_session_id, validate_hash_id
 from .video_library import (
     create_item_from_existing_source,
     delete_user_video_item,
+    get_user_video_asset_for_download,
     list_user_video_items,
     resolve_share_token,
+    set_user_video_share_enabled,
 )
 
 logger = logging.getLogger(__name__)
@@ -311,6 +313,36 @@ async def delete_my_video(
     result = delete_user_video_item(db, current_user, item_id, settings.get_download_dir())
     db.commit()
     return result
+
+
+@router.patch("/me/videos/{item_id}/share")
+async def update_my_video_share(
+    item_id: int,
+    body: UpdateShareRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """开启或关闭当前用户视频库条目的分享链接。"""
+    result = set_user_video_share_enabled(db, current_user, item_id, body.share_enabled)
+    db.commit()
+    return result
+
+
+@router.get("/me/videos/{item_id}/download")
+async def download_my_video(
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """下载当前用户自己的视频库条目，不按 filename 暴露主库路径。"""
+    _item, asset = get_user_video_asset_for_download(db, current_user, item_id)
+    path = Path(asset.filepath)
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename=path.name,
+        headers={"Content-Disposition": f'attachment; filename="{path.name}"'},
+    )
 
 
 @router.post("/tasks/{task_id}/retry")

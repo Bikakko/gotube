@@ -23,6 +23,15 @@
 
     const tasks = {};
     let ws = null;
+    let isLoggedIn = false;
+    let currentUser = null;
+    let myVideos = [];
+    let myQuota = null;
+
+    function authHeaders(extra = {}) {
+        const token = localStorage.getItem('gotube_admin_token');
+        return token ? { ...extra, 'Authorization': `Bearer ${token}` } : extra;
+    }
 
     function setStatus(msg, color = '#8b949e') {
         const el = $('#status');
@@ -87,8 +96,8 @@
                 if (t.eta && t.total_bytes) metaParts.push(`⏱ ${fmtETA(t.eta)}`);
                 if (t.downloaded_bytes && !t.total_bytes) metaParts.push(`📦 ${fmtBytes(t.downloaded_bytes)}`);
             }
-            if ((t.status === 'completed' || t.status === 'duplicate') && t.file_hash) {
-                metaParts.push(`🔒 ${t.file_hash}`);
+            if ((t.status === 'completed' || t.status === 'duplicate') && (t.share_token || t.file_hash)) {
+                metaParts.push(`🔒 ${t.share_token ? '用户分享' : t.file_hash}`);
             }
             if (t.status === 'failed' && t.error) {
                 metaParts.push(`❌ ${t.error}`);
@@ -117,6 +126,9 @@
                     addButton('download', '⬇ 下载', () => downloadGuest(t.task_id));
                 } else {
                     addButton('share', '🔗 分享', () => copyShareLink(t.task_id));
+                    if (t.user_video_item_id) {
+                        addButton('download', '⬇ 下载', () => downloadMyVideo({ id: t.user_video_item_id, title: t.title }));
+                    }
                 }
             }
             if (t.status === 'failed') {
@@ -153,7 +165,10 @@
         setStatus('🔄 重试中...', '#58a6ff');
 
         try {
-            const res = await fetch(`/api/tasks/${id}/retry?client_id=${clientId}`, { method: 'POST' });
+            const res = await fetch(`/api/tasks/${id}/retry?client_id=${clientId}`, {
+                method: 'POST',
+                headers: authHeaders(),
+            });
             if (!res.ok) {
                 const e = await res.json();
                 setStatus('❌ 重试失败: ' + (e.detail || '未知错误'), '#f85149');
@@ -174,7 +189,7 @@
 
     function openModal(id) {
         const t = tasks[id];
-        if (!t || !t.file_hash) return;
+        if (!t || (!t.file_hash && !t.share_token)) return;
 
         // 根据是否为 guest 文件选择 URL
         let videoUrl;
@@ -182,21 +197,29 @@
             // 检查是否为去重文件（DUPLICATE/ 标记）
             const isDuplicate = t.filename.includes('/DUPLICATE/');
             if (isDuplicate) {
-                // 去重文件：直接使用主视频库的 hash URL
-                videoUrl = `/watch?v=${t.file_hash}`;
+                videoUrl = `/watch?v=${encodeURIComponent(t.share_token || t.file_hash)}`;
             } else {
                 // guest 文件：去掉 temp_guest/{session_id}/ 前缀
                 const relativePath = t.filename.replace(/^temp_guest\/[^\/]+\//, '');
                 videoUrl = `/api/guest-downloads/stream/${guestSessionId}/${encodeURIComponent(relativePath)}`;
             }
         } else {
-            videoUrl = `/watch?v=${t.file_hash}`;
+            videoUrl = `/watch?v=${encodeURIComponent(t.share_token || t.file_hash)}`;
         }
         
-        const shareUrl = `${location.origin}/watch?v=${t.file_hash}`;
+        const shareToken = t.share_token || t.file_hash;
+        const shareUrl = `${location.origin}/watch?v=${encodeURIComponent(shareToken)}`;
 
         $('#modal-title').textContent = t.title || '未知标题';
-        $('#modal-video').innerHTML = `<video src="${videoUrl}" controls autoplay style="width:100%;background:#000"></video>`;
+        const modalVideo = $('#modal-video');
+        modalVideo.replaceChildren();
+        const video = document.createElement('video');
+        video.src = videoUrl;
+        video.controls = true;
+        video.autoplay = true;
+        video.style.width = '100%';
+        video.style.background = '#000';
+        modalVideo.appendChild(video);
         $('#copy-btn').dataset.shareUrl = shareUrl;
 
         $('#modal').classList.add('active');
@@ -231,9 +254,9 @@
 
     function copyShareLink(id) {
         const t = tasks[id];
-        if (!t || !t.file_hash) return;
+        if (!t || (!t.share_token && !t.file_hash)) return;
 
-        const shareUrl = `${location.origin}/watch?v=${t.file_hash}`;
+        const shareUrl = `${location.origin}/watch?v=${encodeURIComponent(t.share_token || t.file_hash)}`;
         navigator.clipboard.writeText(shareUrl).then(() => {
             setStatus('✅ 链接已复制', '#3fb950');
             setTimeout(() => setStatus(''), 2000);
@@ -314,7 +337,7 @@
 
             const res = await fetch(`/api/tasks?client_id=${clientId}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
                 body: JSON.stringify(body)
             });
 
@@ -332,6 +355,7 @@
             tasks[data.task_id] = data;
             setStatus('✅ 已添加', '#3fb950');
             renderTasks();
+            if (isLoggedIn) loadMyLibrary();
         } catch (e) {
             setStatus('❌ ' + e.message, '#f85149');
         } finally {
@@ -411,6 +435,9 @@
                     // 调试日志
                     if (d.status === 'completed' || d.status === 'failed') {
                         console.log(`任务 ${taskId} ${d.status}:`, d.title);
+                        if (d.status === 'completed' && isLoggedIn) {
+                            loadMyLibrary();
+                        }
                     }
                 } else if (d.type === 'pong') {
                     // 心跳响应
@@ -463,6 +490,7 @@
     $('#register-submit-btn').onclick = handleRegister;
     $('#register-password').onkeypress = (e) => { if (e.key === 'Enter') handleRegister(); };
     $('#register-invite').onkeypress = (e) => { if (e.key === 'Enter') handleRegister(); };
+    $('#refresh-library-btn').onclick = () => loadMyLibrary();
 
     // 初始化
     loadTasks();
@@ -503,6 +531,201 @@
         document.body.removeChild(a);
     }
 
+    async function loadMyLibrary() {
+        if (!isLoggedIn) {
+            myVideos = [];
+            myQuota = null;
+            renderMyLibrary();
+            return;
+        }
+
+        try {
+            const [quotaRes, videosRes] = await Promise.all([
+                fetch('/api/me/quota', { headers: authHeaders() }),
+                fetch('/api/me/videos', { headers: authHeaders() }),
+            ]);
+            if (!quotaRes.ok || !videosRes.ok) {
+                throw new Error('加载视频库失败');
+            }
+            myQuota = await quotaRes.json();
+            const videosData = await videosRes.json();
+            myVideos = videosData.videos || [];
+            renderMyLibrary();
+        } catch (err) {
+            console.error(err);
+            showToast('⚠️ 加载我的视频库失败: ' + err.message, '#d29922');
+        }
+    }
+
+    function renderMyLibrary() {
+        const section = $('#library-section');
+        const quotaInfo = $('#quota-info');
+        const list = $('#library-list');
+        if (!section || !quotaInfo || !list) return;
+
+        section.style.display = isLoggedIn ? 'block' : 'none';
+        list.replaceChildren();
+        if (!isLoggedIn) {
+            quotaInfo.textContent = '';
+            return;
+        }
+
+        if (myQuota) {
+            const quotaText = myQuota.unlimited
+                ? '不限容量'
+                : `${fmtBytes(myQuota.storage_used_bytes)} / ${fmtBytes(myQuota.storage_quota_bytes)}`;
+            quotaInfo.textContent = `容量：${quotaText}`;
+        }
+
+        if (myVideos.length === 0) {
+            list.appendChild(Object.assign(document.createElement('div'), {
+                className: 'empty-library',
+                textContent: '还没有保存到视频库的视频',
+            }));
+            return;
+        }
+
+        myVideos.forEach(video => {
+            const card = document.createElement('div');
+            card.className = 'library-item';
+
+            const title = document.createElement('div');
+            title.className = 'library-title';
+            title.textContent = video.title || '未命名视频';
+
+            const meta = document.createElement('div');
+            meta.className = 'library-meta';
+            const source = sourceFromUrl(video.source_url);
+            const savedAt = video.saved_at ? new Date(video.saved_at).toLocaleString('zh-CN') : '';
+            meta.textContent = `${fmtBytes(video.size)} · ${source || 'Unknown'} · ${savedAt} · ${video.share_enabled ? '分享已开启' : '分享已关闭'}`;
+
+            const actions = document.createElement('div');
+            actions.className = 'library-actions';
+            addLibraryButton(actions, 'play', '▶ 播放', () => openLibraryVideo(video));
+            addLibraryButton(actions, 'share', '🔗 分享', () => copyLibraryShare(video), !video.share_enabled);
+            addLibraryButton(actions, 'download', '⬇ 下载', () => downloadMyVideo(video));
+            addLibraryButton(actions, 'retry', video.share_enabled ? '关闭分享' : '开启分享', () => toggleLibraryShare(video));
+            addLibraryButton(actions, 'danger', '移除', () => deleteLibraryVideo(video));
+
+            card.append(title, meta, actions);
+            list.appendChild(card);
+        });
+    }
+
+    function addLibraryButton(parent, className, text, handler, disabled = false) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `task-btn ${className}`;
+        button.textContent = text;
+        button.disabled = disabled;
+        button.addEventListener('click', handler);
+        parent.appendChild(button);
+    }
+
+    function sourceFromUrl(url) {
+        try {
+            return new URL(url).hostname || '';
+        } catch {
+            return '';
+        }
+    }
+
+    function openLibraryVideo(video) {
+        if (!video.share_token) return;
+        const videoUrl = `/watch?v=${encodeURIComponent(video.share_token)}`;
+        $('#modal-title').textContent = video.title || '未知标题';
+        const modalVideo = $('#modal-video');
+        modalVideo.replaceChildren();
+        const elem = document.createElement('video');
+        elem.src = videoUrl;
+        elem.controls = true;
+        elem.autoplay = true;
+        elem.style.width = '100%';
+        elem.style.background = '#000';
+        modalVideo.appendChild(elem);
+        $('#copy-btn').dataset.shareUrl = `${location.origin}/watch?v=${encodeURIComponent(video.share_token)}`;
+        $('#modal').classList.add('active');
+    }
+
+    function copyLibraryShare(video) {
+        if (!video.share_enabled || !video.share_token) return;
+        copyText(`${location.origin}/watch?v=${encodeURIComponent(video.share_token)}`, '✅ 分享链接已复制');
+    }
+
+    async function toggleLibraryShare(video) {
+        try {
+            const res = await fetch(`/api/me/videos/${video.id}/share`, {
+                method: 'PATCH',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ share_enabled: !video.share_enabled }),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.detail || '更新失败');
+            }
+            await loadMyLibrary();
+        } catch (err) {
+            showToast('❌ ' + err.message, '#f85149');
+        }
+    }
+
+    async function deleteLibraryVideo(video) {
+        if (!confirm(`确定从我的视频库移除“${video.title || '未命名视频'}”吗？`)) return;
+        try {
+            const res = await fetch(`/api/me/videos/${video.id}`, {
+                method: 'DELETE',
+                headers: authHeaders(),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.detail || '移除失败');
+            }
+            await loadMyLibrary();
+            showToast('✅ 已从我的视频库移除', '#3fb950');
+        } catch (err) {
+            showToast('❌ ' + err.message, '#f85149');
+        }
+    }
+
+    async function downloadMyVideo(video) {
+        const itemId = video.id || video.user_video_item_id;
+        if (!itemId) return;
+        try {
+            const res = await fetch(`/api/me/videos/${itemId}/download`, {
+                headers: authHeaders(),
+            });
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.detail || '下载失败');
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = video.title || 'video';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            showToast('❌ ' + err.message, '#f85149');
+        }
+    }
+
+    function copyText(text, message) {
+        navigator.clipboard.writeText(text).then(() => {
+            showToast(message, '#3fb950');
+        }).catch(() => {
+            const input = document.createElement('input');
+            input.value = text;
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            document.body.removeChild(input);
+            showToast(message, '#3fb950');
+        });
+    }
+
     // 暴露全局 API
     window.DownloadPage = {
         retryTask,
@@ -511,19 +734,20 @@
         copyShare,
         copyShareLink,
         downloadGuest,
+        loadMyLibrary,
         closeLoginModal,
         checkAndTransferGuestDownloads
     };
 
     // ========== 登录相关功能 ==========
 
-    let isLoggedIn = false;
-
     async function checkLoginStatus() {
         const token = localStorage.getItem('gotube_admin_token');
         if (!token) {
             isLoggedIn = false;
+            currentUser = null;
             updateLogoStyle();
+            renderMyLibrary();
             return;
         }
 
@@ -540,19 +764,23 @@
 
             const data = await response.json();
             isLoggedIn = data.valid && data.user;
+            currentUser = data.user || null;
             updateLogoStyle();
+            await loadMyLibrary();
         } catch (err) {
             console.debug('Check auth failed:', err.message);
             localStorage.removeItem('gotube_admin_token');
             isLoggedIn = false;
+            currentUser = null;
             updateLogoStyle();
+            renderMyLibrary();
         }
     }
 
     function updateLogoStyle() {
         const logoLink = $('#logo-link');
         if (isLoggedIn) {
-            logoLink.title = '进入管理页面';
+            logoLink.title = currentUser && currentUser.role === 'admin' ? '进入管理页面' : '查看我的视频库';
             logoLink.classList.add('logged-in');
         } else {
             logoLink.title = '点击登录';
@@ -562,8 +790,12 @@
 
     function handleLogoClick() {
         if (isLoggedIn) {
-            const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';
-            window.location.href = `/${hiddenPath}/admin`;
+            if (currentUser && currentUser.role === 'admin') {
+                const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';
+                window.location.href = `/${hiddenPath}/admin`;
+                return;
+            }
+            $('#library-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } else {
             showLoginModal();
         }
@@ -657,11 +889,13 @@
             const data = await response.json();
             localStorage.setItem('gotube_admin_token', data.token);
             isLoggedIn = true;
+            currentUser = data.user || null;
             updateLogoStyle();
             closeLoginModal();
 
             // 登录后检测是否有游客临时下载
             await checkAndTransferGuestDownloads();
+            await loadMyLibrary();
         } catch (err) {
             errorEl.textContent = err.message || '登录失败，请重试';
         } finally {
@@ -786,6 +1020,7 @@
 
             // 显示 Toast 提示
             showToast(`✅ 已转移 ${transferredCount} 个视频到视频库`, '#3fb950');
+            await loadMyLibrary();
 
         } catch (err) {
             console.error('转移游客下载失败:', err);
