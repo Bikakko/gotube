@@ -4,7 +4,7 @@
 
 **目标：** 将 GoTube 从单一视频库升级为多用户视频库，支持普通用户容量限制、管理员全局管理、邀请码注册，并修复 v3 已发现的安全隐患。
 
-**架构：** 先集中安全边界，再引入数据库归属模型，最后调整 API 和前端。旧文件结构保持可读，新下载进入用户目录，数据库通过 `video_assets` 记录视频归属。
+**架构：** 先集中安全边界，再引入数据库归属模型，最后调整 API 和前端。旧文件结构保持可读，新下载进入用户目录。数据库用 `media_assets` 表示物理文件，用 `user_video_items` 表示用户视频库条目。
 
 **技术栈：** FastAPI、SQLAlchemy、SQLite、Pydantic、yt-dlp、原生 JavaScript。
 
@@ -21,7 +21,7 @@
 | `server/video_library.py` | 创建 | 视频资产登记、查询、删除和 hash 查找。 |
 | `server/quota.py` | 创建 | 用户容量计算和下载准入判断。 |
 | `server/guest_sessions.py` | 创建 | 游客 session 校验、统计、转存和清理。 |
-| `server/db.py` | 修改 | 新增 `VideoAsset`、`InviteCode`、`SchemaMigration` 和用户容量字段。 |
+| `server/db.py` | 修改 | 新增 `MediaAsset`、`UserVideoItem`、`InviteCode`、`SchemaMigration` 和用户容量字段。 |
 | `server/config.py` | 修改 | 新增普通用户默认容量配置。 |
 | `server/models.py` | 修改 | 新增注册、邀请码、容量和视频响应模型。 |
 | `server/api.py` | 修改 | 拆分公开 API 和登录用户 API，收紧危险接口。 |
@@ -131,7 +131,7 @@ matched_file = hash_index.get(hash_id)
 
 - `DELETE /api/downloads/{filename:path}` 返回 `403` 或迁移到管理员接口。
 - `/api/downloads` 如果前端没有游客依赖，改为要求登录。
-- `/api/downloads/stream/{filename:path}` 不作为公开分享入口，分享只走 `/watch?v={hash}`。
+- `/api/downloads/stream/{filename:path}` 不作为公开分享入口。任务 1 保留 legacy `/watch?v={hash}` 精确匹配，后续用户级分享改为 `/watch?v={share_token}`。
 
 - [ ] **步骤 6：修复任务列表 XSS**
 
@@ -158,9 +158,20 @@ python -m compileall server
 **文件：**
 - 修改：`server/db.py`
 - 创建：`server/migrations.py`
-- 修改：`server/main.py`
+- 测试：`tests/test_v4_migrations_unittest.py`
 
-- [ ] **步骤 1：扩展 User 表模型**
+- [x] **步骤 1：先写迁移测试**
+
+使用标准库 `unittest` 覆盖：
+
+- v4 表结构存在。
+- `readonly` 用户迁移为 `user`。
+- 旧视频登记到 `media_assets`。
+- 重复迁移不重复登记。
+- `temp_guest` 下的视频不登记。
+- 文件不被移动或删除。
+
+- [x] **步骤 2：扩展 User 表模型**
 
 在 `User` 中新增：
 
@@ -171,64 +182,31 @@ storage_used_bytes = Column(Integer, nullable=False, default=0)
 
 `to_dict()` 返回这两个字段。
 
-- [ ] **步骤 2：新增 VideoAsset 模型**
+- [x] **步骤 3：新增 MediaAsset 和 UserVideoItem 模型**
 
-在 `db.py` 中新增：
+`MediaAsset` 表示硬盘上的物理视频文件，包含 `fingerprint`、`file_hash`、`filepath`、`size_bytes`、`meta_json` 等字段。
 
-```python
-class VideoAsset(Base):
-    __tablename__ = "video_assets"
+`UserVideoItem` 表示用户视频库条目，包含 `owner_user_id`、`media_asset_id`、`share_token`、`share_enabled`、`deleted_at` 等字段。唯一约束为：
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    file_hash = Column(String(16), nullable=False, index=True)
-    filename = Column(Text, nullable=False)
-    filepath = Column(Text, nullable=False)
-    title = Column(Text, nullable=True)
-    size = Column(Integer, nullable=False, default=0)
-    source_url = Column(Text, nullable=True)
-    thumbnail = Column(Text, nullable=True)
-    duration = Column(Integer, nullable=False, default=0)
-    visibility = Column(String(20), nullable=False, default="private")
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+```text
+owner_user_id + media_asset_id
+share_token
 ```
 
-- [ ] **步骤 3：新增 InviteCode 和 SchemaMigration 模型**
+- [x] **步骤 4：新增 InviteCode 和 SchemaMigration 模型**
 
-在 `db.py` 中新增：
+`InviteCode` 为后续邀请码注册预留表结构。`SchemaMigration` 记录 v4 迁移是否已执行。
 
-```python
-class InviteCode(Base):
-    __tablename__ = "invite_codes"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    code_hash = Column(String(128), unique=True, nullable=False, index=True)
-    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    max_uses = Column(Integer, nullable=False, default=1)
-    used_count = Column(Integer, nullable=False, default=0)
-    expires_at = Column(DateTime, nullable=True)
-    is_active = Column(Boolean, nullable=False, default=True)
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-
-
-class SchemaMigration(Base):
-    __tablename__ = "schema_migrations"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    version = Column(Integer, nullable=False, unique=True)
-    applied_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-```
-
-- [ ] **步骤 4：创建幂等迁移脚本**
+- [x] **步骤 5：创建幂等迁移脚本**
 
 新增 `server/migrations.py`，实现：
 
 ```python
-def migrate_to_v4(session: Session, download_dir: Path) -> None:
-    ensure_user_columns(session)
-    normalize_readonly_users(session)
-    index_legacy_videos(session, download_dir)
-    mark_version(session, 4)
+def run_v4_migrations(engine: Engine, download_dir: Path) -> None:
+    _ensure_schema(engine, conn)
+    _migrate_readonly_users(conn)
+    _index_legacy_media_assets(conn, download_dir)
+    mark_version(conn, 4)
 ```
 
 迁移时跳过：
@@ -236,33 +214,30 @@ def migrate_to_v4(session: Session, download_dir: Path) -> None:
 - `temp_guest`
 - `.temp_ytdlp`
 - 非视频文件
+- 符号链接视频文件
 
-`index_legacy_videos()` 以 `filepath` 去重。
+legacy 视频登记到 `media_assets`，不创建 `user_video_items`。
 
-- [ ] **步骤 5：启动时执行迁移**
+- [x] **步骤 6：启动时执行迁移**
 
-在 `main.py` 的 lifespan 中，`init_db()` 后调用：
+`init_db()` 在 `Base.metadata.create_all()` 后执行 `run_v4_migrations()`。旧库通过 `ALTER TABLE` 补用户容量列，新库直接由 ORM 建表。
 
-```python
-from .migrations import migrate_to_v4
-
-with get_session() as session:
-    migrate_to_v4(session, settings.get_download_dir())
-```
-
-- [ ] **步骤 6：验证**
+- [x] **步骤 7：验证**
 
 运行：
 
 ```powershell
-python -m compileall server
+venv\Scripts\python.exe -m unittest tests.test_v4_migrations_unittest -v
+venv\Scripts\python.exe -m compileall server
+venv\Scripts\python.exe -c "from server.main import app; print(app.title)"
 ```
 
-启动一次应用后确认：
+确认：
 
 - 新表存在。
 - `readonly` 用户被改为 `user`。
-- 旧视频被索引到 `video_assets`，但文件没有被移动。
+- 旧视频被索引到 `media_assets`，但文件没有被移动。
+- `user_video_items` 在迁移阶段保持为空，后续任务 4 再创建用户视频库条目。
 
 ---
 
@@ -393,11 +368,11 @@ def ensure_user_can_download(user: User) -> None:
 实现：
 
 ```python
-def register_video_asset(session: Session, task: DownloadTask, owner_user_id: int | None) -> VideoAsset:
+def register_user_video_item(session: Session, task: DownloadTask, owner_user_id: int) -> UserVideoItem:
     ...
 
 
-def list_visible_videos(session: Session, user: User, owner_user_id: int | None = None) -> list[VideoAsset]:
+def list_visible_videos(session: Session, user: User, owner_user_id: int | None = None) -> list[UserVideoItem]:
     ...
 
 
@@ -405,7 +380,7 @@ def delete_visible_video(session: Session, user: User, video_id: int) -> list[st
     ...
 ```
 
-普通用户只能查询和删除自己的视频。管理员可按 `owner_user_id` 筛选。
+`register_user_video_item()` 先按内容指纹查找或创建 `MediaAsset`，再为当前用户创建 `UserVideoItem`。普通用户只能查询和删除自己的视频库条目。管理员可按 `owner_user_id` 筛选，也可查看 legacy `MediaAsset`。
 
 - [ ] **步骤 4：登录用户下载登记归属**
 
@@ -413,7 +388,8 @@ def delete_visible_video(session: Session, user: User, video_id: int) -> list[st
 
 - guest 请求没有 token 时保持临时下载。
 - 登录用户请求带 token 时下载到用户目录。
-- 任务完成后写入 `video_assets`。
+- 任务完成后写入或复用 `media_assets`，并创建当前用户的 `user_video_items`。
+- 如果同一指纹视频已存在，不重复下载物理文件；当前用户仍得到自己的视频库条目、分享 token 和管理能力。
 
 `DownloadTask` 增加：
 
@@ -440,7 +416,7 @@ user.storage_used_bytes = calculate_user_usage(session, user.id)
 session.commit()
 ```
 
-删除视频后同样刷新容量。
+删除视频后同样刷新容量。删除逻辑先软删除用户自己的 `user_video_items`，只有没有任何活跃条目引用对应 `media_assets` 时才物理删除文件。
 
 - [ ] **步骤 7：验证**
 
@@ -736,7 +712,7 @@ git commit -m "feat: 升级 v4 多用户视频库"
 - v4 不强制移动旧视频文件，因此文件层面可回滚。
 - 数据库迁移只新增表和列，避免删除历史字段。
 - `readonly` 迁移为 `user` 属于行为变更，回滚前需要确认是否要恢复角色。
-- 如果用户目录下载出现问题，可临时把登录用户下载目录切回旧目录，但仍保留 `VideoAsset.owner_user_id` 记录归属。
+- 如果用户目录下载出现问题，可临时把登录用户下载目录切回旧目录，但仍保留 `MediaAsset` 和 `UserVideoItem` 记录归属。
 
 ## 执行建议
 

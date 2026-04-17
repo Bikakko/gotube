@@ -2,8 +2,8 @@ from datetime import datetime, timezone
 import logging
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, ForeignKey, Integer, String, Text,
-    create_engine, inspect
+    Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text,
+    UniqueConstraint, create_engine, inspect
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
@@ -21,6 +21,8 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False, default="user")  # admin/user/readonly
     is_active = Column(Boolean, nullable=False, default=True)
+    storage_quota_mb = Column(Integer, nullable=True)
+    storage_used_bytes = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc),
                         onupdate=lambda: datetime.now(timezone.utc))
@@ -32,6 +34,8 @@ class User(Base):
             "username": self.username,
             "role": self.role,
             "is_active": self.is_active,
+            "storage_quota_mb": self.storage_quota_mb,
+            "storage_used_bytes": self.storage_used_bytes,
             "created_at": self.created_at.isoformat(),
             "updated_at": self.updated_at.isoformat(),
             "last_login": self.last_login.isoformat() if self.last_login else None,
@@ -61,6 +65,64 @@ class AuthToken(Base):
     is_active = Column(Boolean, nullable=False, default=True, index=True)
 
 
+class SchemaMigration(Base):
+    __tablename__ = "schema_migrations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    version = Column(Integer, unique=True, nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    applied_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class MediaAsset(Base):
+    __tablename__ = "media_assets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fingerprint = Column(String(64), unique=True, nullable=False, index=True)
+    file_hash = Column(String(32), nullable=False, index=True)
+    filename = Column(Text, nullable=False)
+    filepath = Column(Text, nullable=False)
+    size_bytes = Column(Integer, nullable=False, default=0)
+    title = Column(Text, nullable=False, default="")
+    thumbnail = Column(Text, nullable=False, default="")
+    duration = Column(Float, nullable=True)
+    source_url = Column(Text, nullable=False, default="")
+    meta_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_seen_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class UserVideoItem(Base):
+    __tablename__ = "user_video_items"
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "media_asset_id", name="uq_user_video_item_owner_media"),
+        UniqueConstraint("share_token", name="uq_user_video_item_share_token"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    media_asset_id = Column(Integer, ForeignKey("media_assets.id"), nullable=False, index=True)
+    display_title = Column(Text, nullable=False, default="")
+    share_token = Column(String(64), nullable=False, index=True)
+    share_enabled = Column(Boolean, nullable=False, default=True)
+    created_from = Column(String(32), nullable=False, default="download")
+    saved_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    deleted_at = Column(DateTime, nullable=True, index=True)
+
+
+class InviteCode(Base):
+    __tablename__ = "invite_codes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code_hash = Column(String(128), unique=True, nullable=False, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    max_uses = Column(Integer, nullable=False, default=1)
+    used_count = Column(Integer, nullable=False, default=0)
+    expires_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True, index=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 # ── 数据库初始化 ──
 
 _engine = None
@@ -74,6 +136,10 @@ def init_db(db_path: str) -> None:
     _engine = create_engine(f"sqlite:///{db_path}", pool_pre_ping=True)
     _SessionLocal = sessionmaker(bind=_engine)
     Base.metadata.create_all(_engine)  # 自动建表（不存在的表才创建）
+    from .config import settings
+    from .migrations import run_v4_migrations
+
+    run_v4_migrations(_engine, settings.get_download_dir())
 
 
 def get_session() -> Session:

@@ -91,31 +91,48 @@ FastAPI 路由层
 
 历史 `readonly` 用户迁移为 `user`，避免误删账号。
 
-### 视频资产表
+### 物理视频资产表
 
-新增 `video_assets` 表，用于记录视频归属和文件位置。
+新增 `media_assets` 表，用于记录硬盘上真实存在的一份视频文件。该表不直接表示用户归属。
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
 | `id` | integer | 主键。 |
-| `owner_user_id` | integer, nullable | 所属用户。为空表示 legacy/system 视频。 |
+| `fingerprint` | string | 内容指纹，作为跨用户去重依据。 |
 | `file_hash` | string | 当前 8 位 CRC32 hash。 |
 | `filename` | text | 相对下载目录的展示路径。 |
 | `filepath` | text | 绝对路径或可解析路径。 |
+| `size_bytes` | integer | 文件大小，单位字节。 |
 | `title` | text | 视频标题。 |
-| `size` | integer | 文件大小，单位字节。 |
 | `source_url` | text | 原始下载 URL。 |
 | `thumbnail` | text | 缩略图路径或 URL。 |
 | `duration` | integer | 视频时长，单位秒。 |
-| `visibility` | string | `private` 或 `shared`。 |
+| `meta_json` | text | 原始元数据 JSON。 |
 | `created_at` | datetime | 记录创建时间。 |
+| `last_seen_at` | datetime | 最近一次扫描或引用时间。 |
 
-兼容规则：
+### 用户视频库条目表
 
-- 旧视频登记为 `owner_user_id = NULL`。
-- 新登录用户下载的视频登记为当前用户。
-- 管理员可查看所有记录。
-- 普通用户只能查看自己的记录。
+新增 `user_video_items` 表，用于记录某个用户的视频库中拥有或引用了哪个物理视频资产。
+
+| 字段 | 类型 | 说明 |
+| --- | --- | --- |
+| `id` | integer | 主键。 |
+| `owner_user_id` | integer | 所属用户。 |
+| `media_asset_id` | integer | 引用的物理视频资产。 |
+| `display_title` | text | 用户侧显示标题。 |
+| `share_token` | string | 用户级分享令牌，随机生成，不使用文件 hash。 |
+| `share_enabled` | boolean | 是否允许分享。 |
+| `created_from` | string | 来源：`download`、`guest_transfer` 或 `legacy_assign`。 |
+| `saved_at` | datetime | 加入用户视频库时间。 |
+| `deleted_at` | datetime, nullable | 软删除时间。 |
+
+兼容和去重规则：
+
+- 旧视频只登记到 `media_assets`，不自动归属普通用户。
+- 新登录用户下载时先按 `fingerprint` 查找 `media_assets`。已存在则复用物理文件，只创建用户视频库条目。
+- 用户删除视频时先删除自己的 `user_video_items` 条目。只有没有任何活跃用户条目引用该 `media_asset` 时，后续删除流程才允许物理删除文件。
+- 分享链接绑定 `user_video_items.share_token`，并根据条目、用户和物理文件状态判断是否有效。
 
 ### 邀请码表
 
@@ -231,7 +248,7 @@ GOTUBE_USER_STORAGE_QUOTA_MB=10240
 - 普通用户默认使用 `GOTUBE_USER_STORAGE_QUOTA_MB`。
 - `users.storage_quota_mb` 不为空时覆盖默认值。
 - 管理员没有容量限制。
-- `storage_used_bytes` 可缓存，也可通过 `video_assets` 修复。
+- `storage_used_bytes` 可缓存，也可通过当前用户活跃的 `user_video_items` 关联 `media_assets` 修复。
 - 下载完成后登记视频并更新容量。
 
 下载前容量判断：
@@ -268,7 +285,7 @@ v4 实施前必须先修复以下问题：
 1. `session_id` 必须固定格式，所有 guest 路径必须限制在 `temp_guest` 内。
 2. `/api/downloads` 和公开删除接口必须拆分或加鉴权。
 3. `download.js` 不能把视频标题、错误信息直接拼到 `innerHTML`。
-4. 分享 hash 必须完整匹配，不允许短前缀命中。
+4. 旧分享 hash 必须完整匹配，不允许短前缀命中；新分享链接使用随机 `share_token`，并绑定用户视频库条目。
 5. 游客转存必须要求登录用户，转存目标为当前用户的视频库。
 
 ## 前端变化
@@ -295,14 +312,14 @@ v4 实施前必须先修复以下问题：
 
 步骤：
 
-1. 创建 `schema_migrations`、`video_assets`、`invite_codes`。
+1. 创建 `schema_migrations`、`media_assets`、`user_video_items`、`invite_codes`。
 2. 给 `users` 增加容量字段。
 3. 将历史 `readonly` 用户改为 `user`。
 4. 扫描旧下载目录，写入 legacy 视频资产。
 5. 跳过 `temp_guest`、`.temp_ytdlp` 和非视频文件。
 6. 设置 schema version 为 `4`。
 
-legacy 视频资产的 `owner_user_id` 为 `NULL`。管理员后台可查看，普通用户不可见。
+legacy 视频只登记为 `media_assets`。管理员后台可查看，普通用户不可见，除非后续通过显式分配创建 `user_video_items`。
 
 ## 验收标准
 
