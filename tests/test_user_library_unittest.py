@@ -43,8 +43,14 @@ class UserLibraryTests(unittest.TestCase):
         self.engine.dispose()
         self.tmp.cleanup()
 
-    def _user(self, session, username: str, role: str = "user") -> User:
-        user = User(username=username, password_hash="x", role=role, is_active=True)
+    def _user(self, session, username: str, role: str = "user", quota_mb: int | None = None) -> User:
+        user = User(
+            username=username,
+            password_hash="x",
+            role=role,
+            is_active=True,
+            storage_quota_mb=quota_mb,
+        )
         session.add(user)
         session.commit()
         session.refresh(user)
@@ -201,6 +207,79 @@ class UserLibraryTests(unittest.TestCase):
             self.assertEqual(task.filename, "Alpha_aaaaaaaa/aaaaaaaa.mp4")
             self.assertEqual(updated["updated_tasks"][0]["user_video_item_id"], task.user_video_item_id)
             self.assertTrue(updated["updated_tasks"][0]["share_token"])
+
+    def test_guest_transfer_registration_reports_quota_error(self):
+        class FakeTask:
+            def __init__(self):
+                self.filename = "TooLarge_aaaaaaaa/aaaaaaaa.mp4"
+                self.status = "completed"
+                self.error = ""
+
+        class FakeQueue:
+            def __init__(self, task):
+                self.task = task
+
+            def get_client_tasks(self, client_id):
+                return [self.task]
+
+        with self.Session() as session:
+            alice = self._user(session, "alice", quota_mb=1)
+            video_file = self._video_file(
+                "TooLarge_aaaaaaaa",
+                "aaaaaaaa.mp4",
+                b"x" * (1024 * 1024 + 1),
+            )
+            self._write_meta(video_file, title="Too Large")
+            result = {
+                "transferred_files": ["TooLarge_aaaaaaaa/aaaaaaaa.mp4"],
+                "updated_tasks": [{"task_id": "t1", "filename": "TooLarge_aaaaaaaa/aaaaaaaa.mp4"}],
+            }
+            task = FakeTask()
+
+            updated = _register_transferred_guest_files(
+                session,
+                current_user=alice,
+                transfer_result=result,
+                download_dir=self.download_dir,
+                qm=FakeQueue(task),
+                client_id="client-1",
+            )
+
+            self.assertEqual(updated["registered_count"], 0)
+            self.assertEqual(session.query(UserVideoItem).count(), 0)
+            self.assertEqual(len(updated["errors"]), 1)
+            self.assertIn("容量不足", updated["errors"][0]["error"])
+            self.assertEqual(task.status, "failed")
+            self.assertIn("容量不足", task.error)
+            self.assertEqual(updated["updated_tasks"][0]["status"], "failed")
+            self.assertIn("容量不足", updated["updated_tasks"][0]["error"])
+            self.assertFalse(video_file.exists())
+
+    def test_guest_transfer_registration_allows_admin_user(self):
+        class FakeQueue:
+            def get_client_tasks(self, client_id):
+                return []
+
+        with self.Session() as session:
+            admin = self._user(session, "admin", role="admin")
+            video_file = self._video_file("Alpha_aaaaaaaa", "aaaaaaaa.mp4")
+            self._write_meta(video_file)
+            result = {
+                "transferred_files": ["Alpha_aaaaaaaa/aaaaaaaa.mp4"],
+                "updated_tasks": [],
+            }
+
+            updated = _register_transferred_guest_files(
+                session,
+                current_user=admin,
+                transfer_result=result,
+                download_dir=self.download_dir,
+                qm=FakeQueue(),
+                client_id="client-1",
+            )
+
+            self.assertEqual(updated["registered_count"], 1)
+            self.assertEqual(session.query(UserVideoItem).filter_by(owner_user_id=admin.id).count(), 1)
 
     def test_guest_count_includes_duplicate_placeholder_tasks(self):
         class FakeTask:

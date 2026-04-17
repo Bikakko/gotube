@@ -116,8 +116,11 @@ def _register_transferred_guest_files(
     qm: QueueManager,
     client_id: str,
 ) -> dict:
-    """把已移动到主目录的 guest 文件注册到当前普通用户的视频库。"""
+    """把已移动到主目录的 guest 文件注册到当前登录用户的视频库。"""
     item_by_filename: dict[str, dict] = {}
+    error_by_filename: dict[str, str] = {}
+    registered_count = 0
+    errors = transfer_result.setdefault("errors", [])
     for rel_name in transfer_result.get("transferred_files", []):
         filepath = resolve_inside(download_dir, rel_name)
         if not filepath.is_file():
@@ -125,19 +128,26 @@ def _register_transferred_guest_files(
             continue
 
         meta = _read_meta_from_dir(filepath.parent)
-        item = register_completed_file(
-            db,
-            owner_user_id=current_user.id,
-            filepath=filepath,
-            download_dir=download_dir,
-            source_url=meta.get("url", ""),
-            title=meta.get("title") or filepath.parent.name,
-            file_hash=meta.get("file_hash") or filepath.stem,
-            thumbnail=meta.get("thumbnail", ""),
-            duration=meta.get("duration", 0),
-            meta=meta,
-            created_from="guest_transfer",
-        )
+        try:
+            item = register_completed_file(
+                db,
+                owner_user_id=current_user.id,
+                filepath=filepath,
+                download_dir=download_dir,
+                source_url=meta.get("url", ""),
+                title=meta.get("title") or filepath.parent.name,
+                file_hash=meta.get("file_hash") or filepath.stem,
+                thumbnail=meta.get("thumbnail", ""),
+                duration=meta.get("duration", 0),
+                meta=meta,
+                created_from="guest_transfer",
+            )
+        except ValueError as e:
+            error_text = str(e)
+            errors.append({"file": rel_name, "error": error_text})
+            error_by_filename[rel_name] = error_text
+            _delete_unregistered_transfer_file(db, filepath)
+            continue
         db.flush()
         asset = db.query(MediaAsset).filter(MediaAsset.id == item.media_asset_id).one()
         item_info = {
@@ -149,27 +159,52 @@ def _register_transferred_guest_files(
         }
         item_by_filename[rel_name] = item_info
         item_by_filename[asset.filename] = item_info
+        registered_count += 1
 
-    if not item_by_filename:
-        return transfer_result
+    transfer_result["registered_count"] = registered_count
 
     for task in qm.get_client_tasks(client_id):
         item_info = item_by_filename.get(task.filename)
-        if not item_info:
+        if item_info:
+            task.user_video_item_id = item_info["user_video_item_id"]
+            task.media_asset_id = item_info["media_asset_id"]
+            task.share_token = item_info["share_token"]
+            task.file_hash = item_info["file_hash"]
+            task.filename = item_info["filename"]
             continue
-        task.user_video_item_id = item_info["user_video_item_id"]
-        task.media_asset_id = item_info["media_asset_id"]
-        task.share_token = item_info["share_token"]
-        task.file_hash = item_info["file_hash"]
-        task.filename = item_info["filename"]
+        task_error = error_by_filename.get(task.filename)
+        if task_error:
+            task.status = "failed"
+            task.error = task_error
 
     for task_data in transfer_result.get("updated_tasks", []):
         item_info = item_by_filename.get(task_data.get("filename"))
         if item_info:
             task_data.update(item_info)
+            continue
+        task_error = error_by_filename.get(task_data.get("filename"))
+        if task_error:
+            task_data["status"] = "failed"
+            task_data["error"] = task_error
 
-    transfer_result["registered_count"] = len(item_by_filename)
     return transfer_result
+
+
+def _delete_unregistered_transfer_file(db: Session, filepath: Path) -> None:
+    """Delete a moved guest file if it is not tracked as a media asset."""
+    tracked = db.query(MediaAsset).filter(MediaAsset.filepath == str(filepath.resolve())).first()
+    if tracked is not None:
+        return
+    try:
+        if filepath.is_file():
+            parent = filepath.parent
+            filepath.unlink()
+            if parent.exists():
+                import shutil
+
+                shutil.rmtree(parent)
+    except OSError as e:
+        logger.warning("删除未入库 guest 转存文件失败: %s, error=%s", filepath, e)
 
 
 # ── 辅助函数 ──
@@ -310,7 +345,6 @@ async def transfer_guest_downloads(
     游客登录后调用，将指定 session_id 下所有已完成的视频转移到主下载目录。
     返回更新后的任务数据，前端可直接刷新。
     """
-    _require_regular_user(current_user)
     session_id = validate_guest_session_id(session_id)
     try:
         result = qm.downloader.transfer_guest_session(session_id, client_id=client_id)

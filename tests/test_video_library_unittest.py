@@ -12,6 +12,7 @@ from server.video_library import (
     create_item_from_existing_source,
     delete_user_video_item,
     get_asset_from_existing_source,
+    normalize_source_url,
     register_completed_file,
     resolve_share_token,
 )
@@ -111,6 +112,41 @@ class VideoLibraryTests(unittest.TestCase):
             stale_asset = get_asset_from_existing_source(session, "https://example.test/a")
             self.assertIsNone(stale)
             self.assertIsNone(stale_asset)
+
+    def test_source_url_normalization_drops_playback_progress_params(self):
+        self.assertEqual(
+            normalize_source_url("https://www.youtube.com/watch?v=abc&t=42s"),
+            normalize_source_url("https://www.youtube.com/watch?v=abc"),
+        )
+        self.assertEqual(
+            normalize_source_url("https://www.bilibili.com/video/BV123?vd_source=x&p=2"),
+            "https://www.bilibili.com/video/BV123?p=2",
+        )
+
+    def test_existing_source_reuse_ignores_playback_progress_params(self):
+        with self.Session() as session:
+            alice = self._user(session, "alice")
+            bob = self._user(session, "bob")
+            video_file = self._video_file("Example_abcd1234", "abcd1234.mp4")
+            register_completed_file(
+                session,
+                owner_user_id=alice.id,
+                filepath=video_file,
+                download_dir=self.download_dir,
+                source_url="https://www.youtube.com/watch?v=abc",
+                title="Example",
+                file_hash="abcd1234",
+            )
+
+            reused = create_item_from_existing_source(
+                session,
+                bob.id,
+                "https://www.youtube.com/watch?v=abc&t=42s",
+            )
+
+            self.assertIsNotNone(reused)
+            self.assertEqual(session.query(MediaAsset).count(), 1)
+            self.assertEqual(session.query(UserVideoItem).filter_by(owner_user_id=bob.id).count(), 1)
 
     def test_new_url_is_added_when_download_fingerprints_to_existing_media(self):
         with self.Session() as session:

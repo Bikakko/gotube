@@ -21,6 +21,22 @@ from .quota import refresh_user_storage_usage, user_can_add_media
 
 logger = logging.getLogger(__name__)
 
+TRANSIENT_SOURCE_QUERY_KEYS = {
+    "t",
+    "start",
+    "time_continue",
+    "progress",
+    "seek",
+    "spm_id_from",
+    "vd_source",
+    "share_source",
+    "share_medium",
+    "share_plat",
+    "share_session_id",
+    "timestamp",
+    "share_times",
+}
+
 
 def normalize_source_url(url: str) -> str:
     """Normalize a source URL for reuse lookup without changing its semantics."""
@@ -31,7 +47,12 @@ def normalize_source_url(url: str) -> str:
         parsed = urlparse(url)
     except Exception:
         return url
-    query = urlencode(sorted(parse_qsl(parsed.query, keep_blank_values=True)))
+    query_pairs = [
+        (key, value)
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
+        if key.lower() not in TRANSIENT_SOURCE_QUERY_KEYS
+    ]
+    query = urlencode(sorted(query_pairs))
     netloc = parsed.netloc.lower()
     path = parsed.path.rstrip("/") or parsed.path
     return urlunparse((parsed.scheme.lower(), netloc, path, "", query, ""))
@@ -79,7 +100,7 @@ def register_completed_file(
 
     if asset is None:
         if not user_can_add_media(session, owner, filepath.stat().st_size):
-            raise ValueError("storage quota exceeded")
+            raise ValueError("视频库容量不足")
         asset = _create_media_asset(
             filepath=filepath,
             download_dir=download_dir,
@@ -108,7 +129,7 @@ def register_completed_file(
             _ensure_media_source(session, asset, source_url)
             return existing_item
         if not user_can_add_media(session, owner, asset.size_bytes):
-            raise ValueError("storage quota exceeded")
+            raise ValueError("视频库容量不足")
         asset.last_seen_at = now
         asset.source_url = asset.source_url or source_url or ""
         if title:

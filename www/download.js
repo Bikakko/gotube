@@ -45,6 +45,10 @@
         return isLoggedIn && currentUser && currentUser.role === 'user';
     }
 
+    function isQuotaError(message = '') {
+        return /容量不足|quota/i.test(String(message || ''));
+    }
+
     function setStatus(msg, color = '#8b949e') {
         const el = $('#status');
         el.textContent = msg;
@@ -145,7 +149,7 @@
                     addButton('secondary', '在视频库管理', () => $('#library-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
                 }
             }
-            if (t.status === 'failed') {
+            if (t.status === 'failed' && !isQuotaError(t.error)) {
                 addButton('retry', '🔄 重试', () => retryTask(t.task_id));
             }
 
@@ -1068,9 +1072,9 @@
             updateLogoStyle();
             closeLoginModal();
 
-            // 普通用户登录后检测是否有游客临时下载；管理员统一使用管理后台。
+            // 登录后检测是否有游客临时下载；管理员保存后统一使用管理后台查看。
+            await checkAndTransferGuestDownloads();
             if (isRegularUser()) {
-                await checkAndTransferGuestDownloads();
                 await loadMyLibrary();
                 connectWS();
             } else {
@@ -1154,7 +1158,7 @@
      * 检测并转移游客临时下载
      */
     async function checkAndTransferGuestDownloads() {
-        if (!isRegularUser()) return;
+        if (!isLoggedIn) return;
 
         try {
             // 获取当前 session 的下载数量
@@ -1189,6 +1193,7 @@
             const transferData = await transferRes.json();
             const transferredCount = transferData.transferred_count;
             const registeredCount = transferData.registered_count || 0;
+            const transferErrors = transferData.errors || [];
 
             // 使用后端返回的 updated_tasks 更新本地任务数据
             if (transferData.updated_tasks && transferData.updated_tasks.length > 0) {
@@ -1204,10 +1209,27 @@
                 await loadTasks();
             }
 
-            // 显示 Toast 提示
-            showToast(`✅ 已转移 ${transferredCount} 个视频，入库 ${registeredCount} 个`, '#3fb950');
+            if (registeredCount > 0) {
+                const targetText = isRegularUser() ? '视频库' : '管理后台';
+                showToast(`✅ 已转移 ${transferredCount} 个视频，已保存 ${registeredCount} 个到${targetText}`, '#3fb950');
+                rotateGuestSession();
+                if (isRegularUser()) {
+                    await loadMyLibrary();
+                }
+                return;
+            }
+
+            if (transferErrors.length > 0) {
+                const firstError = transferErrors[0].error || '入库失败';
+                showToast(`⚠️ 游客视频未入库：${firstError}`, '#d29922', 5000);
+                if (isRegularUser()) {
+                    await loadMyLibrary();
+                }
+                return;
+            }
+
+            showToast(`ℹ️ 没有可转移的视频`, '#8b949e');
             rotateGuestSession();
-            await loadMyLibrary();
 
         } catch (err) {
             console.error('转移游客下载失败:', err);

@@ -204,3 +204,38 @@
   - `/health` 返回 200；
   - `/static/download.js` 返回 200，包含 `libraryPageSize`；
   - `/static/admin/js/auth.js` 返回 200，退出后跳转 `/`。
+
+## 修复记录：URL 归一化、游客转存提示与容量失败循环
+
+用户继续验收反馈后修复：
+
+- URL 复用受播放进度参数影响：
+  - 来源 URL 归一化时剔除 `t`、`start`、`time_continue`、`progress`、`seek` 等播放进度参数；
+  - 同时剔除常见分享跟踪参数，如 `vd_source`、`spm_id_from`、`share_source` 等；
+  - 保留语义参数，例如 B 站分 P 参数 `p`，避免误把不同内容合并。
+- 游客下载后以管理员账号登录无法保存：
+  - `/api/guest-downloads/{session_id}/transfer` 允许当前登录用户为管理员；
+  - 前端登录后不再只给普通用户触发游客转存，管理员转存成功后提示去管理后台查看。
+- 游客下载后登录但剩余容量不足时提示缺失：
+  - 转存注册失败时返回 `errors` 和稳定的 `registered_count=0`；
+  - 前端展示“游客视频未入库：容量不足”一类明确提示；
+  - 未入库的新转存文件会清理，避免残留孤儿文件。
+- 下载后超过容量导致反复重试循环：
+  - 后端容量失败仍拒绝入库，不虚增已用容量；
+  - 对应下载任务会回填为 `failed`，并携带容量错误，避免继续显示成已完成；
+  - 前端识别容量不足错误，不再显示“重试”按钮，避免同一个失败任务反复落盘失败；
+  - 普通用户释放空间后需要重新提交下载或重新触发保存。
+- 游客之间临时空间互相复用：
+  - 本轮仍不做跨 guest 临时任务合并；
+  - 维持主库已有 URL 的复用，避免临时文件归属和关闭窗口清理互相误伤。
+
+追加验证：
+
+- `venv\Scripts\python.exe -m unittest tests.test_video_library_unittest tests.test_user_library_unittest -v`
+- `node --check www\download.js`
+- `venv\Scripts\python.exe -m compileall server`
+- `git diff --check`
+- `venv\Scripts\python.exe -m unittest discover -s tests -v`
+  - 业务相关 32 个 unittest 通过；
+  - `tests/test_security_boundaries.py` 因当前 venv 未安装 `pytest` 导入失败，未能在 discover 中执行。
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_admin_management_unittest tests.test_auth_roles_unittest tests.test_video_library_unittest tests.test_v4_migrations_unittest tests.test_invites_unittest -v`
