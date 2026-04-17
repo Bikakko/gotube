@@ -6,6 +6,8 @@
 
 import asyncio
 import logging
+from datetime import UTC, datetime
+from pathlib import Path
 from collections.abc import Callable
 
 from .downloader import Downloader, DownloadTask
@@ -50,7 +52,13 @@ class QueueManager:
         self._progress_callbacks.pop(client_id, None)
         logger.info("客户端已注销: %s", client_id)
 
-    async def add_task(self, url: str, client_id: str, session_id: str | None = None) -> DownloadTask | None:
+    async def add_task(
+        self,
+        url: str,
+        client_id: str,
+        session_id: str | None = None,
+        owner_user_id: int | None = None,
+    ) -> DownloadTask | None:
         """
         添加下载任务并启动下载（受信号量控制并发）。
 
@@ -71,6 +79,7 @@ class QueueManager:
             return existing
 
         task = self.downloader.create_task(url, client_id)
+        task.owner_user_id = owner_user_id
 
         # 设置 guest 标识
         if session_id:
@@ -81,6 +90,26 @@ class QueueManager:
         asyncio.create_task(self._execute_with_semaphore(task), name=f"download-{task.task_id}")
 
         logger.info("任务已加入队列: %s, client=%s, is_guest=%s", task.task_id, client_id, bool(session_id))
+        return task
+
+    def add_completed_library_task(self, url: str, client_id: str, item, asset) -> DownloadTask:
+        """Create a completed in-memory task for a reused library item."""
+        task = self.downloader.create_task(url, client_id)
+        task.status = "completed"
+        task.progress = 100.0
+        task.completed_at = datetime.now(UTC)
+        task.filename = asset.filename
+        task.filepath = asset.filepath
+        task.title = item.display_title or asset.title
+        task.thumbnail = asset.thumbnail
+        task.duration = asset.duration or 0
+        task.file_hash = asset.file_hash
+        task.is_duplicate = True
+        task.owner_user_id = item.owner_user_id
+        task.user_video_item_id = item.id
+        task.media_asset_id = asset.id
+        task.share_token = item.share_token
+        logger.info("复用已有媒体资产创建完成任务: %s, asset=%s, item=%s", task.task_id, asset.id, item.id)
         return task
 
     def _find_task_by_url(self, client_id: str, url: str) -> DownloadTask | None:
@@ -107,6 +136,47 @@ class QueueManager:
         async with self._semaphore:
             callback = self._build_callback(task.client_id)
             await self.downloader.download(task, callback)
+            if task.status == "completed" and task.owner_user_id and not task.is_guest:
+                self._register_completed_library_item(task)
+                await callback(task)
+
+    def _register_completed_library_item(self, task: DownloadTask) -> None:
+        """Persist completed logged-in downloads into the v4 video library."""
+        if not task.filepath:
+            return
+        from .db import get_session
+        from .video_library import register_completed_file
+
+        with get_session() as session:
+            try:
+                item = register_completed_file(
+                    session,
+                    owner_user_id=task.owner_user_id,
+                    filepath=Path(task.filepath),
+                    download_dir=self.downloader.download_dir,
+                    source_url=task.url,
+                    title=task.title,
+                    file_hash=task.file_hash,
+                    thumbnail=task.thumbnail,
+                    duration=task.duration,
+                    meta={
+                        "url": task.url,
+                        "title": task.title,
+                        "thumbnail": task.thumbnail,
+                        "video_id": task.video_id,
+                        "duration": task.duration,
+                        "file_hash": task.file_hash,
+                    },
+                )
+                session.commit()
+                task.user_video_item_id = item.id
+                task.media_asset_id = item.media_asset_id
+                task.share_token = item.share_token
+            except Exception as exc:
+                session.rollback()
+                task.status = "failed"
+                task.error = str(exc)
+                logger.error("注册用户视频库条目失败: task=%s, error=%s", task.task_id, exc)
 
     def _build_callback(self, client_id: str) -> Callable:
         """构建进度回调函数"""

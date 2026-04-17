@@ -106,6 +106,10 @@ class DownloadTask:
         self.is_duplicate = False
         self.is_guest = False  # 是否为匿名用户下载
         self.session_id = ""   # 匿名用户会话 ID
+        self.owner_user_id: int | None = None
+        self.user_video_item_id: int | None = None
+        self.media_asset_id: int | None = None
+        self.share_token = ""
 
 
 class Downloader:

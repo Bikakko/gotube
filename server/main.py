@@ -26,6 +26,7 @@ from .db import init_db, get_session, sync_admins_from_env
 from .downloader import Downloader, DownloadTask
 from .queue_manager import QueueManager
 from .security import validate_guest_session_id, validate_hash_id
+from .video_library import resolve_share_token
 
 logger = logging.getLogger(__name__)
 
@@ -198,8 +199,20 @@ async def watch_unified(
         logger.info("[/watch] returning HTML page")
         return _serve_html("watch.html")
 
-    # 视频请求：根据 hash_id 查找文件并返回视频流
+    # 视频请求：优先按用户级 share_token 解析，兼容旧 8 位 hash。
     if v:
+        with get_session() as session:
+            resolved = resolve_share_token(session, v)
+            if resolved:
+                _item, asset = resolved
+                matched_file = Path(asset.filepath)
+                logger.info("[/watch] returning shared video: path=%s, size=%d", matched_file, matched_file.stat().st_size)
+                return FileResponse(
+                    matched_file,
+                    media_type="video/mp4",
+                    headers={"Content-Disposition": f'inline; filename="{matched_file.name}"'},
+                )
+
         hash_id = validate_hash_id(v)
         qm: QueueManager = get_queue_manager(request)
 

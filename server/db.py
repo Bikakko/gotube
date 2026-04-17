@@ -92,6 +92,22 @@ class MediaAsset(Base):
     last_seen_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
+class MediaSource(Base):
+    __tablename__ = "media_sources"
+    __table_args__ = (
+        UniqueConstraint("normalized_url", name="uq_media_source_normalized_url"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    media_asset_id = Column(Integer, ForeignKey("media_assets.id"), nullable=False, index=True)
+    source_url = Column(Text, nullable=False, default="")
+    normalized_url = Column(Text, nullable=False)
+    platform = Column(String(50), nullable=False, default="")
+    platform_video_id = Column(String(128), nullable=False, default="")
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_seen_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 class UserVideoItem(Base):
     __tablename__ = "user_video_items"
     __table_args__ = (

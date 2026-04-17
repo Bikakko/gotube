@@ -98,6 +98,7 @@ _log_level: str = _s("GOTUBE_LOG_LEVEL", default="ERROR").upper()
 _allow_guest_download: bool = _b("GOTUBE_ALLOW_GUEST_DOWNLOAD", True)
 _allow_playlist_download: bool = _b("GOTUBE_ALLOW_PLAYLIST_DOWNLOAD", False)
 _max_video_size_mb: int = _i("GOTUBE_MAX_VIDEO_SIZE_MB", required=False, default=0, min_val=0)
+_user_storage_quota_mb: int = _i("GOTUBE_USER_STORAGE_QUOTA_MB", required=False, default=0, min_val=0)
 
 _china_domains: list[str] = [
     "bilibili.com", "b23.tv", "acfun.cn", "iqiyi.com",
@@ -184,6 +185,11 @@ class _Settings:
     def max_video_size_mb(self) -> int:
         """单个视频最大大小限制（MB），0=不限制"""
         return _max_video_size_mb
+
+    @property
+    def user_storage_quota_mb(self) -> int:
+        """普通用户默认视频库容量限制（MB），0=不限制"""
+        return _user_storage_quota_mb
 
     @property
     def china_domains(self) -> list[str]:

@@ -11,14 +11,23 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 
-from .auth import get_current_user
+from .auth import get_current_user, get_db, get_optional_current_user
+from .db import User
 from .downloader import _read_meta_from_dir
 from .models import AddTaskRequest, TaskResponse
 from .path_utils import resolve_inside
+from .quota import get_effective_quota_bytes, refresh_user_storage_usage
 from .queue_manager import QueueManager
 from .config import settings
 from .security import validate_guest_session_id, validate_hash_id
+from .video_library import (
+    create_item_from_existing_source,
+    delete_user_video_item,
+    list_user_video_items,
+    resolve_share_token,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +119,9 @@ def _task_to_response(task) -> TaskResponse:
         video_id=task.video_id,
         file_hash=task.file_hash,
         is_duplicate=task.is_duplicate,
+        user_video_item_id=getattr(task, "user_video_item_id", None),
+        media_asset_id=getattr(task, "media_asset_id", None),
+        share_token=getattr(task, "share_token", ""),
         created_at=task.created_at.isoformat(),
         completed_at=task.completed_at.isoformat() if task.completed_at else None,
     )
@@ -123,6 +135,8 @@ async def add_task(
     req: AddTaskRequest,
     client_id: str = Query(..., description="客户端标识"),
     qm: QueueManager = Depends(get_queue_manager),
+    current_user: User | None = Depends(get_optional_current_user),
+    db: Session = Depends(get_db),
 ):
     """添加下载任务"""
     if not req.url:
@@ -136,14 +150,37 @@ async def add_task(
     # 验证 URL 格式（必须 http/https 开头）
     _validate_url_format(req.url)
 
-    # 检查是否为匿名用户（未登录用户传递 session_id，登录用户不传）
-    is_guest = bool(req.session_id)
+    # 未登录用户使用 guest session；登录用户进入个人视频库流程。
+    is_guest = current_user is None and bool(req.session_id)
     if is_guest and not settings.allow_guest_download:
         raise HTTPException(status_code=403, detail="匿名用户下载功能已禁用")
     if is_guest:
         req.session_id = validate_guest_session_id(req.session_id)
 
-    task = await qm.add_task(req.url, client_id, session_id=req.session_id)
+    owner_user_id = current_user.id if current_user is not None else None
+    if current_user is not None:
+        quota = get_effective_quota_bytes(current_user)
+        used = refresh_user_storage_usage(db, current_user.id)
+        if quota is not None and used >= quota:
+            raise HTTPException(status_code=403, detail="视频库容量已达上限")
+
+        reused_item = create_item_from_existing_source(db, current_user.id, req.url)
+        if reused_item is not None:
+            from .db import MediaAsset
+
+            db.commit()
+            db.refresh(reused_item)
+            asset = db.query(MediaAsset).filter(MediaAsset.id == reused_item.media_asset_id).one()
+            task = qm.add_completed_library_task(req.url, client_id, reused_item, asset)
+            logger.info("复用已有视频: task=%s, user=%s, item=%s", task.task_id, current_user.id, reused_item.id)
+            return _task_to_response(task)
+
+    task = await qm.add_task(
+        req.url,
+        client_id,
+        session_id=req.session_id if is_guest else None,
+        owner_user_id=owner_user_id,
+    )
     if task is None:
         # 同客户端相同URL且不可重试
         raise HTTPException(status_code=409, detail="该链接已在下载中或已完成，请勿重复提交")
@@ -213,6 +250,45 @@ async def delete_task(
     return {"status": "ok"}
 
 
+@router.get("/me/quota")
+async def get_my_quota(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """返回当前用户的视频库容量状态。"""
+    used = refresh_user_storage_usage(db, current_user.id)
+    quota = get_effective_quota_bytes(current_user)
+    db.commit()
+    return {
+        "role": current_user.role,
+        "storage_used_bytes": used,
+        "storage_quota_bytes": quota,
+        "unlimited": quota is None,
+        "over_quota": quota is not None and used >= quota,
+    }
+
+
+@router.get("/me/videos")
+async def get_my_videos(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """返回当前登录用户的视频库。"""
+    return {"videos": list_user_video_items(db, current_user)}
+
+
+@router.delete("/me/videos/{item_id}")
+async def delete_my_video(
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """从当前用户视频库删除一个视频项。"""
+    result = delete_user_video_item(db, current_user, item_id, settings.get_download_dir())
+    db.commit()
+    return result
+
+
 @router.post("/tasks/{task_id}/retry")
 async def retry_task(
     task_id: str,
@@ -275,6 +351,54 @@ async def stream_guest_video(
     )
 
 
+@router.get("/share/{share_token}/info")
+async def get_shared_video_info(
+    share_token: str,
+    db: Session = Depends(get_db),
+) -> dict:
+    """根据用户级分享 token 获取视频信息。"""
+    resolved = resolve_share_token(db, share_token)
+    if not resolved:
+        raise HTTPException(status_code=404, detail="分享链接无效")
+    item, asset = resolved
+    path = Path(asset.filepath)
+    stat = path.stat()
+    return {
+        "share_token": item.share_token,
+        "filename": asset.filename,
+        "size": stat.st_size,
+        "modified": stat.st_mtime,
+        "title": item.display_title or asset.title,
+        "thumbnail": f"/api/share/{share_token}/thumbnail" if asset.thumbnail and not asset.thumbnail.startswith(("http://", "https://")) else asset.thumbnail,
+        "duration": asset.duration or 0,
+        "file_hash": asset.file_hash,
+    }
+
+
+@router.get("/share/{share_token}/thumbnail")
+async def get_shared_thumbnail(
+    share_token: str,
+    db: Session = Depends(get_db),
+):
+    """返回分享视频的本地缩略图。"""
+    resolved = resolve_share_token(db, share_token)
+    if not resolved:
+        raise HTTPException(status_code=404, detail="分享链接无效")
+    _item, asset = resolved
+    thumb_name = asset.thumbnail or ""
+    if not thumb_name or thumb_name.startswith(("http://", "https://")):
+        raise HTTPException(status_code=404, detail="缩略图不可用")
+
+    thumb_path = Path(asset.filepath).parent / thumb_name
+    if not thumb_path.is_file():
+        raise HTTPException(status_code=404, detail="缩略图文件不存在")
+
+    ext = thumb_path.suffix.lower()
+    mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+                ".webp": "image/webp", ".gif": "image/gif"}
+    return FileResponse(thumb_path, media_type=mime_map.get(ext, "image/jpeg"))
+
+
 @router.get("/video/{hash_id}/info")
 async def get_video_info(
     hash_id: str,
@@ -289,6 +413,7 @@ async def get_video_info(
 
     if matched_file is not None and matched_file.is_file():
         stat = matched_file.stat()
+        download_dir = qm.downloader.download_dir
         rel_path = matched_file.relative_to(download_dir)
         info: dict = {
             "hash_id": hash_id,

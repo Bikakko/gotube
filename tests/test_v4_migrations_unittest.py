@@ -84,6 +84,45 @@ class V4MigrationTests(unittest.TestCase):
             item_count = session.execute(text("SELECT COUNT(*) FROM user_video_items")).scalar_one()
             self.assertEqual(item_count, 0)
 
+            sources = session.execute(
+                text("SELECT source_url, normalized_url, platform FROM media_sources")
+            ).all()
+            self.assertEqual(len(sources), 1)
+            self.assertEqual(sources[0].source_url, "https://example.test/video")
+            self.assertEqual(sources[0].normalized_url, "https://example.test/video")
+
+    def test_migration_backfills_sources_for_existing_v4_assets(self):
+        with self.engine.begin() as conn:
+            now = "2026-04-17T00:00:00+00:00"
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO media_assets (
+                        fingerprint, file_hash, filename, filepath, size_bytes, title,
+                        thumbnail, duration, source_url, meta_json, created_at, last_seen_at
+                    )
+                    VALUES (
+                        'crc32:00000000:1', 'abcd1234', 'a.mp4', 'a.mp4', 1, 'A',
+                        '', NULL, 'https://example.test/video?b=2&a=1', '{}', :now, :now
+                    )
+                    """
+                ),
+                {"now": now},
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO schema_migrations (version, name, applied_at) VALUES (4, 'v4_media_assets_and_invites', :now)"
+                ),
+                {"now": now},
+            )
+
+        run_v4_migrations(self.engine, self.download_dir)
+
+        with self.Session() as session:
+            sources = session.execute(text("SELECT normalized_url FROM media_sources")).all()
+            self.assertEqual(len(sources), 1)
+            self.assertEqual(sources[0].normalized_url, "https://example.test/video?a=1&b=2")
+
 
 if __name__ == "__main__":
     unittest.main()

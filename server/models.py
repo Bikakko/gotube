@@ -31,6 +31,9 @@ class TaskResponse(BaseModel):
     video_id: str = ""
     file_hash: str = ""
     is_duplicate: bool = False
+    user_video_item_id: int | None = None
+    media_asset_id: int | None = None
+    share_token: str = ""
     created_at: str
     completed_at: str | None = None
 

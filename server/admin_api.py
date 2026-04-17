@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from .auth import get_current_user, get_db, require_admin
 from .config import settings
-from .db import AuthToken, User
+from .db import AuthToken, MediaAsset, User
 from .models import (
     ChangePasswordRequest,
     CreateUserRequest,
@@ -31,6 +31,7 @@ from .models import (
     UpdateUserRequest,
     UserResponse,
 )
+from .video_library import admin_delete_media_asset, list_user_video_items
 
 logger = logging.getLogger(__name__)
 
@@ -576,13 +577,29 @@ async def get_videos(
     time: str | None = Query("all", description="时间范围: all/today/week/month/earlier"),
     page: int = Query(1, ge=1, description="页码"),
     per_page: int = Query(20, ge=1, le=100, description="每页数量"),
+    owner_user_id: int | None = Query(None, description="按用户过滤"),
     admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
 ) -> dict:
     """
     获取视频列表，支持筛选和分页。
     """
-    download_dir = settings.get_download_dir()
-    videos = _list_all_videos(download_dir)
+    library_videos = list_user_video_items(db, admin, owner_user_id=owner_user_id)
+    if library_videos:
+        videos = [
+            {
+                **v,
+                "filepath": "",
+                "url": v.get("source_url", ""),
+                "source": _extract_source_from_url(v.get("source_url", "")),
+                "created_at": v.get("saved_at") or datetime.now(UTC).isoformat(),
+                "tags": [],
+            }
+            for v in library_videos
+        ]
+    else:
+        download_dir = settings.get_download_dir()
+        videos = _list_all_videos(download_dir)
 
     # 筛选
     if keyword:
@@ -619,6 +636,7 @@ async def get_videos(
 async def delete_video(
     filename: str,
     admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
 ) -> dict:
     """
     删除单个视频（含物理文件和元数据）。
@@ -628,6 +646,23 @@ async def delete_video(
     
     if not filepath.is_file():
         raise HTTPException(status_code=404, detail="文件不存在")
+
+    relative_name = str(filepath.relative_to(download_dir)).replace("\\", "/")
+    asset = (
+        db.query(MediaAsset)
+        .filter((MediaAsset.filename == relative_name) | (MediaAsset.filepath == str(filepath.resolve())))
+        .first()
+    )
+    if asset:
+        result = admin_delete_media_asset(db, admin, asset.id, download_dir)
+        db.commit()
+        try:
+            qm = _get_queue_manager()
+            qm.downloader.invalidate_file_index_cache()
+            qm.downloader.invalidate_hash_index()
+        except Exception as e:
+            logger.warning("删除视频后刷新缓存失败: %s", e)
+        return result
     
     deleted_files = []
     parent_dir = filepath.parent
@@ -679,6 +714,24 @@ async def delete_video(
         logger.warning("删除视频后刷新缓存失败: %s", e)
 
     return {"status": "ok", "deleted_files": deleted_files}
+
+
+@router.delete("/media-assets/{media_asset_id}")
+async def delete_media_asset(
+    media_asset_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """管理员维护性删除：物理删除媒体并移除所有用户库记录。"""
+    result = admin_delete_media_asset(db, admin, media_asset_id, settings.get_download_dir())
+    db.commit()
+    try:
+        qm = _get_queue_manager()
+        qm.downloader.invalidate_file_index_cache()
+        qm.downloader.invalidate_hash_index()
+    except Exception as e:
+        logger.warning("维护性删除后刷新缓存失败: %s", e)
+    return result
 
 
 @router.post("/videos/batch-delete")

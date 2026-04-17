@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import zlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -12,6 +11,8 @@ from typing import Any
 from sqlalchemy import Engine, inspect, text
 
 from .downloader import VIDEO_EXTENSIONS
+from .media_fingerprint import fingerprint_file
+from .video_library import normalize_source_url, source_platform
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ def run_v4_migrations(engine: Engine, download_dir: Path) -> None:
     """Apply v4 schema migrations and index legacy videos once."""
     with engine.begin() as conn:
         _ensure_schema(engine, conn)
+        _backfill_media_sources(conn)
         if _migration_exists(conn, V4_SCHEMA_VERSION):
             return
 
@@ -96,6 +98,26 @@ def _ensure_schema(engine: Engine, conn) -> None:
     conn.execute(
         text(
             """
+            CREATE TABLE IF NOT EXISTS media_sources (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                media_asset_id INTEGER NOT NULL,
+                source_url TEXT NOT NULL DEFAULT '',
+                normalized_url TEXT NOT NULL,
+                platform VARCHAR(50) NOT NULL DEFAULT '',
+                platform_video_id VARCHAR(128) NOT NULL DEFAULT '',
+                created_at DATETIME NOT NULL,
+                last_seen_at DATETIME NOT NULL,
+                FOREIGN KEY(media_asset_id) REFERENCES media_assets (id),
+                CONSTRAINT uq_media_source_normalized_url UNIQUE (normalized_url)
+            )
+            """
+        )
+    )
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_media_sources_media_asset_id ON media_sources (media_asset_id)"))
+
+    conn.execute(
+        text(
+            """
             CREATE TABLE IF NOT EXISTS user_video_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 owner_user_id INTEGER NOT NULL,
@@ -151,6 +173,47 @@ def _migrate_readonly_users(conn) -> None:
     conn.execute(text("UPDATE users SET role = 'user' WHERE role = 'readonly'"))
 
 
+def _backfill_media_sources(conn) -> int:
+    rows = conn.execute(
+        text(
+            """
+            SELECT id, fingerprint, source_url, created_at, last_seen_at
+            FROM media_assets
+            WHERE source_url IS NOT NULL AND source_url != ''
+            """
+        )
+    ).all()
+    count = 0
+    for row in rows:
+        normalized = normalize_source_url(row.source_url)
+        if not normalized:
+            continue
+        result = conn.execute(
+            text(
+                """
+                INSERT OR IGNORE INTO media_sources (
+                    media_asset_id, source_url, normalized_url, platform,
+                    platform_video_id, created_at, last_seen_at
+                )
+                VALUES (
+                    :media_asset_id, :source_url, :normalized_url, :platform,
+                    '', :created_at, :last_seen_at
+                )
+                """
+            ),
+            {
+                "media_asset_id": row.id,
+                "source_url": row.source_url,
+                "normalized_url": normalized,
+                "platform": source_platform(row.source_url),
+                "created_at": row.created_at,
+                "last_seen_at": row.last_seen_at,
+            },
+        )
+        count += result.rowcount or 0
+    return count
+
+
 def _index_legacy_media_assets(conn, download_dir: Path) -> int:
     if not download_dir.exists():
         return 0
@@ -177,6 +240,29 @@ def _index_legacy_media_assets(conn, download_dir: Path) -> int:
                 ),
                 media,
             )
+            if media["source_url"]:
+                conn.execute(
+                    text(
+                        """
+                        INSERT OR IGNORE INTO media_sources (
+                            media_asset_id, source_url, normalized_url, platform,
+                            platform_video_id, created_at, last_seen_at
+                        )
+                        SELECT id, :source_url, :normalized_url, :platform,
+                               '', :created_at, :last_seen_at
+                        FROM media_assets
+                        WHERE fingerprint = :fingerprint
+                        """
+                    ),
+                    {
+                        "fingerprint": media["fingerprint"],
+                        "source_url": media["source_url"],
+                        "normalized_url": normalize_source_url(media["source_url"]),
+                        "platform": source_platform(media["source_url"]),
+                        "created_at": media["created_at"],
+                        "last_seen_at": media["last_seen_at"],
+                    },
+                )
             indexed_count += 1
         except Exception as exc:
             logger.warning("登记 legacy 视频失败: %s, error=%s", video_file, exc)
@@ -194,7 +280,7 @@ def _is_indexable_video(download_dir: Path, path: Path) -> bool:
 def _build_media_record(download_dir: Path, video_file: Path) -> dict[str, Any]:
     meta = _read_meta(video_file.parent / "meta.json")
     file_hash = str(meta.get("file_hash") or video_file.stem[:8]).lower()
-    fingerprint = _fingerprint_file(video_file)
+    fingerprint = fingerprint_file(video_file)
     now = _utcnow()
     relative_path = video_file.resolve().relative_to(download_dir.resolve()).as_posix()
     return {
@@ -222,15 +308,6 @@ def _read_meta(path: Path) -> dict[str, Any]:
         logger.warning("读取 meta.json 失败: %s, error=%s", path, exc)
         return {}
     return data if isinstance(data, dict) else {}
-
-
-def _fingerprint_file(path: Path) -> str:
-    checksum = 0
-    with path.open("rb") as fh:
-        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
-            checksum = zlib.crc32(chunk, checksum)
-    return f"crc32:{checksum & 0xFFFFFFFF:08x}:{path.stat().st_size}"
-
 
 def _coerce_float(value: Any) -> float | None:
     if value in (None, ""):

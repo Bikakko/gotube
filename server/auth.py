@@ -96,6 +96,26 @@ async def get_current_user(
     return user
 
 
+async def get_optional_current_user(
+    request: Request,
+    db: Session = Depends(get_db),
+) -> User | None:
+    """Return the current user when a valid Bearer token is present."""
+    token = get_bearer_token(request)
+    if not token:
+        return None
+
+    cleanup_expired_tokens(db)
+    payload = verify_token(db, token)
+    if not payload:
+        return None
+
+    user = db.query(User).filter(User.id == payload["user_id"]).first()
+    if not user or not user.is_active:
+        return None
+    return user
+
+
 async def require_admin(user: User = Depends(get_current_user)) -> User:
     """Require the current user to be an admin."""
     if user.role != "admin":
