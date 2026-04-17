@@ -19,11 +19,12 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from .auth import get_current_user, get_db, require_admin
 from .config import settings
-from .db import AuthToken, MediaAsset, User
+from .db import AuthToken, MediaAsset, User, UserVideoItem
 from .models import (
     ChangePasswordRequest,
     CreateInviteRequest,
@@ -215,6 +216,107 @@ def _list_all_videos(download_dir: Path) -> list[dict[str, Any]]:
     
     # 按创建时间倒序
     videos.sort(key=lambda x: x["created_at"], reverse=True)
+    return videos
+
+
+def _reference_counts(db: Session) -> dict[int, int]:
+    rows = (
+        db.query(UserVideoItem.media_asset_id, func.count(UserVideoItem.id))
+        .filter(UserVideoItem.deleted_at.is_(None))
+        .group_by(UserVideoItem.media_asset_id)
+        .all()
+    )
+    return {int(media_asset_id): int(count) for media_asset_id, count in rows}
+
+
+def _normalize_route_value(value: Any, fallback: Any = None) -> Any:
+    """Support direct unit-test calls where FastAPI Query defaults are not resolved."""
+    if value.__class__.__module__.startswith("fastapi."):
+        return fallback
+    return value
+
+
+def _media_thumbnail_url(asset: MediaAsset) -> str:
+    thumbnail = asset.thumbnail or ""
+    if thumbnail and not thumbnail.startswith(("http://", "https://")):
+        return f"/api/thumbnail/{asset.file_hash}"
+    return thumbnail
+
+
+def _library_video_to_admin_dict(row: dict[str, Any], ref_counts: dict[int, int]) -> dict[str, Any]:
+    media_asset_id = row.get("media_asset_id")
+    source_url = row.get("source_url", "")
+    return {
+        **row,
+        "item_id": row.get("id"),
+        "filepath": "",
+        "url": source_url,
+        "source": _extract_source_from_url(source_url),
+        "created_at": row.get("saved_at") or datetime.now(UTC).isoformat(),
+        "tags": [],
+        "reference_count": ref_counts.get(media_asset_id, 0) if media_asset_id else 0,
+        "is_legacy": False,
+    }
+
+
+def _legacy_media_to_admin_dict(asset: MediaAsset, ref_counts: dict[int, int]) -> dict[str, Any]:
+    return {
+        "id": f"legacy-{asset.id}",
+        "item_id": None,
+        "owner_user_id": None,
+        "owner_username": "未归属",
+        "media_asset_id": asset.id,
+        "title": asset.title,
+        "filename": asset.filename,
+        "filepath": asset.filepath,
+        "file_hash": asset.file_hash,
+        "share_token": "",
+        "share_enabled": False,
+        "thumbnail": _media_thumbnail_url(asset),
+        "video_id": "",
+        "duration": asset.duration or 0,
+        "size": asset.size_bytes,
+        "source_url": asset.source_url,
+        "url": asset.source_url,
+        "source": _extract_source_from_url(asset.source_url),
+        "created_at": asset.created_at.isoformat() if asset.created_at else datetime.now(UTC).isoformat(),
+        "tags": [],
+        "reference_count": ref_counts.get(asset.id, 0),
+        "is_legacy": True,
+    }
+
+
+def _list_admin_media_videos(
+    db: Session,
+    admin: User,
+    *,
+    owner_user_id: int | None = None,
+    owner: str | None = None,
+) -> list[dict[str, Any]]:
+    ref_counts = _reference_counts(db)
+    owner = (owner or "").strip().lower() or None
+
+    videos: list[dict[str, Any]] = []
+    if owner != "legacy":
+        videos.extend(
+            _library_video_to_admin_dict(row, ref_counts)
+            for row in list_user_video_items(db, admin, owner_user_id=owner_user_id)
+        )
+
+    if owner == "legacy" or (owner is None and owner_user_id is None):
+        legacy_assets = (
+            db.query(MediaAsset)
+            .outerjoin(
+                UserVideoItem,
+                (UserVideoItem.media_asset_id == MediaAsset.id) & (UserVideoItem.deleted_at.is_(None)),
+            )
+            .filter(UserVideoItem.id.is_(None))
+            .order_by(MediaAsset.created_at.desc())
+            .all()
+        )
+        videos.extend(_legacy_media_to_admin_dict(asset, ref_counts) for asset in legacy_assets)
+
+    videos.sort(key=lambda row: row.get("created_at") or "", reverse=True)
     return videos
 
 
@@ -412,9 +514,20 @@ async def list_users(
 ) -> list:
     """获取用户列表 (仅限 admin)"""
     users = db.query(User).all()
+    video_counts = {
+        int(user_id): int(count)
+        for user_id, count in (
+            db.query(UserVideoItem.owner_user_id, func.count(UserVideoItem.id))
+            .filter(UserVideoItem.deleted_at.is_(None))
+            .group_by(UserVideoItem.owner_user_id)
+            .all()
+        )
+    }
     result = []
     for u in users:
         data = u.to_dict()
+        data["video_count"] = video_counts.get(u.id, 0)
+        data["is_system_account"] = False
         # 标记 admin 权限账号为系统账号
         if u.role == "admin":
             data["is_system_account"] = True
@@ -493,6 +606,10 @@ async def update_user(
 
     if body.is_active is not None:
         user.is_active = body.is_active
+
+    fields_set = body.model_fields_set if hasattr(body, "model_fields_set") else getattr(body, "__fields_set__", set())
+    if "storage_quota_mb" in fields_set:
+        user.storage_quota_mb = body.storage_quota_mb
 
     db.commit()
     return user.to_dict()
@@ -622,25 +739,24 @@ async def get_videos(
     page: int = Query(1, ge=1, description="页码"),
     per_page: int = Query(20, ge=1, le=100, description="每页数量"),
     owner_user_id: int | None = Query(None, description="按用户过滤"),
+    owner: str | None = Query(None, description="归属过滤: all/legacy"),
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     """
     获取视频列表，支持筛选和分页。
     """
-    library_videos = list_user_video_items(db, admin, owner_user_id=owner_user_id)
-    if library_videos:
-        videos = [
-            {
-                **v,
-                "filepath": "",
-                "url": v.get("source_url", ""),
-                "source": _extract_source_from_url(v.get("source_url", "")),
-                "created_at": v.get("saved_at") or datetime.now(UTC).isoformat(),
-                "tags": [],
-            }
-            for v in library_videos
-        ]
+    keyword = _normalize_route_value(keyword)
+    source = _normalize_route_value(source)
+    time = _normalize_route_value(time, "all")
+    page = int(_normalize_route_value(page, 1) or 1)
+    per_page = int(_normalize_route_value(per_page, 20) or 20)
+    owner_user_id = _normalize_route_value(owner_user_id)
+    owner = _normalize_route_value(owner)
+
+    has_media_assets = db.query(MediaAsset.id).first() is not None
+    if has_media_assets:
+        videos = _list_admin_media_videos(db, admin, owner_user_id=owner_user_id, owner=owner)
     else:
         download_dir = settings.get_download_dir()
         videos = _list_all_videos(download_dir)

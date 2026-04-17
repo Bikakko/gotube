@@ -31,10 +31,6 @@ async function renderPage() {
     // 渲染批量操作栏
     window.renderBatchBar();
     
-    // 初始化点击外部区域返回视频管理的监听器
-    if (typeof initClickOutsideListener === 'function') {
-        initClickOutsideListener();
-    }
 }
 
 /**
@@ -62,10 +58,20 @@ function renderNavbar() {
                     el('span', { className: 'username', textContent: user.username }),
                     el('span', { className: `role-badge ${user.role}`, textContent: formatRole(user.role) }),
                 ]),
+                el('button', {
+                    className: `btn btn-secondary nav-tab ${state.currentView === 'videos' ? 'active' : ''}`,
+                    textContent: '视频管理',
+                    onClick: () => window.showVideoManagement(),
+                }),
                 isAdmin ? el('button', {
-                    className: 'btn btn-secondary',
-                    textContent: '👥 用户管理',
+                    className: `btn btn-secondary nav-tab ${state.currentView === 'users' ? 'active' : ''}`,
+                    textContent: '用户管理',
                     onClick: () => window.showUserManagement(),
+                }) : null,
+                isAdmin ? el('button', {
+                    className: `btn btn-secondary nav-tab ${state.currentView === 'invites' ? 'active' : ''}`,
+                    textContent: '邀请码',
+                    onClick: () => window.showInviteManagement(),
                 }) : null,
                 el('button', {
                     className: 'btn btn-secondary',
@@ -143,6 +149,12 @@ function renderMainLayout() {
             style: 'display: none;' 
         }, [
             el('div', { id: 'users-table-slot' }),
+        ]),
+        el('div', {
+            id: 'invite-view-container',
+            style: 'display: none;'
+        }, [
+            el('div', { id: 'invites-table-slot' }),
         ]),
     ]);
     document.body.appendChild(main);
@@ -271,6 +283,20 @@ function renderFilters() {
                 el('div', { className: 'custom-dropdown-menu', id: 'time-dropdown-menu' }),
             ]),
         ]),
+        // 归属筛选
+        state.currentUser && state.currentUser.role === 'admin' ? el('div', { className: 'filter-group' }, [
+            el('span', { className: 'filter-label', textContent: '归属:' }),
+            el('div', { className: 'custom-dropdown', id: 'owner-dropdown' }, [
+                el('button', {
+                    className: 'custom-dropdown-btn',
+                    onClick: (e) => { e.stopPropagation(); window.toggleCustomDropdown('owner-dropdown'); },
+                }, [
+                    el('span', { className: 'dropdown-text', id: 'owner-dropdown-text', textContent: '全部' }),
+                    el('span', { className: 'dropdown-arrow', textContent: '▼' }),
+                ]),
+                el('div', { className: 'custom-dropdown-menu', id: 'owner-dropdown-menu' }),
+            ]),
+        ]) : null,
     ]);
 
     slot.appendChild(filtersBar);
@@ -288,6 +314,7 @@ function renderFilters() {
     // 初始化下拉菜单选项
     window.updateSourceDropdownOptions();
     window.updateTimeDropdownOptions();
+    window.updateOwnerDropdownOptions();
 }
 
 /**
@@ -364,6 +391,10 @@ function renderVideoCard(video) {
             className: 'video-source',
             textContent: video.source || 'Unknown',
         }),
+        el('div', {
+            className: 'video-owner',
+            textContent: `${video.is_legacy ? '未归属' : (video.owner_username || '未知用户')} · 关联 ${video.reference_count || 0}`,
+        }),
     ]);
 
     // 复选框（作为操作按钮样式）
@@ -391,8 +422,13 @@ function renderVideoCard(video) {
             el('button', {
                 className: 'action-btn share',
                 textContent: '🔗 分享',
+                ...(!video.share_token ? { disabled: true } : {}),
                 onClick: (e) => {
                     e.stopPropagation();
+                    if (!video.share_token) {
+                        showToast('未归属视频没有用户分享链接', 'warning');
+                        return;
+                    }
                     window.showShareModal(video);
                 },
             }),
@@ -592,6 +628,9 @@ function _createDropdownItem(value, text, filterType) {
             } else if (filterType === 'time') {
                 handleTimeChange(value);
                 window.setCustomDropdownValue('time-dropdown', value, text);
+            } else if (filterType === 'owner') {
+                handleOwnerChange(value);
+                window.setCustomDropdownValue('owner-dropdown', value, text);
             }
             window.hideAllCustomDropdowns();
         },
@@ -726,9 +765,42 @@ function updateTimeDropdownOptions() {
     }
 }
 
+/**
+ * 更新归属下拉菜单选项
+ */
+function updateOwnerDropdownOptions() {
+    const menu = $('#owner-dropdown-menu');
+    if (!menu) return;
+
+    menu.innerHTML = '';
+    menu.appendChild(_createDropdownItem('all', '全部', 'owner'));
+    menu.appendChild(_createDropdownItem('legacy', '未归属', 'owner'));
+
+    state.users.forEach(user => {
+        menu.appendChild(_createDropdownItem(`user:${user.id}`, user.username, 'owner'));
+    });
+
+    const currentValue = state.filters.owner || 'all';
+    let currentText = '全部';
+    menu.querySelectorAll('.custom-dropdown-item').forEach(item => {
+        if (item.getAttribute('data-value') === currentValue) {
+            item.classList.add('selected');
+            currentText = item.textContent;
+        } else {
+            item.classList.remove('selected');
+        }
+    });
+
+    const textEl = $('#owner-dropdown-text');
+    if (textEl) {
+        textEl.textContent = currentText;
+    }
+}
+
 // 挂载自定义下拉菜单函数到 window
 window.toggleCustomDropdown = toggleCustomDropdown;
 window.hideAllCustomDropdowns = hideAllCustomDropdowns;
 window.setCustomDropdownValue = setCustomDropdownValue;
 window.updateSourceDropdownOptions = updateSourceDropdownOptions;
 window.updateTimeDropdownOptions = updateTimeDropdownOptions;
+window.updateOwnerDropdownOptions = updateOwnerDropdownOptions;

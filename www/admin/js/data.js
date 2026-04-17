@@ -8,6 +8,15 @@
  */
 async function loadVideos() {
     try {
+        if (state.currentUser && state.currentUser.role === 'admin' && !state.usersLoaded) {
+            try {
+                state.users = await apiFetch('/users');
+                state.usersLoaded = true;
+            } catch (err) {
+                console.warn('加载用户筛选数据失败:', err);
+            }
+        }
+
         const params = new URLSearchParams({
             page: state.pagination.page.toString(),
             per_page: state.pagination.perPage.toString(),
@@ -21,6 +30,13 @@ async function loadVideos() {
         }
         if (state.filters.time !== 'all') {
             params.set('time', state.filters.time);
+        }
+        if (state.filters.owner && state.filters.owner !== 'all') {
+            if (state.filters.owner === 'legacy') {
+                params.set('owner', 'legacy');
+            } else if (state.filters.owner.startsWith('user:')) {
+                params.set('owner_user_id', state.filters.owner.slice(5));
+            }
         }
 
         const data = await apiFetch(`/videos?${params}`);
@@ -60,6 +76,7 @@ async function loadVideos() {
             // 只更新下拉菜单选项，不重建整个筛选栏
             window.updateSourceDropdownOptions();
             window.updateTimeDropdownOptions();
+            window.updateOwnerDropdownOptions();
         }
 
         // 重新渲染视频网格
@@ -145,7 +162,12 @@ function showDeleteConfirmModal(video) {
             ]),
             el('div', { className: 'modal-body' }, [
                 el('div', { className: 'delete-confirm-content' }, [
-                    el('p', { className: 'delete-warning-text', textContent: '此操作将永久删除以下视频及其所有元数据，无法恢复。' }),
+                    el('p', {
+                        className: 'delete-warning-text',
+                        textContent: video.media_asset_id
+                            ? `维护性删除会从所有用户视频库移除此视频，并物理删除硬盘文件。当前关联 ${video.reference_count || 0} 个用户条目，无法恢复。`
+                            : '此操作将永久删除以下视频及其所有元数据，无法恢复。',
+                    }),
                     el('div', { className: 'video-preview' }, [
                         video.thumbnail
                             ? el('img', { className: 'preview-thumb', src: video.thumbnail, alt: '' })
@@ -155,6 +177,7 @@ function showDeleteConfirmModal(video) {
                             el('p', { className: 'preview-meta', textContent: `大小: ${formatBytes(video.size)}` }),
                             el('p', { className: 'preview-meta', textContent: `下载时间: ${new Date(video.created_at).toLocaleString('zh-CN')}` }),
                             el('p', { className: 'preview-meta', textContent: `来源: ${video.source || 'Unknown'}` }),
+                            el('p', { className: 'preview-meta', textContent: `归属: ${video.owner_username || '未归属'}` }),
                         ]),
                     ]),
                 ]),
@@ -168,8 +191,8 @@ function showDeleteConfirmModal(video) {
                 el('button', {
                     className: 'btn btn-danger',
                     id: 'confirm-delete-btn',
-                    textContent: '🗑️ 确认删除',
-                    onClick: () => executeDeleteVideo(video.filename),
+                    textContent: video.media_asset_id ? '🗑️ 维护删除' : '🗑️ 确认删除',
+                    onClick: () => executeDeleteVideo(video),
                 }),
             ]),
         ]),
@@ -188,7 +211,7 @@ function showDeleteConfirmModal(video) {
 /**
  * 执行删除视频操作
  */
-async function executeDeleteVideo(filename) {
+async function executeDeleteVideo(video) {
     const btn = $('#confirm-delete-btn');
     if (btn) {
         btn.disabled = true;
@@ -196,12 +219,15 @@ async function executeDeleteVideo(filename) {
     }
 
     try {
-        await apiFetch(`/videos/${encodeURIComponent(filename)}`, {
+        const endpoint = video.media_asset_id
+            ? `/media-assets/${encodeURIComponent(video.media_asset_id)}`
+            : `/videos/${encodeURIComponent(video.filename)}`;
+        await apiFetch(endpoint, {
             method: 'DELETE',
         });
 
         // 从选中列表中移除
-        state.selectedVideos.delete(filename);
+        state.selectedVideos.delete(video.filename);
 
         // 关闭模态框
         closeModal('delete-confirm-modal');

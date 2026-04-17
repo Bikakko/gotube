@@ -36,6 +36,15 @@ function handleTimeChange(time) {
 }
 
 /**
+ * 归属筛选变化
+ */
+function handleOwnerChange(owner) {
+    state.filters.owner = owner;
+    state.pagination.page = 1;
+    window.loadVideos();
+}
+
+/**
  * 切换视频选择状态
  */
 function toggleVideoSelection(filename, selected) {
@@ -138,6 +147,7 @@ function hideAllDropdowns() {
 window.handleKeywordChange = handleKeywordChange;
 window.handleSourceChange = handleSourceChange;
 window.handleTimeChange = handleTimeChange;
+window.handleOwnerChange = handleOwnerChange;
 window.toggleVideoSelection = toggleVideoSelection;
 window.toggleSelectAll = toggleSelectAll;
 window.updateSelectAllCheckbox = updateSelectAllCheckbox;

@@ -4,6 +4,50 @@
  */
 
 /**
+ * 刷新导航标签状态
+ */
+function refreshNavTabs() {
+    document.querySelectorAll('.nav-tab').forEach(btn => {
+        const label = btn.textContent.trim();
+        btn.classList.toggle('active',
+            (state.currentView === 'videos' && label === '视频管理') ||
+            (state.currentView === 'users' && label === '用户管理') ||
+            (state.currentView === 'invites' && label === '邀请码')
+        );
+    });
+}
+
+/**
+ * 显示指定后台视图
+ */
+function switchAdminView(view) {
+    const containers = {
+        videos: $('#video-view-container'),
+        users: $('#user-view-container'),
+        invites: $('#invite-view-container'),
+    };
+
+    Object.entries(containers).forEach(([name, container]) => {
+        if (!container) return;
+        container.style.display = name === view ? 'block' : 'none';
+        container.style.opacity = name === view ? '1' : '0';
+        container.style.transition = 'opacity 0.15s ease';
+    });
+
+    state.currentView = view;
+    state.isTransitioning = false;
+    refreshNavTabs();
+    if (view === 'videos') {
+        window.updateBatchBar();
+    } else {
+        const bar = $('#batch-bar');
+        const deleteBtnNav = $('#batch-delete-btn');
+        if (bar) bar.classList.remove('active');
+        if (deleteBtnNav) deleteBtnNav.disabled = true;
+    }
+}
+
+/**
  * 切换到用户管理视图（CSS 显示/隐藏，无布局抖动）
  */
 async function showUserManagement() {
@@ -18,48 +62,9 @@ async function showUserManagement() {
         return;
     }
 
-    // 防止重复切换
-    if (state.isTransitioning) return;
-    state.isTransitioning = true;
-
-    // 更新视图状态
-    state.currentView = 'users';
     document.title = 'GoTube Admin - 用户管理';
-
-    // 获取两个视图容器
-    const videoContainer = $('#video-view-container');
-    const userContainer = $('#user-view-container');
-
-    if (!videoContainer || !userContainer) {
-        state.isTransitioning = false;
-        return;
-    }
-
-    // 添加淡出效果
-    videoContainer.style.opacity = '0';
-    videoContainer.style.transition = 'opacity 0.15s ease';
-
-    // 等待淡出完成后切换视图
-    setTimeout(() => {
-        // 隐藏视频视图，显示用户视图
-        videoContainer.style.display = 'none';
-        userContainer.style.display = 'block';
-        userContainer.style.opacity = '0';
-
-        // 强制重排后淡入
-        requestAnimationFrame(() => {
-            userContainer.style.transition = 'opacity 0.15s ease';
-            userContainer.style.opacity = '1';
-        });
-
-        // 重置过渡状态
-        setTimeout(() => {
-            state.isTransitioning = false;
-        }, 150);
-
-        // 加载用户数据（使用缓存）
-        loadUsers();
-    }, 150);
+    switchAdminView('users');
+    loadUsers();
 }
 
 /**
@@ -69,45 +74,8 @@ function showVideoManagement() {
     // 如果已经在视频管理视图，直接返回
     if (state.currentView === 'videos') return;
 
-    // 防止重复切换
-    if (state.isTransitioning) return;
-    state.isTransitioning = true;
-
-    // 更新视图状态
-    state.currentView = 'videos';
     document.title = 'GoTube Admin - 视频管理';
-
-    // 获取两个视图容器
-    const videoContainer = $('#video-view-container');
-    const userContainer = $('#user-view-container');
-
-    if (!videoContainer || !userContainer) {
-        state.isTransitioning = false;
-        return;
-    }
-
-    // 添加淡出效果
-    userContainer.style.opacity = '0';
-    userContainer.style.transition = 'opacity 0.15s ease';
-
-    // 等待淡出完成后切换视图
-    setTimeout(() => {
-        // 隐藏用户视图，显示视频视图
-        userContainer.style.display = 'none';
-        videoContainer.style.display = 'block';
-        videoContainer.style.opacity = '0';
-
-        // 强制重排后淡入
-        requestAnimationFrame(() => {
-            videoContainer.style.transition = 'opacity 0.15s ease';
-            videoContainer.style.opacity = '1';
-        });
-
-        // 重置过渡状态
-        setTimeout(() => {
-            state.isTransitioning = false;
-        }, 150);
-    }, 150);
+    switchAdminView('videos');
 }
 
 /**
@@ -116,6 +84,7 @@ function showVideoManagement() {
 window._clickOutsideListenerInitialized = false;
 
 function initClickOutsideListener() {
+    return;
     // 避免重复绑定
     if (window._clickOutsideListenerInitialized) return;
 
@@ -197,6 +166,8 @@ function renderUsersTable(users) {
                 el('th', { textContent: '用户名' }),
                 el('th', { textContent: '角色' }),
                 el('th', { textContent: '状态' }),
+                el('th', { textContent: '视频数' }),
+                el('th', { textContent: '容量' }),
                 el('th', { textContent: '最后登录' }),
                 el('th', { textContent: '操作' }),
             ])
@@ -215,6 +186,12 @@ function renderUsersTable(users) {
                         textContent: user.is_active ? '启用' : '禁用'
                     })
                 ]),
+                el('td', { textContent: String(user.video_count || 0) }),
+                el('td', {
+                    textContent: user.role === 'admin'
+                        ? '不限'
+                        : `${formatBytes(user.storage_used_bytes || 0)} / ${formatUserQuota(user.storage_quota_mb)}`,
+                }),
                 el('td', { textContent: user.last_login ? new Date(user.last_login).toLocaleString() : '从未登录' }),
                 el('td', { className: 'user-actions' }, [
                     isSystemAccount ? null : el('button', {
@@ -268,6 +245,12 @@ function formatRole(role) {
         'user': '普通用户'
     };
     return map[role] || role;
+}
+
+function formatUserQuota(quotaMb) {
+    if (quotaMb === 0) return '不限';
+    if (quotaMb === null || quotaMb === undefined) return '默认';
+    return `${quotaMb} MB`;
 }
 
 /**
@@ -347,6 +330,16 @@ function showUserEditModal(user = null) {
                         el('option', { value: 'user', textContent: '普通用户', selected: user ? user.role === 'user' : true }),
                     ]),
                 ]),
+                el('div', { className: 'form-group' }, [
+                    el('label', { textContent: '视频库容量 MB' }),
+                    el('input', {
+                        type: 'number',
+                        id: 'edit-storage-quota',
+                        min: '0',
+                        value: user && user.storage_quota_mb !== null && user.storage_quota_mb !== undefined ? String(user.storage_quota_mb) : '',
+                        placeholder: '留空使用默认值，0 表示不限',
+                    }),
+                ]),
             ]),
             el('div', { className: 'modal-footer' }, [
                 el('button', {
@@ -373,6 +366,8 @@ async function handleSaveUser(user) {
     const isEdit = !!user;
     const username = $('#edit-username').value.trim();
     const role = $('#edit-role').value;
+    const quotaInput = $('#edit-storage-quota');
+    const quotaRaw = quotaInput ? quotaInput.value.trim() : '';
 
     if (!username) {
         showToast('请输入用户名', 'warning');
@@ -381,9 +376,20 @@ async function handleSaveUser(user) {
 
     try {
         if (isEdit) {
+            const payload = { username, role };
+            if (quotaRaw === '') {
+                payload.storage_quota_mb = null;
+            } else {
+                const quotaMb = Number.parseInt(quotaRaw, 10);
+                if (!Number.isInteger(quotaMb) || quotaMb < 0) {
+                    showToast('容量必须为空、0 或正整数', 'warning');
+                    return;
+                }
+                payload.storage_quota_mb = quotaMb;
+            }
             await apiFetch(`/users/${user.id}`, {
                 method: 'PUT',
-                body: JSON.stringify({ username, role })
+                body: JSON.stringify(payload)
             });
             showToast('更新成功', 'success');
             closeModal('user-edit-modal');
@@ -502,3 +508,8 @@ async function handleChangePassword(user) {
 // 导出
 window.showUserManagement = showUserManagement;
 window.showVideoManagement = showVideoManagement;
+window.switchAdminView = switchAdminView;
+window.refreshNavTabs = refreshNavTabs;
+window.loadUsers = loadUsers;
+window.renderUsersTable = renderUsersTable;
+window.initClickOutsideListener = initClickOutsideListener;

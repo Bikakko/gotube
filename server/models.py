@@ -62,6 +62,10 @@ class UserResponse(BaseModel):
     username: str
     role: str
     is_active: bool
+    storage_quota_mb: int | None = None
+    storage_used_bytes: int = 0
+    video_count: int = 0
+    is_system_account: bool = False
     created_at: str
     last_login: str | None
 
@@ -87,12 +91,20 @@ class UpdateUserRequest(BaseModel):
     username: str | None = None
     role: str | None = None
     is_active: bool | None = None
+    storage_quota_mb: int | None = None
 
     @field_validator("role")
     @classmethod
     def validate_role(cls, value: str | None) -> str | None:
         if value is not None and value not in {"admin", "user"}:
             raise ValueError("角色只能是 admin 或 user")
+        return value
+
+    @field_validator("storage_quota_mb")
+    @classmethod
+    def validate_storage_quota_mb(cls, value: int | None) -> int | None:
+        if value is not None and value < 0:
+            raise ValueError("视频库容量不能为负数")
         return value
 
 

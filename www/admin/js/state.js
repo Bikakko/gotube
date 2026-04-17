@@ -6,7 +6,7 @@
 // ========== 全局状态 ==========
 let state = {
     currentUser: null,
-    currentView: 'videos', // 'videos' or 'users'
+    currentView: 'videos', // 'videos', 'users' or 'invites'
     
     // 视频相关数据
     videos: [],
@@ -19,6 +19,7 @@ let state = {
         keyword: '',
         source: '',
         time: 'all',
+        owner: 'all',
     },
     pagination: {
         page: 1,
@@ -30,6 +31,8 @@ let state = {
     // 用户相关数据（缓存）
     users: [],
     usersLoaded: false, // 标记用户数据是否已加载过
+    invites: [],
+    invitesLoaded: false,
     
     // 视图切换动画状态
     isTransitioning: false,
@@ -71,6 +74,12 @@ function invalidateUserCache() {
     state.usersLoaded = false;
 }
 
+function invalidateInviteCache() {
+    state.invites = [];
+    state.invitesLoaded = false;
+}
+
 // 显式挂载到 window
 window.invalidateVideoCache = invalidateVideoCache;
 window.invalidateUserCache = invalidateUserCache;
+window.invalidateInviteCache = invalidateInviteCache;
