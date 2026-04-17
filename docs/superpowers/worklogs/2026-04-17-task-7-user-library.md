@@ -119,3 +119,25 @@
   - `/` 返回 200，且不包含 `login-section` / `handleLogin` / `gotube_admin_token`；
   - `/` 包含下载页入口 `download-link`；
   - `/7777` 返回 200。
+
+## 修复记录：管理员不进入普通用户视频库上下文
+
+用户继续验收反馈后修复：
+
+- 明确 `role=user` 才是“我的视频库”用户：
+  - 下载页只有普通用户加载和渲染“我的视频库”；
+  - 管理员登录下载页时隐藏个人库区域，只保留下载入口和“管理后台”入口；
+  - 管理员点击 GoTube 标识进入管理后台，不再滚动到个人库。
+- 后端增加同一边界：
+  - `/api/me/quota`、`/api/me/videos`、个人库删除、分享开关、下载、缩略图接口均拒绝管理员；
+  - 游客转存到个人库也只允许普通用户；
+  - 管理员在下载页提交任务不再绑定为个人视频库条目。
+- 新增回归测试覆盖管理员访问 `/api/me/*` 被拒绝。
+
+追加验证：
+
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest -v`
+- `node --check www\download.js`
+- `venv\Scripts\python.exe -m compileall server`
+- `git diff --check`
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_admin_management_unittest tests.test_auth_roles_unittest tests.test_video_library_unittest -v`

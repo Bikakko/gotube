@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from server.api import download_my_video, download_shared_video, get_shared_video_info, update_my_video_share
+from server.api import download_my_video, download_shared_video, get_my_quota, get_my_videos, get_shared_video_info, update_my_video_share
 from server.db import Base, User
 from server.models import UpdateShareRequest
 from server.video_library import (
@@ -32,8 +32,8 @@ class UserLibraryTests(unittest.TestCase):
         self.engine.dispose()
         self.tmp.cleanup()
 
-    def _user(self, session, username: str) -> User:
-        user = User(username=username, password_hash="x", role="user", is_active=True)
+    def _user(self, session, username: str, role: str = "user") -> User:
+        user = User(username=username, password_hash="x", role=role, is_active=True)
         session.add(user)
         session.commit()
         session.refresh(user)
@@ -126,6 +126,18 @@ class UserLibraryTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as ctx:
                 asyncio.run(download_my_video(item.id, current_user=bob, db=session))
             self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_me_library_routes_reject_admin_users(self):
+        with self.Session() as session:
+            admin = self._user(session, "admin", role="admin")
+
+            with self.assertRaises(HTTPException) as quota_ctx:
+                asyncio.run(get_my_quota(current_user=admin, db=session))
+            self.assertEqual(quota_ctx.exception.status_code, 403)
+
+            with self.assertRaises(HTTPException) as videos_ctx:
+                asyncio.run(get_my_videos(current_user=admin, db=session))
+            self.assertEqual(videos_ctx.exception.status_code, 403)
 
     def test_share_info_and_download_work_with_share_token_and_preserve_extension(self):
         with self.Session() as session:

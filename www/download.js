@@ -38,6 +38,10 @@
         return token ? { ...extra, 'Authorization': `Bearer ${token}` } : extra;
     }
 
+    function isRegularUser() {
+        return isLoggedIn && currentUser && currentUser.role === 'user';
+    }
+
     function setStatus(msg, color = '#8b949e') {
         const el = $('#status');
         el.textContent = msg;
@@ -374,7 +378,7 @@
             tasks[data.task_id] = data;
             setStatus('✅ 已添加', '#3fb950');
             renderTasks();
-            if (isLoggedIn) loadMyLibrary();
+            if (isRegularUser()) loadMyLibrary();
         } catch (e) {
             setStatus('❌ ' + e.message, '#f85149');
         } finally {
@@ -462,7 +466,7 @@
                     // 调试日志
                     if (d.status === 'completed' || d.status === 'failed') {
                         console.log(`任务 ${taskId} ${d.status}:`, d.title);
-                        if (d.status === 'completed' && isLoggedIn) {
+                        if (d.status === 'completed' && isRegularUser()) {
                             loadMyLibrary();
                         }
                     }
@@ -565,7 +569,7 @@
     }
 
     async function loadMyLibrary() {
-        if (!isLoggedIn) {
+        if (!isRegularUser()) {
             myVideos = [];
             myQuota = null;
             renderMyLibrary();
@@ -596,9 +600,9 @@
         const list = $('#library-list');
         if (!section || !quotaInfo || !list) return;
 
-        section.style.display = isLoggedIn ? 'block' : 'none';
+        section.style.display = isRegularUser() ? 'block' : 'none';
         list.replaceChildren();
-        if (!isLoggedIn) {
+        if (!isRegularUser()) {
             myVideos = [];
             myQuota = null;
             quotaInfo.textContent = '';
@@ -869,8 +873,11 @@
 
     function updateLogoStyle() {
         const logoLink = $('#logo-link');
-        if (isLoggedIn) {
+        if (isRegularUser()) {
             logoLink.title = '查看我的视频库';
+            logoLink.classList.add('logged-in');
+        } else if (isLoggedIn && currentUser && currentUser.role === 'admin') {
+            logoLink.title = '进入管理后台';
             logoLink.classList.add('logged-in');
         } else {
             logoLink.title = '点击登录';
@@ -887,8 +894,11 @@
     }
 
     function handleLogoClick() {
-        if (isLoggedIn) {
+        if (isRegularUser()) {
             $('#library-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        } else if (isLoggedIn && currentUser && currentUser.role === 'admin') {
+            const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';
+            window.location.href = `/${hiddenPath}/admin`;
         } else {
             showLoginModal();
         }
@@ -1007,9 +1017,15 @@
             updateLogoStyle();
             closeLoginModal();
 
-            // 登录后检测是否有游客临时下载
-            await checkAndTransferGuestDownloads();
-            await loadMyLibrary();
+            // 普通用户登录后检测是否有游客临时下载；管理员统一使用管理后台。
+            if (isRegularUser()) {
+                await checkAndTransferGuestDownloads();
+                await loadMyLibrary();
+            } else {
+                myVideos = [];
+                myQuota = null;
+                renderMyLibrary();
+            }
         } catch (err) {
             errorEl.textContent = err.message || '登录失败，请重试';
         } finally {
@@ -1085,6 +1101,8 @@
      * 检测并转移游客临时下载
      */
     async function checkAndTransferGuestDownloads() {
+        if (!isRegularUser()) return;
+
         try {
             // 获取当前 session 的下载数量
             const countRes = await fetch(`/api/guest-downloads/${guestSessionId}/count`);

@@ -98,6 +98,13 @@ def get_queue_manager(request: Request) -> QueueManager:
     return qm
 
 
+def _require_regular_user(current_user: User) -> User:
+    """普通用户视频库接口只接受普通用户，管理员统一走后台管理接口。"""
+    if current_user.role != "user":
+        raise HTTPException(status_code=403, detail="管理员请使用管理后台")
+    return current_user
+
+
 # ── 辅助函数 ──
 
 
@@ -176,21 +183,22 @@ async def add_task(
     # 验证 URL 格式（必须 http/https 开头）
     _validate_url_format(req.url)
 
-    # 未登录用户使用 guest session；登录用户进入个人视频库流程。
+    # 未登录用户使用 guest session；普通用户进入个人视频库流程；管理员下载不绑定个人库。
     is_guest = current_user is None and bool(req.session_id)
     if is_guest and not settings.allow_guest_download:
         raise HTTPException(status_code=403, detail="匿名用户下载功能已禁用")
     if is_guest:
         req.session_id = validate_guest_session_id(req.session_id)
 
-    owner_user_id = current_user.id if current_user is not None else None
-    if current_user is not None:
-        quota = get_effective_quota_bytes(current_user)
-        used = refresh_user_storage_usage(db, current_user.id)
+    library_user = current_user if current_user is not None and current_user.role == "user" else None
+    owner_user_id = library_user.id if library_user is not None else None
+    if library_user is not None:
+        quota = get_effective_quota_bytes(library_user)
+        used = refresh_user_storage_usage(db, library_user.id)
         if quota is not None and used >= quota:
             raise HTTPException(status_code=403, detail="视频库容量已达上限")
 
-        reused_item = create_item_from_existing_source(db, current_user.id, req.url)
+        reused_item = create_item_from_existing_source(db, library_user.id, req.url)
         if reused_item is not None:
             from .db import MediaAsset
 
@@ -198,7 +206,7 @@ async def add_task(
             db.refresh(reused_item)
             asset = db.query(MediaAsset).filter(MediaAsset.id == reused_item.media_asset_id).one()
             task = qm.add_completed_library_task(req.url, client_id, reused_item, asset)
-            logger.info("复用已有视频: task=%s, user=%s, item=%s", task.task_id, current_user.id, reused_item.id)
+            logger.info("复用已有视频: task=%s, user=%s, item=%s", task.task_id, library_user.id, reused_item.id)
             return _task_to_response(task)
 
     task = await qm.add_task(
@@ -228,6 +236,7 @@ async def transfer_guest_downloads(
     游客登录后调用，将指定 session_id 下所有已完成的视频转移到主下载目录。
     返回更新后的任务数据，前端可直接刷新。
     """
+    _require_regular_user(current_user)
     session_id = validate_guest_session_id(session_id)
     try:
         result = qm.downloader.transfer_guest_session(session_id, client_id=client_id)
@@ -282,6 +291,7 @@ async def get_my_quota(
     db: Session = Depends(get_db),
 ) -> dict:
     """返回当前用户的视频库容量状态。"""
+    current_user = _require_regular_user(current_user)
     used = refresh_user_storage_usage(db, current_user.id)
     quota = get_effective_quota_bytes(current_user)
     db.commit()
@@ -300,6 +310,7 @@ async def get_my_videos(
     db: Session = Depends(get_db),
 ) -> dict:
     """返回当前登录用户的视频库。"""
+    current_user = _require_regular_user(current_user)
     return {"videos": list_user_video_items(db, current_user)}
 
 
@@ -310,6 +321,7 @@ async def delete_my_video(
     db: Session = Depends(get_db),
 ) -> dict:
     """从当前用户视频库删除一个视频项。"""
+    current_user = _require_regular_user(current_user)
     result = delete_user_video_item(db, current_user, item_id, settings.get_download_dir())
     db.commit()
     return result
@@ -323,6 +335,7 @@ async def update_my_video_share(
     db: Session = Depends(get_db),
 ) -> dict:
     """开启或关闭当前用户视频库条目的分享链接。"""
+    current_user = _require_regular_user(current_user)
     result = set_user_video_share_enabled(db, current_user, item_id, body.share_enabled)
     db.commit()
     return result
@@ -335,6 +348,7 @@ async def download_my_video(
     db: Session = Depends(get_db),
 ) -> FileResponse:
     """下载当前用户自己的视频库条目，不按 filename 暴露主库路径。"""
+    current_user = _require_regular_user(current_user)
     _item, asset = get_user_video_asset_for_download(db, current_user, item_id)
     path = Path(asset.filepath)
     return FileResponse(
@@ -352,6 +366,7 @@ async def get_my_video_thumbnail(
     db: Session = Depends(get_db),
 ) -> FileResponse:
     """返回当前用户视频库条目的本地缩略图。"""
+    current_user = _require_regular_user(current_user)
     _item, asset = get_user_video_asset_for_download(db, current_user, item_id)
     return _thumbnail_response(asset.thumbnail, Path(asset.filepath).parent)
 
