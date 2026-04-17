@@ -45,11 +45,17 @@
             const app = document.getElementById('app');
             if (!id) { app.innerHTML = '<div class="err"><h2>无效链接</h2><p>分享链接缺少视频参数</p></div>'; return; }
             try {
-                const res = await fetch(`/api/video/${id}/info`);
+                let shareMode = true;
+                let res = await fetch(`/api/share/${encodeURIComponent(id)}/info`);
+                if (!res.ok) {
+                    shareMode = false;
+                    res = await fetch(`/api/video/${encodeURIComponent(id)}/info`);
+                }
                 if (!res.ok) throw new Error('视频不存在');
                 const v = await res.json();
                 document.title = (v.title || 'GoTube') + ' - 视频播放';
                 const url = `/watch?v=${encodeURIComponent(id)}`;
+                const downloadUrl = shareMode ? `/api/share/${encodeURIComponent(id)}/download` : url;
                 const sizes = ['B','KB','MB','GB'];
                 const sz = v.size ? (() => { const i = Math.floor(Math.log(v.size)/Math.log(1024)); return (v.size/Math.pow(1024,i)).toFixed(1)+' '+sizes[i]; })() : '';
                 app.innerHTML = `
@@ -60,7 +66,7 @@
                         <button class="dl-btn" id="d">⬇ 下载视频</button>
                     </div>`;
                 document.getElementById('d').onclick = () => {
-                    const a = document.createElement('a'); a.href = url; a.download = 'video.mp4';
+                    const a = document.createElement('a'); a.href = downloadUrl; a.download = `${v.title || 'video'}.mp4`;
                     a.style.display='none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
                 };
             } catch(e) {

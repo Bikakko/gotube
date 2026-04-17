@@ -124,11 +124,13 @@
                 addButton('play', '▶ 播放', () => openModal(t.task_id));
                 if (t.filename.startsWith('temp_guest/')) {
                     addButton('download', '⬇ 下载', () => downloadGuest(t.task_id));
-                } else {
+                } else if (!isLoggedIn) {
                     addButton('share', '🔗 分享', () => copyShareLink(t.task_id));
                     if (t.user_video_item_id) {
                         addButton('download', '⬇ 下载', () => downloadMyVideo({ id: t.user_video_item_id, title: t.title }));
                     }
+                } else {
+                    addButton('secondary', '在视频库管理', () => $('#library-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
                 }
             }
             if (t.status === 'failed') {
@@ -491,6 +493,11 @@
     $('#register-password').onkeypress = (e) => { if (e.key === 'Enter') handleRegister(); };
     $('#register-invite').onkeypress = (e) => { if (e.key === 'Enter') handleRegister(); };
     $('#refresh-library-btn').onclick = () => loadMyLibrary();
+    $('#logout-btn').onclick = logout;
+    $('#admin-link-btn').onclick = () => {
+        const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';
+        window.location.href = `/${hiddenPath}/admin`;
+    };
 
     // 初始化
     loadTasks();
@@ -589,6 +596,22 @@
             const card = document.createElement('div');
             card.className = 'library-item';
 
+            let preview;
+            const thumbnailUrl = video.thumbnail_url || video.thumbnail || '';
+            if (thumbnailUrl) {
+                preview = document.createElement('img');
+                preview.className = 'library-thumb';
+                preview.alt = '';
+                preview.loading = 'lazy';
+                setAuthorizedImage(preview, thumbnailUrl);
+            } else {
+                preview = document.createElement('div');
+                preview.className = 'library-thumb-empty';
+                preview.textContent = '暂无预览';
+            }
+
+            const body = document.createElement('div');
+
             const title = document.createElement('div');
             title.className = 'library-title';
             title.textContent = video.title || '未命名视频';
@@ -607,7 +630,8 @@
             addLibraryButton(actions, 'retry', video.share_enabled ? '关闭分享' : '开启分享', () => toggleLibraryShare(video));
             addLibraryButton(actions, 'danger', '移除', () => deleteLibraryVideo(video));
 
-            card.append(title, meta, actions);
+            body.append(title, meta, actions);
+            card.append(preview, body);
             list.appendChild(card);
         });
     }
@@ -699,16 +723,52 @@
                 throw new Error(data.detail || '下载失败');
             }
             const blob = await res.blob();
+            const filename = filenameFromDisposition(res.headers.get('content-disposition')) || filenameWithExtension(video.title, video.filename);
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = video.title || 'video';
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
         } catch (err) {
             showToast('❌ ' + err.message, '#f85149');
+        }
+    }
+
+    function filenameFromDisposition(disposition) {
+        if (!disposition) return '';
+        const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+        if (utfMatch) return decodeURIComponent(utfMatch[1]);
+        const match = disposition.match(/filename="?([^"]+)"?/i);
+        return match ? match[1] : '';
+    }
+
+    function filenameWithExtension(title, filename) {
+        const base = (title || 'video').trim() || 'video';
+        const extMatch = (filename || '').match(/\.[A-Za-z0-9]{2,5}$/);
+        const ext = extMatch ? extMatch[0] : '.mp4';
+        return base.toLowerCase().endsWith(ext.toLowerCase()) ? base : base + ext;
+    }
+
+    async function setAuthorizedImage(img, url) {
+        if (!url.startsWith('/api/me/')) {
+            img.src = url;
+            return;
+        }
+        try {
+            const res = await fetch(url, { headers: authHeaders() });
+            if (!res.ok) throw new Error('thumbnail unavailable');
+            const blob = await res.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            img.onload = () => URL.revokeObjectURL(objectUrl);
+            img.src = objectUrl;
+        } catch {
+            img.replaceWith(Object.assign(document.createElement('div'), {
+                className: 'library-thumb-empty',
+                textContent: '暂无预览',
+            }));
         }
     }
 
@@ -735,6 +795,7 @@
         copyShareLink,
         downloadGuest,
         loadMyLibrary,
+        logout,
         closeLoginModal,
         checkAndTransferGuestDownloads
     };
@@ -780,25 +841,37 @@
     function updateLogoStyle() {
         const logoLink = $('#logo-link');
         if (isLoggedIn) {
-            logoLink.title = currentUser && currentUser.role === 'admin' ? '进入管理页面' : '查看我的视频库';
+            logoLink.title = '查看我的视频库';
             logoLink.classList.add('logged-in');
         } else {
             logoLink.title = '点击登录';
             logoLink.classList.remove('logged-in');
         }
+        const sessionBar = $('#session-bar');
+        const sessionUser = $('#session-user');
+        const adminLink = $('#admin-link-btn');
+        if (sessionBar && sessionUser && adminLink) {
+            sessionBar.classList.toggle('active', isLoggedIn);
+            sessionUser.textContent = currentUser ? `已登录：${currentUser.username}` : '';
+            adminLink.style.display = currentUser && currentUser.role === 'admin' ? 'inline-flex' : 'none';
+        }
     }
 
     function handleLogoClick() {
         if (isLoggedIn) {
-            if (currentUser && currentUser.role === 'admin') {
-                const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';
-                window.location.href = `/${hiddenPath}/admin`;
-                return;
-            }
             $('#library-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } else {
             showLoginModal();
         }
+    }
+
+    function logout() {
+        localStorage.removeItem('gotube_admin_token');
+        isLoggedIn = false;
+        currentUser = null;
+        updateLogoStyle();
+        renderMyLibrary();
+        showToast('已退出登录', '#3fb950');
     }
 
     function showLoginModal() {

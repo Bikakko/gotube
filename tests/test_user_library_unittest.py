@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from server.api import download_my_video, update_my_video_share
+from server.api import download_my_video, download_shared_video, get_shared_video_info, update_my_video_share
 from server.db import Base, User
 from server.models import UpdateShareRequest
 from server.video_library import (
@@ -126,6 +126,30 @@ class UserLibraryTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as ctx:
                 asyncio.run(download_my_video(item.id, current_user=bob, db=session))
             self.assertEqual(ctx.exception.status_code, 403)
+
+    def test_share_info_and_download_work_with_share_token_and_preserve_extension(self):
+        with self.Session() as session:
+            alice = self._user(session, "alice")
+            video_file = self._video_file("Alpha_aaaaaaaa", "aaaaaaaa.mp4")
+            item = register_completed_file(
+                session,
+                owner_user_id=alice.id,
+                filepath=video_file,
+                download_dir=self.download_dir,
+                source_url="https://example.test/a",
+                title="Alpha Title",
+                file_hash="aaaaaaaa",
+            )
+
+            info = asyncio.run(get_shared_video_info(item.share_token, db=session))
+            response = asyncio.run(download_shared_video(item.share_token, db=session))
+
+            self.assertEqual(info["share_token"], item.share_token)
+            self.assertEqual(info["title"], "Alpha Title")
+            self.assertEqual(Path(response.path), video_file)
+            disposition = response.headers["content-disposition"]
+            self.assertIn(".mp4", disposition)
+            self.assertIn("Alpha", disposition)
 
 
 if __name__ == "__main__":

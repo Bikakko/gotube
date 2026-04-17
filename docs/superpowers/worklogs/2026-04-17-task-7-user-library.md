@@ -52,3 +52,39 @@
 - `node --check www\download.js`
 
 完整回归和启动检查见本任务最终汇报。
+
+## 修复记录：普通用户端回归问题
+
+用户验收反馈后修复：
+
+- 分享链接无法播放：
+  - `watch.html` 优先调用 `/api/share/{share_token}/info`；
+  - 失败后再兼容旧 `/api/video/{hash}/info`。
+- 分享下载和个人库下载文件无后缀：
+  - 新增 `/api/share/{share_token}/download`；
+  - 认证下载和分享下载都使用保留后缀的下载文件名；
+  - 前端 Blob 下载从 `Content-Disposition` 读取文件名，失败时再用标题加原始扩展名兜底。
+- 下载任务卡片和视频库卡片功能重叠：
+  - 登录用户的已完成任务卡片只提供“在视频库管理”入口；
+  - 播放、分享、下载、移除集中到“我的视频库”卡片。
+- 视频库卡片无预览：
+  - 用户库条目返回 `thumbnail_url`；
+  - 前端带 Bearer token 拉取缩略图 blob 后渲染。
+- 普通用户登录后仍跳转管理页：
+  - logo 登录后只滚动到“我的视频库”；
+  - 管理员入口改为独立“管理后台”按钮。
+- 缺少退出登录：
+  - 下载页新增登录状态栏和“退出登录”按钮。
+
+追加验证：
+
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest -v`
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_admin_management_unittest tests.test_invites_unittest tests.test_auth_roles_unittest tests.test_v4_migrations_unittest tests.test_video_library_unittest -v`
+- `venv\Scripts\python.exe -m compileall server`
+- `node --check www\download.js`
+- `git diff --check`
+- 临时 `uvicorn server.main:app --port 8766` 启动检查：
+  - `/health` 返回 200；
+  - `/{hidden_path}` 返回 200；
+  - `/watch?v=not-a-token` HTML 入口返回 200；
+  - `/api/share/not-a-token/info` 返回 404。

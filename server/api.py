@@ -340,9 +340,20 @@ async def download_my_video(
     return FileResponse(
         path,
         media_type="application/octet-stream",
-        filename=path.name,
-        headers={"Content-Disposition": f'attachment; filename="{path.name}"'},
+        filename=_download_filename(asset.title, path),
+        content_disposition_type="attachment",
     )
+
+
+@router.get("/me/videos/{item_id}/thumbnail")
+async def get_my_video_thumbnail(
+    item_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """返回当前用户视频库条目的本地缩略图。"""
+    _item, asset = get_user_video_asset_for_download(db, current_user, item_id)
+    return _thumbnail_response(asset.thumbnail, Path(asset.filepath).parent)
 
 
 @router.post("/tasks/{task_id}/retry")
@@ -441,11 +452,44 @@ async def get_shared_thumbnail(
     if not resolved:
         raise HTTPException(status_code=404, detail="分享链接无效")
     _item, asset = resolved
-    thumb_name = asset.thumbnail or ""
+    return _thumbnail_response(asset.thumbnail, Path(asset.filepath).parent)
+
+
+@router.get("/share/{share_token}/download")
+async def download_shared_video(
+    share_token: str,
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """下载分享视频，避免浏览器把 /watch 页面保存成无后缀 HTML。"""
+    resolved = resolve_share_token(db, share_token)
+    if not resolved:
+        raise HTTPException(status_code=404, detail="分享链接无效")
+    item, asset = resolved
+    path = Path(asset.filepath)
+    return FileResponse(
+        path,
+        media_type="application/octet-stream",
+        filename=_download_filename(item.display_title or asset.title, path),
+        content_disposition_type="attachment",
+    )
+
+
+def _download_filename(title: str, path: Path) -> str:
+    safe_title = "".join(c for c in (title or path.stem).strip() if c not in '<>:"/\\|?*').strip()
+    if not safe_title:
+        safe_title = path.stem
+    suffix = path.suffix or ".mp4"
+    if not safe_title.lower().endswith(suffix.lower()):
+        safe_title += suffix
+    return safe_title
+
+
+def _thumbnail_response(thumbnail: str, video_dir: Path) -> FileResponse:
+    thumb_name = thumbnail or ""
     if not thumb_name or thumb_name.startswith(("http://", "https://")):
         raise HTTPException(status_code=404, detail="缩略图不可用")
 
-    thumb_path = Path(asset.filepath).parent / thumb_name
+    thumb_path = video_dir / thumb_name
     if not thumb_path.is_file():
         raise HTTPException(status_code=404, detail="缩略图文件不存在")
 

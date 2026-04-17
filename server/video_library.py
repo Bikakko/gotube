@@ -479,6 +479,7 @@ def _item_to_dict(item: UserVideoItem, asset: MediaAsset, owner: User) -> dict[s
         "share_token": item.share_token,
         "share_enabled": item.share_enabled,
         "thumbnail": asset.thumbnail,
+        "thumbnail_url": f"/api/me/videos/{item.id}/thumbnail" if asset.thumbnail else "",
         "duration": asset.duration,
         "size": asset.size_bytes,
         "source_url": asset.source_url,
