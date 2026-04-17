@@ -171,23 +171,22 @@ downloads/
         hash.mp4
 ```
 
-v4 新下载建议进入用户目录：
+v4 不在文件路径中表达用户归属。第一阶段继续使用全局物理视频目录，后续如需整理存储，可演进为内容寻址目录：
 
 ```text
 downloads/
-  users/
-    12/
-      title_hash/
-        hash.mp4
-        meta.json
-        thumbnail.jpg
+  media/
+    <fingerprint-or-media-id>/
+      video.mp4
+      meta.json
+      thumbnail.jpg
   temp_guest/
     session_id/
       title_hash/
         hash.mp4
 ```
 
-旧文件不自动移动。管理员后台可显示 legacy 视频，并在后续版本提供「分配给用户」或「迁移到 system/legacy」的显式操作。
+用户归属、删除权限和分享有效性统一由数据库 `user_video_items` 判断。旧文件不自动移动。管理员后台可显示 legacy 视频，并在后续版本提供「分配给用户」或「迁移到内容寻址目录」的显式操作。
 
 ## 权限模型
 

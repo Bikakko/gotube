@@ -4,7 +4,7 @@
 
 **目标：** 将 GoTube 从单一视频库升级为多用户视频库，支持普通用户容量限制、管理员全局管理、邀请码注册，并修复 v3 已发现的安全隐患。
 
-**架构：** 先集中安全边界，再引入数据库归属模型，最后调整 API 和前端。旧文件结构保持可读，新下载进入用户目录。数据库用 `media_assets` 表示物理文件，用 `user_video_items` 表示用户视频库条目。
+**架构：** 先集中安全边界，再引入数据库归属模型，最后调整 API 和前端。文件路径不表达用户归属。数据库用 `media_assets` 表示物理文件，用 `user_video_items` 表示用户视频库条目。
 
 **技术栈：** FastAPI、SQLAlchemy、SQLite、Pydantic、yt-dlp、原生 JavaScript。
 
@@ -26,7 +26,7 @@
 | `server/models.py` | 修改 | 新增注册、邀请码、容量和视频响应模型。 |
 | `server/api.py` | 修改 | 拆分公开 API 和登录用户 API，收紧危险接口。 |
 | `server/admin_api.py` | 修改 | 管理员全局视频库、用户容量、邀请码管理。 |
-| `server/downloader.py` | 修改 | 支持用户下载目录，删除直接信任 `session_id` 的路径拼接。 |
+| `server/downloader.py` | 修改 | 支持登录用户下载登记，删除直接信任 `session_id` 的路径拼接。 |
 | `server/queue_manager.py` | 修改 | 任务绑定用户身份，`client_id` 只用于进度分发。 |
 | `server/main.py` | 修改 | 分享播放完整 hash 匹配，WebSocket guest 清理走安全服务。 |
 | `www/download.js` | 修改 | 修复 XSS，登录用户下载、容量展示、转存鉴权。 |
@@ -387,7 +387,7 @@ def delete_visible_video(session: Session, user: User, video_id: int) -> list[st
 `POST /api/tasks` 获取当前用户：
 
 - guest 请求没有 token 时保持临时下载。
-- 登录用户请求带 token 时下载到用户目录。
+- 登录用户请求带 token 时仍下载到物理视频目录，路径不包含用户信息。
 - 任务完成后写入或复用 `media_assets`，并创建当前用户的 `user_video_items`。
 - 如果同一指纹视频已存在，不重复下载物理文件；当前用户仍得到自己的视频库条目、分享 token 和管理能力。
 
@@ -397,15 +397,21 @@ def delete_visible_video(session: Session, user: User, video_id: int) -> list[st
 owner_user_id: int | None = None
 ```
 
-- [ ] **步骤 5：用户目录落地**
+- [ ] **步骤 5：下载完成后登记物理资产和用户视频库条目**
 
-新登录用户下载进入：
+新下载路径不记录用户信息。第一阶段可继续沿用当前全局物理视频目录：
 
 ```text
-downloads/users/{user_id}/{title}_{hash}/{hash}.mp4
+downloads/{title}_{hash}/{hash}.mp4
 ```
 
-legacy 文件保持原位置。
+后续如需整理存储，可演进为内容寻址目录，例如：
+
+```text
+downloads/media/{fingerprint-or-media-id}/video.mp4
+```
+
+用户归属只写入 `user_video_items`。legacy 文件保持原位置。
 
 - [ ] **步骤 6：容量统计更新**
 
@@ -422,7 +428,8 @@ session.commit()
 
 手工验证：
 
-- 普通用户下载后文件进入 `downloads/users/{id}`。
+- 普通用户下载后创建自己的 `user_video_items` 条目。
+- 同一指纹视频不会重复创建物理文件。
 - 普通用户只看到自己的视频。
 - 管理员看到所有视频。
 - 普通用户超容量后新增下载返回 403。
@@ -712,7 +719,7 @@ git commit -m "feat: 升级 v4 多用户视频库"
 - v4 不强制移动旧视频文件，因此文件层面可回滚。
 - 数据库迁移只新增表和列，避免删除历史字段。
 - `readonly` 迁移为 `user` 属于行为变更，回滚前需要确认是否要恢复角色。
-- 如果用户目录下载出现问题，可临时把登录用户下载目录切回旧目录，但仍保留 `MediaAsset` 和 `UserVideoItem` 记录归属。
+- 如果后续内容寻址目录整理出现问题，可临时继续使用当前全局物理视频目录，但仍保留 `MediaAsset` 和 `UserVideoItem` 记录归属。
 
 ## 执行建议
 
