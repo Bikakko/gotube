@@ -39,9 +39,9 @@ def refresh_user_storage_usage(session: Session, user_id: int) -> int:
 
 
 def user_can_add_media(session: Session, user: User, size_bytes: int) -> bool:
-    """Check whether adding one media item would fit the user's library quota."""
+    """Allow one more media item while the user's library is still below quota."""
     quota = get_effective_quota_bytes(user)
     if quota is None:
         return True
     current = refresh_user_storage_usage(session, user.id)
-    return current + max(0, int(size_bytes or 0)) <= quota
+    return current < quota

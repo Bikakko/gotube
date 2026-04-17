@@ -208,7 +208,7 @@ class UserLibraryTests(unittest.TestCase):
             self.assertEqual(updated["updated_tasks"][0]["user_video_item_id"], task.user_video_item_id)
             self.assertTrue(updated["updated_tasks"][0]["share_token"])
 
-    def test_guest_transfer_registration_reports_quota_error(self):
+    def test_guest_transfer_registration_reports_quota_error_after_user_is_full(self):
         class FakeTask:
             def __init__(self):
                 self.filename = "TooLarge_aaaaaaaa/aaaaaaaa.mp4"
@@ -224,10 +224,24 @@ class UserLibraryTests(unittest.TestCase):
 
         with self.Session() as session:
             alice = self._user(session, "alice", quota_mb=1)
+            existing_file = self._video_file(
+                "Existing_bbbbbbbb",
+                "bbbbbbbb.mp4",
+                b"y" * 1024 * 1024,
+            )
+            register_completed_file(
+                session,
+                owner_user_id=alice.id,
+                filepath=existing_file,
+                download_dir=self.download_dir,
+                source_url="https://example.test/existing",
+                title="Existing",
+                file_hash="bbbbbbbb",
+            )
             video_file = self._video_file(
                 "TooLarge_aaaaaaaa",
                 "aaaaaaaa.mp4",
-                b"x" * (1024 * 1024 + 1),
+                b"x",
             )
             self._write_meta(video_file, title="Too Large")
             result = {
@@ -246,7 +260,7 @@ class UserLibraryTests(unittest.TestCase):
             )
 
             self.assertEqual(updated["registered_count"], 0)
-            self.assertEqual(session.query(UserVideoItem).count(), 0)
+            self.assertEqual(session.query(UserVideoItem).count(), 1)
             self.assertEqual(len(updated["errors"]), 1)
             self.assertIn("容量不足", updated["errors"][0]["error"])
             self.assertEqual(task.status, "failed")

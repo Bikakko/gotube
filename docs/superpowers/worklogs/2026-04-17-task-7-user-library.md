@@ -239,3 +239,21 @@
   - 业务相关 32 个 unittest 通过；
   - `tests/test_security_boundaries.py` 因当前 venv 未安装 `pytest` 导入失败，未能在 discover 中执行。
 - `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_admin_management_unittest tests.test_auth_roles_unittest tests.test_video_library_unittest tests.test_v4_migrations_unittest tests.test_invites_unittest -v`
+
+## 修复记录：容量最后一个视频入库语义
+
+用户指出旧规则会在“剩余容量小于当前视频大小”时拒绝入库，导致视频库无法真正达到满额状态，并允许用户反复尝试下载但总是失败。修正为：
+
+- 容量判断从 `当前已用 + 当前视频大小 <= 配额` 改为 `当前已用 < 配额`；
+- 用户未满额时允许保存最后一个视频，即便保存后已用容量超过配额；
+- 用户已满额或已超额后，再保存新视频才返回“容量不足”；
+- 已用容量仍然由实际入库视频求和刷新，不做虚增；
+- guest 转存容量失败测试改为“用户已经满额后再转存才失败”。
+
+追加验证：
+
+- `venv\Scripts\python.exe -m unittest tests.test_video_library_unittest tests.test_user_library_unittest -v`
+- `node --check www\download.js www\admin\js\auth.js`
+- `venv\Scripts\python.exe -m compileall server`
+- `git diff --check`
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_admin_management_unittest tests.test_auth_roles_unittest tests.test_video_library_unittest tests.test_v4_migrations_unittest tests.test_invites_unittest -v`

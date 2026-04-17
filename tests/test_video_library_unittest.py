@@ -84,6 +84,40 @@ class VideoLibraryTests(unittest.TestCase):
             self.assertEqual(refresh_user_storage_usage(session, bob.id), len(b"same-video"))
             self.assertEqual(get_effective_quota_bytes(alice), 1024 * 1024)
 
+    def test_quota_allows_final_video_to_exceed_limit_then_blocks_next_item(self):
+        with self.Session() as session:
+            alice = self._user(session, "alice", quota_mb=1)
+            large_file = self._video_file(
+                "Large_abcd1234",
+                "abcd1234.mp4",
+                b"x" * (1024 * 1024 + 1),
+            )
+
+            item = register_completed_file(
+                session,
+                owner_user_id=alice.id,
+                filepath=large_file,
+                download_dir=self.download_dir,
+                source_url="https://example.test/large",
+                title="Large",
+                file_hash="abcd1234",
+            )
+
+            self.assertIsNotNone(item.id)
+            self.assertGreater(refresh_user_storage_usage(session, alice.id), get_effective_quota_bytes(alice))
+
+            next_file = self._video_file("Next_deadbeef", "deadbeef.mp4", b"next")
+            with self.assertRaisesRegex(ValueError, "容量不足"):
+                register_completed_file(
+                    session,
+                    owner_user_id=alice.id,
+                    filepath=next_file,
+                    download_dir=self.download_dir,
+                    source_url="https://example.test/next",
+                    title="Next",
+                    file_hash="deadbeef",
+                )
+
     def test_existing_source_reuse_requires_live_media_file_and_creates_user_item(self):
         with self.Session() as session:
             alice = self._user(session, "alice")
