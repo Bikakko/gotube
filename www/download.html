@@ -90,15 +90,30 @@
         .task-btn.secondary:hover { background: #8b949e; color: #0d1117; }
         .task-btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .session-bar {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            z-index: 90;
             display: none;
-            justify-content: space-between;
+            justify-content: flex-end;
             align-items: center;
-            gap: 12px;
-            margin-bottom: 16px;
+            gap: 10px;
+            max-width: calc(100vw - 32px);
+            padding: 8px 10px;
+            background: rgba(22, 27, 34, 0.94);
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
             color: #8b949e;
             font-size: 13px;
         }
         .session-bar.active { display: flex; }
+        .session-bar > span {
+            max-width: 220px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
         .library-section {
             margin-top: 28px;
             border-top: 1px solid #30363d;
@@ -179,6 +194,71 @@
         }
         .modal-btn.share { border-color: #58a6ff; color: #58a6ff; }
         .modal-btn.share:hover { background: #58a6ff; color: #0d1117; }
+        .auth-modal { max-width: 400px; }
+        .auth-body { padding: 20px; }
+        .auth-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .auth-tab {
+            flex: 1;
+            padding: 8px;
+            border-radius: 6px;
+            border: 1px solid #30363d;
+            background: transparent;
+            color: #e6edf3;
+            cursor: pointer;
+        }
+        .auth-tab.active {
+            border-color: #58a6ff;
+            background: #58a6ff;
+            color: #0d1117;
+        }
+        .auth-field { margin-bottom: 16px; }
+        .auth-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #30363d;
+            background: #0d1117;
+            color: #e6edf3;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .auth-input:focus {
+            outline: none;
+            border-color: #58a6ff;
+        }
+        .auth-error {
+            color: #f85149;
+            font-size: 13px;
+            text-align: center;
+            min-height: 20px;
+            margin-bottom: 10px;
+        }
+        .auth-submit {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            color: #fff;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .auth-submit.login { background: #e62117; }
+        .auth-submit.login:hover { background: #ff3325; }
+        .auth-submit.register { background: #238636; }
+        .auth-submit.register:hover { background: #2ea043; }
+        .auth-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+        @media (max-width: 700px) {
+            .session-bar {
+                left: 16px;
+                right: 16px;
+                justify-content: space-between;
+            }
+            .session-bar > span { max-width: 46vw; }
+        }
     </style>
 </head>
 <body>
@@ -225,38 +305,38 @@
 
     <!-- 登录模态框 -->
     <div id="login-modal" class="modal" onclick="if(event.target===this)window.DownloadPage.closeLoginModal()">
-        <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-content auth-modal">
             <div class="modal-header">
                 <h3 id="auth-modal-title">登录</h3>
                 <button class="modal-close" onclick="window.DownloadPage.closeLoginModal()">✕</button>
             </div>
-            <div class="modal-body" style="padding: 20px;">
-                <div style="display: flex; gap: 8px; margin-bottom: 16px;">
-                    <button id="show-login-btn" type="button" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #58a6ff; background: #58a6ff; color: #0d1117; cursor: pointer;">登录</button>
-                    <button id="show-register-btn" type="button" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #30363d; background: transparent; color: #e6edf3; cursor: pointer;">注册</button>
+            <div class="modal-body auth-body">
+                <div class="auth-tabs">
+                    <button id="show-login-btn" class="auth-tab active" type="button">登录</button>
+                    <button id="show-register-btn" class="auth-tab" type="button">注册</button>
                 </div>
                 <div id="login-panel">
-                    <div style="margin-bottom: 16px;">
-                        <input type="text" id="login-username" placeholder="用户名" style="width: 100%; padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 6px; font-size: 14px;" autocomplete="username">
+                    <div class="auth-field">
+                        <input class="auth-input" type="text" id="login-username" placeholder="用户名" autocomplete="username">
                     </div>
-                    <div style="margin-bottom: 16px;">
-                        <input type="password" id="login-password" placeholder="密码" style="width: 100%; padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 6px; font-size: 14px;" autocomplete="current-password">
+                    <div class="auth-field">
+                        <input class="auth-input" type="password" id="login-password" placeholder="密码" autocomplete="current-password">
                     </div>
-                    <div id="login-error" style="color: #f85149; font-size: 13px; text-align: center; min-height: 20px; margin-bottom: 10px;"></div>
-                    <button id="login-submit-btn" style="width: 100%; padding: 12px; border: none; border-radius: 6px; background: #e62117; color: #fff; font-size: 16px; font-weight: bold; cursor: pointer;">登录</button>
+                    <div id="login-error" class="auth-error"></div>
+                    <button id="login-submit-btn" class="auth-submit login">登录</button>
                 </div>
                 <div id="register-panel" style="display: none;">
-                    <div style="margin-bottom: 16px;">
-                        <input type="text" id="register-username" placeholder="用户名，3-32 位字母/数字/_/-" style="width: 100%; padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 6px; font-size: 14px;" autocomplete="username">
+                    <div class="auth-field">
+                        <input class="auth-input" type="text" id="register-username" placeholder="用户名，3-32 位字母/数字/_/-" autocomplete="username">
                     </div>
-                    <div style="margin-bottom: 16px;">
-                        <input type="password" id="register-password" placeholder="密码，至少 6 位" style="width: 100%; padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 6px; font-size: 14px;" autocomplete="new-password">
+                    <div class="auth-field">
+                        <input class="auth-input" type="password" id="register-password" placeholder="密码，至少 6 位" autocomplete="new-password">
                     </div>
-                    <div style="margin-bottom: 16px;">
-                        <input type="text" id="register-invite" placeholder="邀请码" style="width: 100%; padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 6px; font-size: 14px;" autocomplete="off">
+                    <div class="auth-field">
+                        <input class="auth-input" type="text" id="register-invite" placeholder="邀请码" autocomplete="off">
                     </div>
-                    <div id="register-error" style="color: #f85149; font-size: 13px; text-align: center; min-height: 20px; margin-bottom: 10px;"></div>
-                    <button id="register-submit-btn" style="width: 100%; padding: 12px; border: none; border-radius: 6px; background: #238636; color: #fff; font-size: 16px; font-weight: bold; cursor: pointer;">注册</button>
+                    <div id="register-error" class="auth-error"></div>
+                    <button id="register-submit-btn" class="auth-submit register">注册</button>
                 </div>
             </div>
         </div>

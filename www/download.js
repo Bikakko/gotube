@@ -6,7 +6,11 @@
 
     const $ = (s) => document.querySelector(s);
 
-    let clientId = sessionStorage.getItem('gotube_client_id') || 'c_' + Math.random().toString(36).substr(2, 9);
+    function newClientId() {
+        return 'c_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    let clientId = sessionStorage.getItem('gotube_client_id') || newClientId();
     sessionStorage.setItem('gotube_client_id', clientId);
 
     // ── 匿名用户 Session 管理 ──
@@ -23,6 +27,7 @@
 
     const tasks = {};
     let ws = null;
+    let reconnectTimer = null;
     let isLoggedIn = false;
     let currentUser = null;
     let myVideos = [];
@@ -151,6 +156,18 @@
         });
 
         renderTasksSafe(list, arr);
+    }
+
+    function clearTasks() {
+        Object.keys(tasks).forEach(key => delete tasks[key]);
+        renderTasks();
+    }
+
+    function rotateClientSession() {
+        clientId = newClientId();
+        sessionStorage.setItem('gotube_client_id', clientId);
+        clearTasks();
+        connectWS();
     }
 
     async function retryTask(id) {
@@ -402,14 +419,22 @@
     }
 
     function connectWS() {
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = null;
+        }
+
         // 关闭旧连接
         if (ws) {
+            ws.onclose = null;
+            if (ws._heartbeat) clearInterval(ws._heartbeat);
             ws.close();
             ws = null;
         }
 
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
         ws = new WebSocket(`${proto}//${location.host}/ws?client_id=${clientId}&session_id=${guestSessionId}`);
+        const currentWs = ws;
 
         ws.onopen = () => {
             console.log('WebSocket 连接成功');
@@ -457,20 +482,21 @@
         };
 
         ws.onclose = (e) => {
+            if (currentWs._heartbeat) clearInterval(currentWs._heartbeat);
             console.warn(`WebSocket 断开: code=${e.code}, reason=${e.reason}`);
             setStatus('🟡 连接断开，重连中...', '#d29922');
 
             // 3秒后重连（高延迟网络下更快尝试重连）
-            setTimeout(() => {
+            reconnectTimer = setTimeout(() => {
+                reconnectTimer = null;
                 connectWS();
             }, 3000);
         };
         
         // 心跳保活：每30秒发送一次ping
-        if (ws._heartbeat) clearInterval(ws._heartbeat);
-        ws._heartbeat = setInterval(() => {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'ping' }));
+        currentWs._heartbeat = setInterval(() => {
+            if (currentWs.readyState === WebSocket.OPEN) {
+                currentWs.send(JSON.stringify({ type: 'ping' }));
             }
         }, 30000);
     }
@@ -573,6 +599,8 @@
         section.style.display = isLoggedIn ? 'block' : 'none';
         list.replaceChildren();
         if (!isLoggedIn) {
+            myVideos = [];
+            myQuota = null;
             quotaInfo.textContent = '';
             return;
         }
@@ -835,6 +863,7 @@
             currentUser = null;
             updateLogoStyle();
             renderMyLibrary();
+            clearTasks();
         }
     }
 
@@ -865,12 +894,24 @@
         }
     }
 
-    function logout() {
+    async function logout() {
+        if (!confirm('确定要退出登录吗？')) return;
+        const token = localStorage.getItem('gotube_admin_token');
+        if (token) {
+            const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';
+            await fetch(`/${hiddenPath}/admin/api/auth/logout`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+            }).catch(() => {});
+        }
         localStorage.removeItem('gotube_admin_token');
         isLoggedIn = false;
         currentUser = null;
+        myVideos = [];
+        myQuota = null;
         updateLogoStyle();
         renderMyLibrary();
+        rotateClientSession();
         showToast('已退出登录', '#3fb950');
     }
 
@@ -886,12 +927,8 @@
         $('#auth-modal-title').textContent = isRegister ? '注册' : '登录';
         $('#login-panel').style.display = isRegister ? 'none' : 'block';
         $('#register-panel').style.display = isRegister ? 'block' : 'none';
-        $('#show-login-btn').style.background = isRegister ? 'transparent' : '#58a6ff';
-        $('#show-login-btn').style.color = isRegister ? '#e6edf3' : '#0d1117';
-        $('#show-login-btn').style.borderColor = isRegister ? '#30363d' : '#58a6ff';
-        $('#show-register-btn').style.background = isRegister ? '#58a6ff' : 'transparent';
-        $('#show-register-btn').style.color = isRegister ? '#0d1117' : '#e6edf3';
-        $('#show-register-btn').style.borderColor = isRegister ? '#58a6ff' : '#30363d';
+        $('#show-login-btn').classList.toggle('active', !isRegister);
+        $('#show-register-btn').classList.toggle('active', isRegister);
         $('#login-error').textContent = '';
         $('#register-error').textContent = '';
         if (isRegister) {
@@ -960,9 +997,13 @@
             }
 
             const data = await response.json();
+            const previousUserId = currentUser && currentUser.id;
             localStorage.setItem('gotube_admin_token', data.token);
             isLoggedIn = true;
             currentUser = data.user || null;
+            if (previousUserId && currentUser && previousUserId !== currentUser.id) {
+                rotateClientSession();
+            }
             updateLogoStyle();
             closeLoginModal();
 
