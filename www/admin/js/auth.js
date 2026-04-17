@@ -3,6 +3,11 @@
  * 登录、登出、Token 管理
  */
 
+function clearDownloadPageSession() {
+    sessionStorage.removeItem('gotube_client_id');
+    sessionStorage.removeItem('gotube_authenticated_client');
+}
+
 /**
  * 检查当前是否有有效 token
  * @returns {Promise<boolean>} 是否认证通过
@@ -46,6 +51,7 @@ async function checkAuth() {
     // 所有重试都失败了，清除 token 并显示登录表单
     console.error('Token 验证最终失败:', lastError?.message);
     localStorage.removeItem('gotube_admin_token');
+    clearDownloadPageSession();
     showLoginForm();
     return false;
 }
@@ -154,6 +160,7 @@ async function handleLogin() {
 
         // 登录成功
         localStorage.setItem('gotube_admin_token', data.token);
+        clearDownloadPageSession();
         state.currentUser = data.user;  // 立即更新用户状态
         hideLoginForm();
         window.renderPage();
@@ -198,6 +205,7 @@ async function handleLogout() {
     }
 
     localStorage.removeItem('gotube_admin_token');
+    clearDownloadPageSession();
     window.location.href = '/';
 }
 

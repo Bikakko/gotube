@@ -257,3 +257,23 @@
 - `venv\Scripts\python.exe -m compileall server`
 - `git diff --check`
 - `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_admin_management_unittest tests.test_auth_roles_unittest tests.test_video_library_unittest tests.test_v4_migrations_unittest tests.test_invites_unittest -v`
+
+## 修复记录：管理员退出后下载页任务卡泄漏
+
+用户反馈管理员退出登录后，下载页会再次出现已保存的视频卡。排查后按两个来源收敛：
+
+- 下载页本地 `client_id` 存在于 `sessionStorage`，管理后台退出不经过下载页 `logout()`，旧 `client_id` 可能继续被 `/api/tasks` 和 WebSocket 用来拉回已完成任务；
+- 下载页切换 client 或退出时，旧 WebSocket 的迟到消息/重连仍可能把旧任务写回本地 `tasks`。
+
+修复：
+
+- 下载页增加认证 client 标记，认证态失效或退出时重置 `client_id` 并清空任务；
+- 下载页初始化顺序改为先检查登录态，再加载当前 client 的任务，避免先拉旧任务再发现已退出；
+- WebSocket 增加连接代际校验，旧连接的 `open/message/error/close` 事件不会再改写当前页面状态；
+- 管理后台登录、退出、token 失效、401、当前用户修改自身密码导致登出时，统一清理下载页 `gotube_client_id` 和认证 client 标记。
+
+追加验证：
+
+- `node --check www\download.js www\admin\js\auth.js www\common.js www\admin\js\users.js`
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_admin_management_unittest tests.test_auth_roles_unittest tests.test_video_library_unittest tests.test_v4_migrations_unittest tests.test_invites_unittest -v`
+- `git diff --check`

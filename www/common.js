@@ -145,6 +145,8 @@ async function apiFetch(endpoint, options = {}) {
     // 401 表示未授权，清除 token
     if (response.status === 401) {
         localStorage.removeItem('gotube_admin_token');
+        sessionStorage.removeItem('gotube_client_id');
+        sessionStorage.removeItem('gotube_authenticated_client');
         throw new Error('UNAUTHORIZED');
     }
     

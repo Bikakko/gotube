@@ -10,12 +10,15 @@
         return 'c_' + Math.random().toString(36).substr(2, 9);
     }
 
-    let clientId = sessionStorage.getItem('gotube_client_id') || newClientId();
-    sessionStorage.setItem('gotube_client_id', clientId);
+    const CLIENT_SESSION_STORAGE_KEY = 'gotube_client_id';
+    const AUTH_CLIENT_STORAGE_KEY = 'gotube_authenticated_client';
+    const GUEST_SESSION_STORAGE_KEY = 'gotube_guest_session_id';
+
+    let clientId = sessionStorage.getItem(CLIENT_SESSION_STORAGE_KEY) || newClientId();
+    sessionStorage.setItem(CLIENT_SESSION_STORAGE_KEY, clientId);
 
     // ── 匿名用户 Session 管理 ──
     // 使用 sessionStorage：刷新页面复用，关闭标签页后失效，避免旧路人 session 被新登录用户转存。
-    const GUEST_SESSION_STORAGE_KEY = 'gotube_guest_session_id';
     localStorage.removeItem(GUEST_SESSION_STORAGE_KEY);
     let guestSessionId = sessionStorage.getItem(GUEST_SESSION_STORAGE_KEY);
     if (!guestSessionId) {
@@ -29,6 +32,7 @@
     const tasks = {};
     let ws = null;
     let reconnectTimer = null;
+    let wsGeneration = 0;
     let isLoggedIn = false;
     let currentUser = null;
     let myVideos = [];
@@ -174,10 +178,14 @@
         renderTasks();
     }
 
-    function rotateClientSession() {
+    function resetClientSession() {
         clientId = newClientId();
-        sessionStorage.setItem('gotube_client_id', clientId);
+        sessionStorage.setItem(CLIENT_SESSION_STORAGE_KEY, clientId);
         clearTasks();
+    }
+
+    function rotateClientSession() {
+        resetClientSession();
         connectWS();
     }
 
@@ -435,6 +443,7 @@
     }
 
     function connectWS() {
+        const generation = ++wsGeneration;
         if (reconnectTimer) {
             clearTimeout(reconnectTimer);
             reconnectTimer = null;
@@ -457,12 +466,14 @@
         const currentWs = ws;
 
         ws.onopen = () => {
+            if (ws !== currentWs || generation !== wsGeneration) return;
             console.log('WebSocket 连接成功');
             setStatus('🟢 已连接', '#3fb950');
             setTimeout(() => setStatus(''), 2000);
         };
 
         ws.onmessage = (e) => {
+            if (ws !== currentWs || generation !== wsGeneration) return;
             try {
                 const d = JSON.parse(e.data);
                 
@@ -497,12 +508,14 @@
         };
 
         ws.onerror = (e) => {
+            if (ws !== currentWs || generation !== wsGeneration) return;
             console.error('WebSocket 错误:', e);
             setStatus('🔴 连接错误', '#f85149');
         };
 
         ws.onclose = (e) => {
             if (currentWs._heartbeat) clearInterval(currentWs._heartbeat);
+            if (ws !== currentWs || generation !== wsGeneration) return;
             console.warn(`WebSocket 断开: code=${e.code}, reason=${e.reason}`);
             setStatus('🟡 连接断开，重连中...', '#d29922');
 
@@ -547,8 +560,8 @@
 
     // 初始化
     async function init() {
-        loadTasks();
         await checkLoginStatus();
+        await loadTasks();
         connectWS();
     }
     init();
@@ -891,6 +904,10 @@
     async function checkLoginStatus() {
         const token = localStorage.getItem('gotube_admin_token');
         if (!token) {
+            if (sessionStorage.getItem(AUTH_CLIENT_STORAGE_KEY) === '1') {
+                sessionStorage.removeItem(AUTH_CLIENT_STORAGE_KEY);
+                resetClientSession();
+            }
             isLoggedIn = false;
             currentUser = null;
             updateLogoStyle();
@@ -917,11 +934,12 @@
         } catch (err) {
             console.debug('Check auth failed:', err.message);
             localStorage.removeItem('gotube_admin_token');
+            sessionStorage.removeItem(AUTH_CLIENT_STORAGE_KEY);
+            resetClientSession();
             isLoggedIn = false;
             currentUser = null;
             updateLogoStyle();
             renderMyLibrary();
-            clearTasks();
         }
     }
 
@@ -969,6 +987,7 @@
             }).catch(() => {});
         }
         localStorage.removeItem('gotube_admin_token');
+        sessionStorage.removeItem(AUTH_CLIENT_STORAGE_KEY);
         isLoggedIn = false;
         currentUser = null;
         myVideos = [];
@@ -1064,6 +1083,7 @@
             const data = await response.json();
             const previousUserId = currentUser && currentUser.id;
             localStorage.setItem('gotube_admin_token', data.token);
+            sessionStorage.setItem(AUTH_CLIENT_STORAGE_KEY, '1');
             isLoggedIn = true;
             currentUser = data.user || null;
             if (previousUserId && currentUser && previousUserId !== currentUser.id) {
