@@ -23,8 +23,9 @@ from .api import router as api_router
 from .admin_api import router as admin_api_router
 from .config import settings
 from .db import init_db, get_session, sync_admins_from_env
-from .downloader import VIDEO_EXTENSIONS, Downloader, DownloadTask
+from .downloader import Downloader, DownloadTask
 from .queue_manager import QueueManager
+from .security import validate_guest_session_id, validate_hash_id
 
 logger = logging.getLogger(__name__)
 
@@ -199,25 +200,13 @@ async def watch_unified(
 
     # 视频请求：根据 hash_id 查找文件并返回视频流
     if v:
+        hash_id = validate_hash_id(v)
         qm: QueueManager = get_queue_manager(request)
-        download_dir = qm.downloader.download_dir
 
         # 使用 hash 索引查找
         hash_index = qm.downloader._build_hash_index()
         logger.info("[/watch] hash_index keys: %s", list(hash_index.keys())[:10])
-        matched_file: Path | None = None
-        for h, fp in hash_index.items():
-            if h.startswith(v) or v.startswith(h):
-                matched_file = fp
-                logger.info("[/watch] matched via hash index: h=%s, fp=%s", h, fp)
-                break
-
-        if matched_file is None:
-            for f in download_dir.rglob(f"{v}*"):
-                if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
-                    matched_file = f
-                    logger.info("[/watch] matched via rglob: %s", f)
-                    break
+        matched_file: Path | None = hash_index.get(hash_id)
 
         if matched_file is not None and matched_file.is_file():
             logger.info("[/watch] returning video: path=%s, size=%d", matched_file, matched_file.stat().st_size)
@@ -227,7 +216,7 @@ async def watch_unified(
                 headers={"Content-Disposition": f'inline; filename="{matched_file.name}"'},
             )
         else:
-            logger.warning("[/watch] file not found: v=%s, matched=%s", v, matched_file)
+            logger.warning("[/watch] file not found: v=%s, matched=%s", hash_id, matched_file)
 
     raise HTTPException(status_code=404, detail="视频不存在或缺少参数")
 
@@ -299,6 +288,13 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
 
     client_id = websocket.query_params.get("client_id", str(uuid.uuid4())[:8])
     session_id = websocket.query_params.get("session_id", "")  # 获取 session_id
+    if session_id:
+        try:
+            session_id = validate_guest_session_id(session_id)
+        except HTTPException:
+            await websocket.send_json({"type": "error", "error": "invalid_session"})
+            await websocket.close(code=1008)
+            return
     queue_mgr = _get_queue_manager()
 
     # 记录 guest 连接时间

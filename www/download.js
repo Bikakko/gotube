@@ -43,20 +43,10 @@
         return m > 0 ? `${m}分${s % 60}秒` : `${s}秒`;
     }
 
-    function renderTasks() {
-        const list = $('#task-list');
-        const arr = Object.values(tasks).sort((a, b) => {
-            if (a.status === 'downloading' && b.status !== 'downloading') return -1;
-            if (b.status === 'downloading' && a.status !== 'downloading') return 1;
-            return new Date(b.created_at) - new Date(a.created_at);
-        });
+    function renderTasksSafe(list, arr) {
+        list.replaceChildren();
+        if (arr.length === 0) return;
 
-        if (arr.length === 0) {
-            list.innerHTML = '';
-            return;
-        }
-
-        list.innerHTML = '';
         const labels = {
             pending: '排队中',
             downloading: '下载中',
@@ -66,20 +56,31 @@
         };
 
         arr.forEach(t => {
-            const pct = Math.round(t.progress);
-            const sp = document.createElement('div');
-            sp.className = 'task';
+            const pct = Math.max(0, Math.min(100, Math.round(t.progress || 0)));
+            const card = document.createElement('div');
+            card.className = 'task';
 
-            let html = `<div style="display:flex;justify-content:space-between">
-                <div class="task-title">${t.title || '获取信息中...'}</div>
-                <span class="task-status status-${t.status}">${labels[t.status] || t.status}</span>
-            </div>`;
+            const header = document.createElement('div');
+            header.style.display = 'flex';
+            header.style.justifyContent = 'space-between';
 
-            html += `<div class="progress-bg"><div class="progress-fill" style="width:${pct}%"></div></div>`;
+            const title = document.createElement('div');
+            title.className = 'task-title';
+            title.textContent = t.title || '获取信息中...';
 
-            // 卡片内状态信息
-            let metaParts = [];
-            metaParts.push(`${pct}%`);
+            const status = document.createElement('span');
+            status.className = `task-status status-${t.status}`;
+            status.textContent = labels[t.status] || t.status;
+            header.append(title, status);
+
+            const progressBg = document.createElement('div');
+            progressBg.className = 'progress-bg';
+            const progressFill = document.createElement('div');
+            progressFill.className = 'progress-fill';
+            progressFill.style.width = `${pct}%`;
+            progressBg.appendChild(progressFill);
+
+            const metaParts = [`${pct}%`];
 
             if (t.status === 'downloading') {
                 if (t.speed) metaParts.push(`⚡ ${fmtBytes(t.speed)}/s`);
@@ -93,30 +94,49 @@
                 metaParts.push(`❌ ${t.error}`);
             }
 
-            html += `<div class="progress-info"><span>${metaParts.join(' ')}</span><span></span></div>`;
+            const progressInfo = document.createElement('div');
+            progressInfo.className = 'progress-info';
+            const progressText = document.createElement('span');
+            progressText.textContent = metaParts.join(' ');
+            progressInfo.append(progressText, document.createElement('span'));
 
-            // 操作按钮
-            let actions = '<div class="task-actions">';
+            const actions = document.createElement('div');
+            actions.className = 'task-actions';
+            const addButton = (className, text, handler) => {
+                const button = document.createElement('button');
+                button.className = `task-btn ${className}`;
+                button.type = 'button';
+                button.textContent = text;
+                button.addEventListener('click', handler);
+                actions.appendChild(button);
+            };
+
             if (t.status === 'completed' && t.filename) {
-                actions += `<button class="task-btn play" onclick="window.DownloadPage.openModal('${t.task_id}')">▶ 播放</button>`;
-                // 游客文件：显示下载按钮（分享无意义，关闭即删除）
-                // 登录用户文件：显示分享按钮
-                const isGuestFile = t.filename.startsWith('temp_guest/');
-                if (isGuestFile) {
-                    actions += `<button class="task-btn download" onclick="window.DownloadPage.downloadGuest('${t.task_id}')">⬇ 下载</button>`;
+                addButton('play', '▶ 播放', () => openModal(t.task_id));
+                if (t.filename.startsWith('temp_guest/')) {
+                    addButton('download', '⬇ 下载', () => downloadGuest(t.task_id));
                 } else {
-                    actions += `<button class="task-btn share" onclick="window.DownloadPage.copyShareLink('${t.task_id}')">🔗 分享</button>`;
+                    addButton('share', '🔗 分享', () => copyShareLink(t.task_id));
                 }
             }
             if (t.status === 'failed') {
-                actions += `<button class="task-btn retry" onclick="window.DownloadPage.retryTask('${t.task_id}')">🔄 重试</button>`;
+                addButton('retry', '🔄 重试', () => retryTask(t.task_id));
             }
-            actions += '</div>';
-            html += actions;
 
-            sp.innerHTML = html;
-            list.appendChild(sp);
+            card.append(header, progressBg, progressInfo, actions);
+            list.appendChild(card);
         });
+    }
+
+    function renderTasks() {
+        const list = $('#task-list');
+        const arr = Object.values(tasks).sort((a, b) => {
+            if (a.status === 'downloading' && b.status !== 'downloading') return -1;
+            if (b.status === 'downloading' && a.status !== 'downloading') return 1;
+            return new Date(b.created_at) - new Date(a.created_at);
+        });
+
+        renderTasksSafe(list, arr);
     }
 
     async function retryTask(id) {
@@ -643,8 +663,10 @@
             setStatus('🔄 正在转移视频到视频库...', '#58a6ff');
 
             // 调用转移 API
+            const token = localStorage.getItem('gotube_admin_token');
             const transferRes = await fetch(`/api/guest-downloads/${guestSessionId}/transfer?client_id=${clientId}`, {
                 method: 'POST',
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
             });
 
             if (!transferRes.ok) {

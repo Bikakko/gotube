@@ -12,10 +12,13 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 
-from .downloader import VIDEO_EXTENSIONS, _read_meta_from_dir
-from .models import AddTaskRequest, DeleteDownloadResponse, TaskResponse
+from .admin_api import verify_admin_authorization
+from .downloader import _read_meta_from_dir
+from .models import AddTaskRequest, TaskResponse
+from .path_utils import resolve_inside
 from .queue_manager import QueueManager
 from .config import settings
+from .security import validate_guest_session_id, validate_hash_id
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +140,8 @@ async def add_task(
     is_guest = bool(req.session_id)
     if is_guest and not settings.allow_guest_download:
         raise HTTPException(status_code=403, detail="匿名用户下载功能已禁用")
+    if is_guest:
+        req.session_id = validate_guest_session_id(req.session_id)
 
     task = await qm.add_task(req.url, client_id, session_id=req.session_id)
     if task is None:
@@ -152,6 +157,7 @@ async def transfer_guest_downloads(
     session_id: str,
     client_id: str = Query(..., description="客户端标识"),
     qm: QueueManager = Depends(get_queue_manager),
+    payload: dict = Depends(verify_admin_authorization),
 ):
     """
     将游客临时视频转移到视频库。
@@ -159,6 +165,7 @@ async def transfer_guest_downloads(
     游客登录后调用，将指定 session_id 下所有已完成的视频转移到主下载目录。
     返回更新后的任务数据，前端可直接刷新。
     """
+    session_id = validate_guest_session_id(session_id)
     try:
         result = qm.downloader.transfer_guest_session(session_id, client_id=client_id)
         return result
@@ -179,6 +186,7 @@ async def get_guest_download_count(
     
     用于登录后判断是否需要提示转移。
     """
+    session_id = validate_guest_session_id(session_id)
     count = qm.downloader.get_guest_download_count(session_id)
     return {"session_id": session_id, "count": count}
 
@@ -221,48 +229,15 @@ async def retry_task(
 
 
 @router.get("/downloads")
-async def list_downloads(qm: QueueManager = Depends(get_queue_manager)):
-    """列出所有已下载的文件（含元数据，使用缓存索引）"""
-    files = qm.downloader._build_file_index_cache()
-    # 按修改时间倒序
-    files.sort(key=lambda x: x["modified"], reverse=True)
-    # 解析缩略图路径（兼容老数据远程 URL 和新数据本地文件）
-    for f in files:
-        if "thumbnail" in f and "file_hash" in f and f.get("filepath"):
-            video_dir = Path(f["filepath"]).parent
-            f["thumbnail"] = _resolve_thumbnail(f["thumbnail"], video_dir, f["file_hash"])
-    return files
+async def list_downloads():
+    """公开 API 不再暴露完整视频库列表。"""
+    raise HTTPException(status_code=403, detail="请通过管理员接口访问视频列表")
 
 
 @router.get("/downloads/stream/{filename:path}")
-async def stream_video(
-    filename: str,
-    qm: QueueManager = Depends(get_queue_manager),
-):
-    """视频文件下载"""
-    download_dir = qm.downloader.download_dir
-    filepath = download_dir / filename
-
-    logger.info("[/api/downloads/stream] request filename=%s, resolved path=%s", filename, filepath)
-
-    # 防止路径遍历攻击
-    try:
-        filepath.resolve().relative_to(download_dir.resolve())
-    except ValueError as e:
-        logger.warning("[/api/downloads/stream] illegal path: %s, error=%s", filepath, e)
-        raise HTTPException(status_code=403, detail="非法文件路径") from e
-
-    if not filepath.is_file():
-        logger.warning("[/api/downloads/stream] file not found: %s", filepath)
-        raise HTTPException(status_code=404, detail="文件不存在")
-
-    logger.info("[/api/downloads/stream] returning video: path=%s, size=%d", filepath, filepath.stat().st_size)
-    return FileResponse(
-        filepath,
-        media_type="video/mp4",
-        filename=filepath.name,
-        headers={"Content-Disposition": f'inline; filename="{filepath.name}"'},
-    )
+async def stream_video(filename: str):
+    """公开 API 不再按文件名播放主视频库内容。"""
+    raise HTTPException(status_code=403, detail="请通过分享链接播放视频")
 
 
 @router.get("/guest-downloads/stream/{session_id}/{filename:path}")
@@ -272,15 +247,17 @@ async def stream_guest_video(
     qm: QueueManager = Depends(get_queue_manager),
 ):
     """匿名用户视频文件下载（仅限自己的 session）"""
+    session_id = validate_guest_session_id(session_id)
     download_dir = qm.downloader.guest_download_dir
-    filepath = download_dir / session_id / filename
+    session_dir = resolve_inside(download_dir, session_id)
+    filepath = resolve_inside(session_dir, filename)
 
     logger.info("[/api/guest-downloads/stream] request session=%s filename=%s, resolved path=%s", 
                 session_id, filename, filepath)
 
     # 防止路径遍历攻击
     try:
-        filepath.resolve().relative_to((download_dir / session_id).resolve())
+        filepath.resolve().relative_to(session_dir.resolve())
     except ValueError as e:
         logger.warning("[/api/guest-downloads/stream] illegal path: %s, error=%s", filepath, e)
         raise HTTPException(status_code=403, detail="非法文件路径") from e
@@ -304,22 +281,11 @@ async def get_video_info(
     qm: QueueManager = Depends(get_queue_manager),
 ):
     """根据视频 hash ID 获取信息"""
-    download_dir = qm.downloader.download_dir
+    hash_id = validate_hash_id(hash_id)
 
     # 使用 hash 索引查找
     hash_index = qm.downloader._build_hash_index()
-    matched_file: Path | None = None
-    for h, fp in hash_index.items():
-        if h.startswith(hash_id) or hash_id.startswith(h):
-            matched_file = fp
-            break
-
-    if matched_file is None:
-        # 降级到递归扫描
-        for f in download_dir.rglob(f"{hash_id}*"):
-            if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
-                matched_file = f
-                break
+    matched_file: Path | None = hash_index.get(hash_id)
 
     if matched_file is not None and matched_file.is_file():
         stat = matched_file.stat()
@@ -349,22 +315,11 @@ async def get_thumbnail(
     qm: QueueManager = Depends(get_queue_manager),
 ):
     """获取视频的本地缩略图"""
-    download_dir = qm.downloader.download_dir
+    hash_id = validate_hash_id(hash_id)
 
     # 使用 hash 索引查找
     hash_index = qm.downloader._build_hash_index()
-    matched_file: Path | None = None
-    for h, fp in hash_index.items():
-        if h.startswith(hash_id) or hash_id.startswith(h):
-            matched_file = fp
-            break
-
-    if matched_file is None:
-        # 降级到递归扫描
-        for f in download_dir.rglob(f"{hash_id}*"):
-            if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
-                matched_file = f
-                break
+    matched_file: Path | None = hash_index.get(hash_id)
 
     if matched_file is None or not matched_file.is_file():
         raise HTTPException(status_code=404, detail="视频不存在")
@@ -389,64 +344,6 @@ async def get_thumbnail(
 
 
 @router.delete("/downloads/{filename:path}")
-async def delete_download(
-    filename: str,
-    qm: QueueManager = Depends(get_queue_manager),
-):
-    """
-    删除已下载的视频文件（含物理删除）。
-
-    会删除视频文件和同目录下的 meta.json。
-    """
-    download_dir = qm.downloader.download_dir
-    filepath = download_dir / filename
-
-    # 防止路径遍历攻击
-    try:
-        filepath.resolve().relative_to(download_dir.resolve())
-    except ValueError as e:
-        raise HTTPException(status_code=403, detail="非法文件路径") from e
-
-    if not filepath.is_file():
-        raise HTTPException(status_code=404, detail="文件不存在") from None
-
-    deleted_files: list[str] = []
-    parent_dir = filepath.parent
-
-    # 删除视频文件
-    try:
-        filepath.unlink()
-        deleted_files.append(str(filepath.relative_to(download_dir)))
-        logger.info("已删除视频文件: %s", filepath)
-    except OSError as e:
-        logger.error("删除视频文件失败: %s, 错误: %s", filepath, e)
-        raise HTTPException(status_code=500, detail=f"删除文件失败: {e}") from e
-
-    # 删除同目录下的 meta.json（如果该目录下没有其他视频文件）
-    meta_path = parent_dir / "meta.json"
-    if meta_path.exists():
-        try:
-            meta_path.unlink()
-            deleted_files.append(str(meta_path.relative_to(download_dir)))
-            logger.info("已删除元数据: %s", meta_path)
-        except OSError as e:
-            logger.warning("删除元数据失败 %s: %s", meta_path, e)
-
-    # 如果目录下没有其他文件，删除目录
-    try:
-        if parent_dir != download_dir and not any(parent_dir.iterdir()):
-            parent_dir.rmdir()
-            deleted_files.append(str(parent_dir.relative_to(download_dir)) + "/")
-            logger.info("已删除空目录: %s", parent_dir)
-    except OSError as e:
-        logger.warning("删除空目录失败 %s: %s", parent_dir, e)
-
-    # 刷新缓存，避免 hash 索引中残留已删除文件的引用
-    try:
-        qm.downloader.invalidate_file_index_cache()
-        qm.downloader.invalidate_hash_index()
-        logger.info("删除视频后已刷新缓存")
-    except Exception as e:
-        logger.warning("删除视频后刷新缓存失败: %s", e)
-
-    return DeleteDownloadResponse(status="ok", deleted_files=deleted_files)
+async def delete_download(filename: str):
+    """公开 API 不再允许按文件名删除主视频库内容。"""
+    raise HTTPException(status_code=403, detail="请通过管理员接口删除视频")

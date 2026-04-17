@@ -1,7 +1,9 @@
 README-Windows.md
 st.bat
 操作说明.md
-doc/*
+docs/*
+!docs/superpowers/
+!docs/superpowers/**
 
 # 敏感信息 - 每个环境独立管理
 .env
@@ -16,6 +18,8 @@ requirements-dev.txt
 
 # 测试 - 生产不需要
 tests/
+!tests/
+!tests/test_security_boundaries.py
 .pytest_cache/
 .ruff_cache/
 

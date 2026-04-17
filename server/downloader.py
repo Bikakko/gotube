@@ -21,6 +21,8 @@ from urllib.parse import urlparse
 import yt_dlp
 
 from .config import settings
+from .path_utils import resolve_inside
+from .security import validate_guest_session_id
 
 logger = logging.getLogger(__name__)
 
@@ -421,10 +423,12 @@ class Downloader:
         Returns:
             清理的目录数量。
         """
-        if not session_id:
+        try:
+            session_id = validate_guest_session_id(session_id)
+            session_dir = resolve_inside(self.guest_download_dir, session_id)
+        except Exception as e:
+            logger.warning("非法 guest session，跳过清理: %s, error=%s", session_id, e)
             return 0
-
-        session_dir = self.guest_download_dir / session_id
         if not session_dir.exists():
             logger.info("Guest session 目录不存在，无需清理: %s", session_id)
             return 0
@@ -432,6 +436,9 @@ class Downloader:
         count = 0
         try:
             # 删除整个 session 目录
+            if session_dir == self.guest_download_dir.resolve():
+                logger.warning("拒绝清理 guest 根目录: %s", session_dir)
+                return 0
             shutil.rmtree(session_dir)
             logger.info("已清理 guest session 临时文件: %s", session_id)
             count += 1
@@ -495,16 +502,18 @@ class Downloader:
         Returns:
             视频文件数量。
         """
-        if not session_id:
+        try:
+            session_id = validate_guest_session_id(session_id)
+            session_dir = resolve_inside(self.guest_download_dir, session_id)
+        except Exception as e:
+            logger.warning("非法 guest session，无法统计: %s, error=%s", session_id, e)
             return 0
-
-        session_dir = self.guest_download_dir / session_id
         if not session_dir.exists():
             return 0
 
         count = 0
         for f in session_dir.rglob("*"):
-            if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
+            if f.is_file() and not f.is_symlink() and f.suffix.lower() in VIDEO_EXTENSIONS:
                 count += 1
 
         return count
@@ -523,17 +532,18 @@ class Downloader:
         Raises:
             ValueError: 如果 session 不存在或没有视频。
         """
-        if not session_id:
-            raise ValueError("session_id 不能为空")
-
-        session_dir = self.guest_download_dir / session_id
+        try:
+            session_id = validate_guest_session_id(session_id)
+            session_dir = resolve_inside(self.guest_download_dir, session_id)
+        except Exception as e:
+            raise ValueError("非法 session_id") from e
         if not session_dir.exists():
             raise ValueError(f"游客 session 不存在: {session_id}")
 
         # 收集所有视频文件
         video_files = []
         for f in session_dir.rglob("*"):
-            if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
+            if f.is_file() and not f.is_symlink() and f.suffix.lower() in VIDEO_EXTENSIONS:
                 video_files.append(f)
 
         if not video_files:
@@ -549,7 +559,7 @@ class Downloader:
                 # 转移到 {title}_{hash}/{hash}.mp4
                 relative_to_session = video_file.relative_to(session_dir)
                 # relative_to_session 类似: "{title}_{hash}/{hash}.mp4"
-                target_path = self.download_dir / relative_to_session
+                target_path = resolve_inside(self.download_dir, relative_to_session)
 
                 # 检查目标是否已存在（避免重复转移）
                 if target_path.exists():
@@ -570,7 +580,7 @@ class Downloader:
                     if target_dir.exists():
                         # 目标目录已存在，逐个移动文件
                         for item in video_dir.iterdir():
-                            target_item = target_dir / item.name
+                            target_item = resolve_inside(target_dir, item.name)
                             if not target_item.exists():
                                 shutil.move(str(item), str(target_item))
                                 logger.info("转移文件: %s -> %s", item.name, target_dir)
@@ -1132,7 +1142,8 @@ class Downloader:
 
         # 根据是否为匿名用户决定目录路径
         if task.is_guest and task.session_id:
-            base_dir = self.guest_download_dir / task.session_id
+            session_id = validate_guest_session_id(task.session_id)
+            base_dir = resolve_inside(self.guest_download_dir, session_id)
             base_dir.mkdir(parents=True, exist_ok=True)
         else:
             base_dir = self.download_dir
