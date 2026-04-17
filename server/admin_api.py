@@ -26,11 +26,14 @@ from .config import settings
 from .db import AuthToken, MediaAsset, User
 from .models import (
     ChangePasswordRequest,
+    CreateInviteRequest,
     CreateUserRequest,
+    InviteResponse,
     LoginRequest,
     UpdateUserRequest,
     UserResponse,
 )
+from .invites import create_invite, list_invites, revoke_invite
 from .video_library import admin_delete_media_asset, list_user_video_items
 
 logger = logging.getLogger(__name__)
@@ -565,6 +568,47 @@ async def change_password(
     db.commit()
 
     return {"status": "ok"}
+
+
+# ── 邀请码管理 API ──
+
+
+@router.post("/invites", response_model=InviteResponse)
+async def create_invite_code(
+    body: CreateInviteRequest,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """管理员创建邀请码；明文 code 只在本次响应返回。"""
+    result = create_invite(
+        db,
+        admin,
+        max_uses=body.max_uses,
+        expires_hours=body.expires_hours,
+    )
+    db.commit()
+    return result
+
+
+@router.get("/invites", response_model=list[InviteResponse])
+async def get_invite_codes(
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> list[dict]:
+    """管理员查看邀请码列表，不返回明文 code。"""
+    return list_invites(db)
+
+
+@router.delete("/invites/{invite_id}", response_model=InviteResponse)
+async def delete_invite_code(
+    invite_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """管理员作废邀请码。"""
+    result = revoke_invite(db, invite_id)
+    db.commit()
+    return result
 
 
 # ── 视频管理 API ──

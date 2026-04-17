@@ -101,3 +101,31 @@ class ChangePasswordRequest(BaseModel):
 
     old_password: str | None = None  # 本人修改时需要验证旧密码
     new_password: str
+
+
+class RegisterRequest(BaseModel):
+    """普通用户邀请码注册请求"""
+
+    username: str
+    password: str
+    invite_code: str
+
+
+class CreateInviteRequest(BaseModel):
+    """管理员创建邀请码请求"""
+
+    max_uses: int = 1
+    expires_hours: int | None = None
+
+
+class InviteResponse(BaseModel):
+    """邀请码元数据响应；创建时才包含 code 明文"""
+
+    id: int
+    max_uses: int
+    used_count: int
+    expires_at: str | None
+    is_active: bool
+    created_at: str | None
+    status: str
+    code: str | None = None

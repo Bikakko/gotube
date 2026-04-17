@@ -144,18 +144,37 @@
     <div id="login-modal" class="modal" onclick="if(event.target===this)window.DownloadPage.closeLoginModal()">
         <div class="modal-content" style="max-width: 400px;">
             <div class="modal-header">
-                <h3>管理员登录</h3>
+                <h3 id="auth-modal-title">登录</h3>
                 <button class="modal-close" onclick="window.DownloadPage.closeLoginModal()">✕</button>
             </div>
             <div class="modal-body" style="padding: 20px;">
-                <div style="margin-bottom: 16px;">
-                    <input type="text" id="login-username" placeholder="用户名" style="width: 100%; padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 6px; font-size: 14px;" autocomplete="username">
+                <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+                    <button id="show-login-btn" type="button" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #58a6ff; background: #58a6ff; color: #0d1117; cursor: pointer;">登录</button>
+                    <button id="show-register-btn" type="button" style="flex: 1; padding: 8px; border-radius: 6px; border: 1px solid #30363d; background: transparent; color: #e6edf3; cursor: pointer;">注册</button>
                 </div>
-                <div style="margin-bottom: 16px;">
-                    <input type="password" id="login-password" placeholder="密码" style="width: 100%; padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 6px; font-size: 14px;" autocomplete="current-password">
+                <div id="login-panel">
+                    <div style="margin-bottom: 16px;">
+                        <input type="text" id="login-username" placeholder="用户名" style="width: 100%; padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 6px; font-size: 14px;" autocomplete="username">
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <input type="password" id="login-password" placeholder="密码" style="width: 100%; padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 6px; font-size: 14px;" autocomplete="current-password">
+                    </div>
+                    <div id="login-error" style="color: #f85149; font-size: 13px; text-align: center; min-height: 20px; margin-bottom: 10px;"></div>
+                    <button id="login-submit-btn" style="width: 100%; padding: 12px; border: none; border-radius: 6px; background: #e62117; color: #fff; font-size: 16px; font-weight: bold; cursor: pointer;">登录</button>
                 </div>
-                <div id="login-error" style="color: #f85149; font-size: 13px; text-align: center; min-height: 20px; margin-bottom: 10px;"></div>
-                <button id="login-submit-btn" style="width: 100%; padding: 12px; border: none; border-radius: 6px; background: #e62117; color: #fff; font-size: 16px; font-weight: bold; cursor: pointer;">登录</button>
+                <div id="register-panel" style="display: none;">
+                    <div style="margin-bottom: 16px;">
+                        <input type="text" id="register-username" placeholder="用户名，3-32 位字母/数字/_/-" style="width: 100%; padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 6px; font-size: 14px;" autocomplete="username">
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <input type="password" id="register-password" placeholder="密码，至少 6 位" style="width: 100%; padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 6px; font-size: 14px;" autocomplete="new-password">
+                    </div>
+                    <div style="margin-bottom: 16px;">
+                        <input type="text" id="register-invite" placeholder="邀请码" style="width: 100%; padding: 10px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; border-radius: 6px; font-size: 14px;" autocomplete="off">
+                    </div>
+                    <div id="register-error" style="color: #f85149; font-size: 13px; text-align: center; min-height: 20px; margin-bottom: 10px;"></div>
+                    <button id="register-submit-btn" style="width: 100%; padding: 12px; border: none; border-radius: 6px; background: #238636; color: #fff; font-size: 16px; font-weight: bold; cursor: pointer;">注册</button>
+                </div>
             </div>
         </div>
     </div>

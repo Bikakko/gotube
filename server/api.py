@@ -16,7 +16,8 @@ from sqlalchemy.orm import Session
 from .auth import get_current_user, get_db, get_optional_current_user
 from .db import User
 from .downloader import _read_meta_from_dir
-from .models import AddTaskRequest, TaskResponse
+from .invites import register_user_with_invite
+from .models import AddTaskRequest, RegisterRequest, TaskResponse
 from .path_utils import resolve_inside
 from .quota import get_effective_quota_bytes, refresh_user_storage_usage
 from .queue_manager import QueueManager
@@ -32,6 +33,29 @@ from .video_library import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.post("/auth/register")
+async def register(
+    body: RegisterRequest,
+    db: Session = Depends(get_db),
+) -> dict:
+    """公开注册接口：必须提供有效邀请码，只创建普通用户。"""
+    user = register_user_with_invite(
+        db,
+        username=body.username,
+        password=body.password,
+        invite_code=body.invite_code,
+    )
+    db.commit()
+    return {
+        "success": True,
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+        },
+    }
 
 
 # ── URL 验证 ──

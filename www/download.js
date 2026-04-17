@@ -458,6 +458,11 @@
     };
     $('#login-submit-btn').onclick = handleLogin;
     $('#login-password').onkeypress = (e) => { if (e.key === 'Enter') handleLogin(); };
+    $('#show-login-btn').onclick = () => switchAuthMode('login');
+    $('#show-register-btn').onclick = () => switchAuthMode('register');
+    $('#register-submit-btn').onclick = handleRegister;
+    $('#register-password').onkeypress = (e) => { if (e.key === 'Enter') handleRegister(); };
+    $('#register-invite').onkeypress = (e) => { if (e.key === 'Enter') handleRegister(); };
 
     // 初始化
     loadTasks();
@@ -566,8 +571,29 @@
 
     function showLoginModal() {
         $('#login-modal').classList.add('active');
+        switchAuthMode('login');
         $('#login-username').focus();
         $('#login-error').textContent = '';
+    }
+
+    function switchAuthMode(mode) {
+        const isRegister = mode === 'register';
+        $('#auth-modal-title').textContent = isRegister ? '注册' : '登录';
+        $('#login-panel').style.display = isRegister ? 'none' : 'block';
+        $('#register-panel').style.display = isRegister ? 'block' : 'none';
+        $('#show-login-btn').style.background = isRegister ? 'transparent' : '#58a6ff';
+        $('#show-login-btn').style.color = isRegister ? '#e6edf3' : '#0d1117';
+        $('#show-login-btn').style.borderColor = isRegister ? '#30363d' : '#58a6ff';
+        $('#show-register-btn').style.background = isRegister ? '#58a6ff' : 'transparent';
+        $('#show-register-btn').style.color = isRegister ? '#0d1117' : '#e6edf3';
+        $('#show-register-btn').style.borderColor = isRegister ? '#58a6ff' : '#30363d';
+        $('#login-error').textContent = '';
+        $('#register-error').textContent = '';
+        if (isRegister) {
+            $('#register-username').focus();
+        } else {
+            $('#login-username').focus();
+        }
     }
 
     function closeLoginModal() {
@@ -575,6 +601,10 @@
         $('#login-username').value = '';
         $('#login-password').value = '';
         $('#login-error').textContent = '';
+        $('#register-username').value = '';
+        $('#register-password').value = '';
+        $('#register-invite').value = '';
+        $('#register-error').textContent = '';
     }
 
     async function handleLogin() {
@@ -637,6 +667,69 @@
         } finally {
             btn.disabled = false;
             btn.textContent = '登录';
+        }
+    }
+
+    async function handleRegister() {
+        const username = $('#register-username').value.trim();
+        const password = $('#register-password').value.trim();
+        const inviteCode = $('#register-invite').value.trim();
+        const errorEl = $('#register-error');
+        const btn = $('#register-submit-btn');
+
+        if (!/^[A-Za-z0-9_-]{3,32}$/.test(username)) {
+            errorEl.textContent = '用户名需为 3-32 位字母、数字、下划线或短横线';
+            $('#register-username').focus();
+            return;
+        }
+        if (password.length < 6) {
+            errorEl.textContent = '密码至少 6 位';
+            $('#register-password').focus();
+            return;
+        }
+        if (!inviteCode) {
+            errorEl.textContent = '请输入邀请码';
+            $('#register-invite').focus();
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = '注册中...';
+        errorEl.textContent = '';
+
+        try {
+            const response = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username,
+                    password,
+                    invite_code: inviteCode
+                }),
+            });
+
+            if (!response.ok) {
+                let msg = '注册失败';
+                try {
+                    const data = await response.json();
+                    msg = data.detail || msg;
+                } catch { /* ignore */ }
+                throw new Error(msg);
+            }
+
+            $('#login-username').value = username;
+            $('#login-password').value = '';
+            switchAuthMode('login');
+            $('#login-error').style.color = '#3fb950';
+            $('#login-error').textContent = '注册成功，请登录';
+            setTimeout(() => {
+                $('#login-error').style.color = '#f85149';
+            }, 3000);
+        } catch (err) {
+            errorEl.textContent = err.message || '注册失败，请重试';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '注册';
         }
     }
 
