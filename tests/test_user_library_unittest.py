@@ -7,8 +7,16 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from server.api import download_my_video, download_shared_video, get_my_quota, get_my_videos, get_shared_video_info, update_my_video_share
-from server.db import Base, User
+from server.api import (
+    _register_transferred_guest_files,
+    download_my_video,
+    download_shared_video,
+    get_my_quota,
+    get_my_videos,
+    get_shared_video_info,
+    update_my_video_share,
+)
+from server.db import Base, User, UserVideoItem
 from server.models import UpdateShareRequest
 from server.video_library import (
     get_user_video_asset_for_download,
@@ -45,6 +53,16 @@ class UserLibraryTests(unittest.TestCase):
         video_file = video_dir / filename
         video_file.write_bytes(content)
         return video_file
+
+    def _write_meta(self, video_file: Path, *, url: str = "https://example.test/a", title: str = "Alpha") -> None:
+        (video_file.parent / "meta.json").write_text(
+            (
+                '{"title": "%s", "url": "%s", "file_hash": "%s", '
+                '"thumbnail": "", "duration": 12}'
+            )
+            % (title, url, video_file.stem),
+            encoding="utf-8",
+        )
 
     def test_user_can_toggle_own_share_and_token_resolution_follows_state(self):
         with self.Session() as session:
@@ -138,6 +156,48 @@ class UserLibraryTests(unittest.TestCase):
             with self.assertRaises(HTTPException) as videos_ctx:
                 asyncio.run(get_my_videos(current_user=admin, db=session))
             self.assertEqual(videos_ctx.exception.status_code, 403)
+
+    def test_guest_transfer_registration_creates_user_video_item_and_updates_task(self):
+        class FakeTask:
+            def __init__(self):
+                self.filename = "Alpha_aaaaaaaa/aaaaaaaa.mp4"
+                self.user_video_item_id = None
+                self.media_asset_id = None
+                self.share_token = ""
+                self.file_hash = ""
+
+        class FakeQueue:
+            def __init__(self, task):
+                self.task = task
+
+            def get_client_tasks(self, client_id):
+                return [self.task]
+
+        with self.Session() as session:
+            alice = self._user(session, "alice")
+            video_file = self._video_file("Alpha_aaaaaaaa", "aaaaaaaa.mp4")
+            self._write_meta(video_file)
+            task = FakeTask()
+            result = {
+                "transferred_files": ["Alpha_aaaaaaaa/aaaaaaaa.mp4"],
+                "updated_tasks": [{"task_id": "t1", "filename": "Alpha_aaaaaaaa/aaaaaaaa.mp4"}],
+            }
+
+            updated = _register_transferred_guest_files(
+                session,
+                current_user=alice,
+                transfer_result=result,
+                download_dir=self.download_dir,
+                qm=FakeQueue(task),
+                client_id="client-1",
+            )
+
+            self.assertEqual(updated["registered_count"], 1)
+            self.assertEqual(session.query(UserVideoItem).count(), 1)
+            self.assertIsNotNone(task.user_video_item_id)
+            self.assertEqual(task.filename, "Alpha_aaaaaaaa/aaaaaaaa.mp4")
+            self.assertEqual(updated["updated_tasks"][0]["user_video_item_id"], task.user_video_item_id)
+            self.assertTrue(updated["updated_tasks"][0]["share_token"])
 
     def test_share_info_and_download_work_with_share_token_and_preserve_extension(self):
         with self.Session() as session:

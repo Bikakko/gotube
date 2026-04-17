@@ -564,15 +564,20 @@ class Downloader:
                 relative_to_session = video_file.relative_to(session_dir)
                 # relative_to_session 类似: "{title}_{hash}/{hash}.mp4"
                 target_path = resolve_inside(self.download_dir, relative_to_session)
+                video_dir = video_file.parent
 
                 # 检查目标是否已存在（避免重复转移）
                 if target_path.exists():
                     logger.info("目标文件已存在，跳过: %s", target_path)
                     transferred.append(str(relative_to_session))
+                    try:
+                        shutil.rmtree(video_dir)
+                        logger.info("删除已转存重复 guest 目录: %s", video_dir)
+                    except OSError as e:
+                        logger.warning("删除重复 guest 目录失败 %s: %s", video_dir, e)
                     continue
 
                 # 获取视频所在目录（包含 meta.json 和缩略图）
-                video_dir = video_file.parent
 
                 # 创建目标目录
                 target_path.parent.mkdir(parents=True, exist_ok=True)

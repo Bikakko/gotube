@@ -284,8 +284,8 @@ async def catch_all(
 
 # ── WebSocket ──
 
-# 记录 guest session_id 的最近连接时间，用于区分"刷新"和"关闭"
-_guest_connections: dict[str, float] = {}
+# 记录 guest session_id 当前活跃连接数量，用于区分"刷新"和"关闭"
+_guest_connections: dict[str, int] = {}
 
 
 @app.websocket("/ws")
@@ -310,10 +310,8 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             return
     queue_mgr = _get_queue_manager()
 
-    # 记录 guest 连接时间
     if session_id:
-        import time
-        _guest_connections[session_id] = time.monotonic()
+        _guest_connections[session_id] = _guest_connections.get(session_id, 0) + 1
 
     # 注册客户端
     queue_mgr.register_client(client_id, lambda task: _on_progress(task, websocket))
@@ -351,23 +349,25 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         
         # 匿名用户断开：延迟清理临时文件
         if session_id:
+            active_count = max(0, _guest_connections.get(session_id, 0) - 1)
+            if active_count:
+                _guest_connections[session_id] = active_count
+            else:
+                _guest_connections.pop(session_id, None)
+
             # 区分"刷新"和"关闭"：
             # - 刷新：断开后很快重连（高延迟网络可能需要 10-20 秒）
             # - 关闭：断开后不重连
-            # 策略：延迟 30 秒清理，检查 session_id 是否在延迟期间有新连接
+            # 策略：延迟 30 秒清理，检查 session_id 是否仍无活跃连接
             async def _delayed_cleanup():
-                import time
                 await asyncio.sleep(30)
 
-                # 检查 session_id 是否在 30 秒内有新连接
-                last_connect = _guest_connections.get(session_id, 0)
-                if time.monotonic() - last_connect < 30:
+                if _guest_connections.get(session_id, 0) > 0:
                     logger.info("session 在延迟期间有新连接，保留 guest session: %s", session_id)
                 else:
                     logger.info("session 无新连接，清理 guest session: %s", session_id)
                     cleaned = queue_mgr.downloader.cleanup_guest_session(session_id)
                     logger.info("已清理 %d 个 guest session 目录", cleaned)
-                    # 清理连接记录
                     _guest_connections.pop(session_id, None)
 
             # 启动后台清理任务

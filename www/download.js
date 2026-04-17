@@ -14,12 +14,13 @@
     sessionStorage.setItem('gotube_client_id', clientId);
 
     // ── 匿名用户 Session 管理 ──
-    // 使用 localStorage 持久化，刷新页面时复用
+    // 使用 sessionStorage：刷新页面复用，关闭标签页后失效，避免旧路人 session 被新登录用户转存。
     const GUEST_SESSION_STORAGE_KEY = 'gotube_guest_session_id';
-    let guestSessionId = localStorage.getItem(GUEST_SESSION_STORAGE_KEY);
+    localStorage.removeItem(GUEST_SESSION_STORAGE_KEY);
+    let guestSessionId = sessionStorage.getItem(GUEST_SESSION_STORAGE_KEY);
     if (!guestSessionId) {
         guestSessionId = 'guest_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
-        localStorage.setItem(GUEST_SESSION_STORAGE_KEY, guestSessionId);
+        sessionStorage.setItem(GUEST_SESSION_STORAGE_KEY, guestSessionId);
         console.log('[Session] 创建新 session:', guestSessionId);
     } else {
         console.log('[Session] 复用已有 session:', guestSessionId);
@@ -172,6 +173,11 @@
         sessionStorage.setItem('gotube_client_id', clientId);
         clearTasks();
         connectWS();
+    }
+
+    function rotateGuestSession() {
+        guestSessionId = 'guest_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
+        sessionStorage.setItem(GUEST_SESSION_STORAGE_KEY, guestSessionId);
     }
 
     async function retryTask(id) {
@@ -437,7 +443,11 @@
         }
 
         const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-        ws = new WebSocket(`${proto}//${location.host}/ws?client_id=${clientId}&session_id=${guestSessionId}`);
+        const params = new URLSearchParams({ client_id: clientId });
+        if (!isLoggedIn) {
+            params.set('session_id', guestSessionId);
+        }
+        ws = new WebSocket(`${proto}//${location.host}/ws?${params.toString()}`);
         const currentWs = ws;
 
         ws.onopen = () => {
@@ -530,9 +540,12 @@
     };
 
     // 初始化
-    loadTasks();
-    connectWS();
-    checkLoginStatus();
+    async function init() {
+        loadTasks();
+        await checkLoginStatus();
+        connectWS();
+    }
+    init();
 
     /**
      * 下载 guest 临时文件
@@ -1021,10 +1034,12 @@
             if (isRegularUser()) {
                 await checkAndTransferGuestDownloads();
                 await loadMyLibrary();
+                connectWS();
             } else {
                 myVideos = [];
                 myQuota = null;
                 renderMyLibrary();
+                connectWS();
             }
         } catch (err) {
             errorEl.textContent = err.message || '登录失败，请重试';
@@ -1135,6 +1150,7 @@
 
             const transferData = await transferRes.json();
             const transferredCount = transferData.transferred_count;
+            const registeredCount = transferData.registered_count || 0;
 
             // 使用后端返回的 updated_tasks 更新本地任务数据
             if (transferData.updated_tasks && transferData.updated_tasks.length > 0) {
@@ -1151,7 +1167,8 @@
             }
 
             // 显示 Toast 提示
-            showToast(`✅ 已转移 ${transferredCount} 个视频到视频库`, '#3fb950');
+            showToast(`✅ 已转移 ${transferredCount} 个视频，入库 ${registeredCount} 个`, '#3fb950');
+            rotateGuestSession();
             await loadMyLibrary();
 
         } catch (err) {

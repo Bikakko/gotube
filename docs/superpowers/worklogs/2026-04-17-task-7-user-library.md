@@ -141,3 +141,35 @@
 - `venv\Scripts\python.exe -m compileall server`
 - `git diff --check`
 - `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_admin_management_unittest tests.test_auth_roles_unittest tests.test_video_library_unittest -v`
+
+## 修复记录：游客 session 生命周期和转存入库
+
+用户继续验收反馈后修复：
+
+- 路人用户关闭窗口后临时视频不删除：
+  - 服务端 WebSocket guest 清理从“最后连接时间”改为“活跃连接计数”；
+  - 断开后延迟 30 秒，只在该 session 无活跃连接时清理，避免 30 秒边界误判后永久保留。
+- 关闭窗口后再次登录会转入之前路人的视频：
+  - 前端 guest session 改为 `sessionStorage`，刷新保留、关闭标签页后失效；
+  - 启动时清理旧版 `localStorage` guest session，避免旧路人 session 被新登录用户复用。
+- 停留下载页时登录转存后不出现在用户视频库：
+  - guest 转存移动文件后，服务端把转入主目录的文件注册为当前普通用户的 `UserVideoItem`；
+  - 回填任务的 `user_video_item_id`、`media_asset_id`、`share_token`；
+  - 前端显示“转移数量 / 入库数量”，转存成功后刷新我的视频库并轮换 guest session。
+- 转存目标文件已存在时清理重复 guest 目录，避免临时目录残留。
+
+追加验证：
+
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest -v`
+- `node --check www\download.js`
+- `venv\Scripts\python.exe -m compileall server`
+- `git diff --check`
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_admin_management_unittest tests.test_auth_roles_unittest tests.test_video_library_unittest tests.test_v4_migrations_unittest tests.test_invites_unittest -v`
+- 临时 `uvicorn server.main:app --port 8766` 启动检查：
+  - `/health` 返回 200；
+  - `/7777` 返回 200；
+  - `/static/download.js` 返回 200，包含 `sessionStorage` 和旧 `localStorage` guest session 清理。
+
+未执行：
+
+- `pytest tests\test_security_boundaries.py`：当前 venv 未安装 `pytest`。

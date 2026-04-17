@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .auth import get_current_user, get_db, get_optional_current_user
-from .db import User
+from .db import MediaAsset, User
 from .downloader import _read_meta_from_dir
 from .invites import register_user_with_invite
 from .models import AddTaskRequest, RegisterRequest, TaskResponse, UpdateShareRequest
@@ -28,6 +28,7 @@ from .video_library import (
     delete_user_video_item,
     get_user_video_asset_for_download,
     list_user_video_items,
+    register_completed_file,
     resolve_share_token,
     set_user_video_share_enabled,
 )
@@ -103,6 +104,71 @@ def _require_regular_user(current_user: User) -> User:
     if current_user.role != "user":
         raise HTTPException(status_code=403, detail="管理员请使用管理后台")
     return current_user
+
+
+def _register_transferred_guest_files(
+    db: Session,
+    *,
+    current_user: User,
+    transfer_result: dict,
+    download_dir: Path,
+    qm: QueueManager,
+    client_id: str,
+) -> dict:
+    """把已移动到主目录的 guest 文件注册到当前普通用户的视频库。"""
+    item_by_filename: dict[str, dict] = {}
+    for rel_name in transfer_result.get("transferred_files", []):
+        filepath = resolve_inside(download_dir, rel_name)
+        if not filepath.is_file():
+            logger.warning("转存文件不存在，跳过注册: %s", filepath)
+            continue
+
+        meta = _read_meta_from_dir(filepath.parent)
+        item = register_completed_file(
+            db,
+            owner_user_id=current_user.id,
+            filepath=filepath,
+            download_dir=download_dir,
+            source_url=meta.get("url", ""),
+            title=meta.get("title") or filepath.parent.name,
+            file_hash=meta.get("file_hash") or filepath.stem,
+            thumbnail=meta.get("thumbnail", ""),
+            duration=meta.get("duration", 0),
+            meta=meta,
+            created_from="guest_transfer",
+        )
+        db.flush()
+        asset = db.query(MediaAsset).filter(MediaAsset.id == item.media_asset_id).one()
+        item_info = {
+            "user_video_item_id": item.id,
+            "media_asset_id": asset.id,
+            "share_token": item.share_token,
+            "file_hash": asset.file_hash,
+            "filename": asset.filename,
+        }
+        item_by_filename[rel_name] = item_info
+        item_by_filename[asset.filename] = item_info
+
+    if not item_by_filename:
+        return transfer_result
+
+    for task in qm.get_client_tasks(client_id):
+        item_info = item_by_filename.get(task.filename)
+        if not item_info:
+            continue
+        task.user_video_item_id = item_info["user_video_item_id"]
+        task.media_asset_id = item_info["media_asset_id"]
+        task.share_token = item_info["share_token"]
+        task.file_hash = item_info["file_hash"]
+        task.filename = item_info["filename"]
+
+    for task_data in transfer_result.get("updated_tasks", []):
+        item_info = item_by_filename.get(task_data.get("filename"))
+        if item_info:
+            task_data.update(item_info)
+
+    transfer_result["registered_count"] = len(item_by_filename)
+    return transfer_result
 
 
 # ── 辅助函数 ──
@@ -229,6 +295,7 @@ async def transfer_guest_downloads(
     client_id: str = Query(..., description="客户端标识"),
     qm: QueueManager = Depends(get_queue_manager),
     current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """
     将游客临时视频转移到视频库。
@@ -240,6 +307,15 @@ async def transfer_guest_downloads(
     session_id = validate_guest_session_id(session_id)
     try:
         result = qm.downloader.transfer_guest_session(session_id, client_id=client_id)
+        result = _register_transferred_guest_files(
+            db=db,
+            current_user=current_user,
+            transfer_result=result,
+            download_dir=settings.get_download_dir(),
+            qm=qm,
+            client_id=client_id,
+        )
+        db.commit()
         return result
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
