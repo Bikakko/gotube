@@ -21,8 +21,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
 
+from .auth import get_current_user, get_db, require_admin
 from .config import settings
-from .db import AuthToken, User, get_session
+from .db import AuthToken, User
 from .models import (
     ChangePasswordRequest,
     CreateUserRequest,
@@ -60,104 +61,6 @@ def generate_token(db: Session, user_id: int, username: str, role: str) -> str:
     logger.info("生成 token: user=%s, role=%s, 过期时间: %s",
                 username, role, expiry.isoformat())
     return token
-
-
-def verify_token(db: Session, token: str | None) -> dict | None:
-    """验证 token 并返回 payload"""
-    if not token:
-        return None
-
-    # 从数据库查询 token
-    auth_token = db.query(AuthToken).filter(
-        AuthToken.token == token,
-        AuthToken.is_active == True,
-    ).first()
-    
-    if not auth_token:
-        return None
-    
-    # 检查是否过期
-    now = datetime.now(UTC)
-    expires_at = auth_token.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=UTC)
-
-    if now > expires_at:
-        auth_token.is_active = False
-        db.commit()
-        return None
-    
-    # 数据库检查用户状态
-    try:
-        user = db.query(User).filter(User.id == auth_token.user_id).first()
-        if not user or not user.is_active:
-            auth_token.is_active = False
-            db.commit()
-            return None
-        
-        # 更新 last_used_at
-        auth_token.last_used_at = datetime.now(UTC)
-        db.commit()
-        
-        return {
-            "user_id": user.id,
-            "username": user.username,
-            "role": user.role,
-            "expiry": auth_token.expires_at.timestamp(),
-        }
-    except Exception as e:
-        logger.error("Token 查库校验失败: %s", e)
-        return None
-
-
-def cleanup_expired_tokens(db: Session) -> None:
-    """清理过期 token"""
-    now = datetime.now(UTC)
-    expired_tokens = db.query(AuthToken).filter(
-        AuthToken.expires_at < now,
-        AuthToken.is_active == True,
-    ).all()
-    
-    for auth_token in expired_tokens:
-        auth_token.is_active = False
-    
-    db.commit()
-    
-    if expired_tokens:
-        logger.info("清理了 %d 个过期 token", len(expired_tokens))
-
-
-async def get_db():
-    """依赖注入：获取数据库会话"""
-    with get_session() as session:
-        yield session
-
-
-async def verify_admin_authorization(
-    request: Request,
-    db: Session = Depends(get_db),
-) -> dict:
-    """
-    依赖注入：验证 Authorization Header 中的 Bearer token。
-
-    Returns:
-        token payload 字典。
-    """
-    auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="未授权访问")
-
-    token = auth_header[7:].strip()
-
-    # 清理过期token
-    cleanup_expired_tokens(db)
-
-    # 验证token
-    payload = verify_token(db, token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Token 无效或已过期")
-
-    return payload
 
 
 # ── 辅助函数 ──
@@ -455,16 +358,16 @@ async def admin_login(
 
 
 @router.get("/auth/check")
-async def auth_check(payload: dict = Depends(verify_admin_authorization)) -> dict:
+async def auth_check(current_user: User = Depends(get_current_user)) -> dict:
     """
     检查当前 token 是否有效，返回用户信息。
     """
     return {
         "valid": True,
         "user": {
-            "id": payload["user_id"],
-            "username": payload["username"],
-            "role": payload["role"],
+            "id": current_user.id,
+            "username": current_user.username,
+            "role": current_user.role,
         }
     }
 
@@ -472,7 +375,7 @@ async def auth_check(payload: dict = Depends(verify_admin_authorization)) -> dic
 @router.post("/auth/logout")
 async def auth_logout(
     request: Request,
-    payload: dict = Depends(verify_admin_authorization),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
     """
@@ -490,7 +393,7 @@ async def auth_logout(
         if auth_token:
             auth_token.is_active = False
             db.commit()
-            logger.info("用户 %s 主动登出", payload["username"])
+            logger.info("用户 %s 主动登出", current_user.username)
     
     return {"success": True}
 
@@ -500,13 +403,10 @@ async def auth_logout(
 
 @router.get("/users", response_model=list[UserResponse])
 async def list_users(
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> list:
     """获取用户列表 (仅限 admin)"""
-    if payload["role"] != "admin":
-        raise HTTPException(status_code=403, detail="权限不足")
-
     users = db.query(User).all()
     result = []
     for u in users:
@@ -521,13 +421,10 @@ async def list_users(
 @router.post("/users", response_model=UserResponse)
 async def create_user(
     body: CreateUserRequest,
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     """创建新用户 (仅限 admin)"""
-    if payload["role"] != "admin":
-        raise HTTPException(status_code=403, detail="权限不足")
-
     # 禁止通过网页创建 admin 权限账号
     if body.role == "admin":
         raise HTTPException(
@@ -560,13 +457,10 @@ async def create_user(
 async def update_user(
     user_id: int,
     body: UpdateUserRequest,
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     """更新用户信息 (仅限 admin)"""
-    if payload["role"] != "admin":
-        raise HTTPException(status_code=403, detail="权限不足")
-
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
@@ -586,6 +480,11 @@ async def update_user(
         user.username = body.username
 
     if body.role:
+        if body.role == "admin":
+            raise HTTPException(
+                status_code=403,
+                detail="不可通过网页创建管理员账号，请通过 .env 配置文件管理"
+            )
         user.role = body.role
 
     if body.is_active is not None:
@@ -598,14 +497,11 @@ async def update_user(
 @router.delete("/users/{user_id}")
 async def delete_user(
     user_id: int,
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
     """删除用户 (仅限 admin)"""
-    if payload["role"] != "admin":
-        raise HTTPException(status_code=403, detail="权限不足")
-
-    if user_id == payload["user_id"]:
+    if user_id == admin.id:
         raise HTTPException(status_code=400, detail="不能删除当前登录账号")
 
     user = db.query(User).filter(User.id == user_id).first()
@@ -628,12 +524,12 @@ async def delete_user(
 async def change_password(
     user_id: int,
     body: ChangePasswordRequest,
-    payload: dict = Depends(verify_admin_authorization),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
     """修改密码 (本人或 admin)"""
-    is_admin = payload["role"] == "admin"
-    is_self = payload["user_id"] == user_id
+    is_admin = current_user.role == "admin"
+    is_self = current_user.id == user_id
 
     if not (is_admin or is_self):
         raise HTTPException(status_code=403, detail="权限不足")
@@ -680,7 +576,7 @@ async def get_videos(
     time: str | None = Query("all", description="时间范围: all/today/week/month/earlier"),
     page: int = Query(1, ge=1, description="页码"),
     per_page: int = Query(20, ge=1, le=100, description="每页数量"),
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
 ) -> dict:
     """
     获取视频列表，支持筛选和分页。
@@ -722,14 +618,11 @@ async def get_videos(
 @router.delete("/videos/{filename:path}")
 async def delete_video(
     filename: str,
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
 ) -> dict:
     """
     删除单个视频（含物理文件和元数据）。
     """
-    if payload["role"] == "readonly":
-        raise HTTPException(status_code=403, detail="权限不足")
-
     download_dir = settings.get_download_dir()
     filepath = _validate_filename(filename, download_dir)
     
@@ -791,16 +684,13 @@ async def delete_video(
 @router.post("/videos/batch-delete")
 async def batch_delete_videos(
     request: Request,
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
 ) -> dict:
     """
     批量删除视频。
     
     请求体: {"filenames": ["file1.mp4", "file2.mp4"]}
     """
-    if payload["role"] == "readonly":
-        raise HTTPException(status_code=403, detail="权限不足")
-
     try:
         body = await request.json()
     except Exception:
@@ -873,16 +763,13 @@ async def batch_delete_videos(
 async def update_video_tags(
     filename: str,
     request: Request,
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
 ) -> dict:
     """
     更新视频标签。
     
     请求体: {"tags": ["tag1", "tag2"]}
     """
-    if payload["role"] == "readonly":
-        raise HTTPException(status_code=403, detail="权限不足")
-
     download_dir = settings.get_download_dir()
     filepath = _validate_filename(filename, download_dir)
     
@@ -914,7 +801,7 @@ async def update_video_tags(
 @router.post("/export/zip")
 async def export_zip(
     request: Request,
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
 ) -> StreamingResponse:
     """
     导出选中视频为 ZIP 文件。
@@ -981,7 +868,7 @@ async def export_zip(
 @router.post("/export/json")
 async def export_json(
     request: Request,
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
 ) -> Response:
     """
     导出所有视频元数据为 JSON 文件。
@@ -1018,7 +905,7 @@ async def export_json(
 @router.post("/export/m3u8")
 async def export_m3u8(
     request: Request,
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
 ) -> Response:
     """
     导出选中视频为 m3u8 播放列表。
@@ -1071,7 +958,7 @@ async def export_m3u8(
 
 @router.get("/stats")
 async def get_stats(
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
 ) -> dict:
     """
     获取视频统计信息。
@@ -1326,7 +1213,7 @@ def _reload_cookies_in_downloader(cookies_path: Path) -> None:
 
 @router.get("/cookies/status")
 async def get_cookies_status(
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
 ) -> dict:
     """
     获取当前 cookies 状态信息。
@@ -1385,7 +1272,7 @@ async def get_cookies_status(
 @router.post("/cookies/check_merge")
 async def check_cookies_merge(
     request: Request,
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
 ) -> dict:
     """
     预检查上传的 cookies 内容，返回将影响的域名。
@@ -1458,7 +1345,7 @@ async def check_cookies_merge(
 async def upload_cookies(
     request: Request,
     mode: str = Query(default="replace", description="上传模式：replace（替换整个文件）或 merge（智能合并）"),
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
 ) -> dict:
     """
     上传/更新 cookies 文件。
@@ -1577,7 +1464,7 @@ async def upload_cookies(
 
 @router.delete("/cookies")
 async def delete_cookies(
-    payload: dict = Depends(verify_admin_authorization),
+    admin: User = Depends(require_admin),
 ) -> dict:
     """
     删除上传的 cookies 文件，恢复到 .env 配置的路径。

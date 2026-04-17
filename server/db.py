@@ -19,7 +19,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(50), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
-    role = Column(String(20), nullable=False, default="user")  # admin/user/readonly
+    role = Column(String(20), nullable=False, default="user")  # admin/user
     is_active = Column(Boolean, nullable=False, default=True)
     storage_quota_mb = Column(Integer, nullable=True)
     storage_used_bytes = Column(Integer, nullable=False, default=0)

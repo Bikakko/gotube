@@ -4,7 +4,7 @@ Pydantic 请求/响应模型
 集中管理所有 API 的数据模型。
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AddTaskRequest(BaseModel):
@@ -68,7 +68,14 @@ class CreateUserRequest(BaseModel):
 
     username: str
     password: str
-    role: str = "user"  # admin/user/readonly
+    role: str = "user"  # admin/user
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        if value not in {"admin", "user"}:
+            raise ValueError("角色只能是 admin 或 user")
+        return value
 
 
 class UpdateUserRequest(BaseModel):
@@ -77,6 +84,13 @@ class UpdateUserRequest(BaseModel):
     username: str | None = None
     role: str | None = None
     is_active: bool | None = None
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str | None) -> str | None:
+        if value is not None and value not in {"admin", "user"}:
+            raise ValueError("角色只能是 admin 或 user")
+        return value
 
 
 class ChangePasswordRequest(BaseModel):

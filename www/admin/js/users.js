@@ -265,8 +265,7 @@ function renderUsersTable(users) {
 function formatRole(role) {
     const map = {
         'admin': '管理员',
-        'user': '普通用户',
-        'readonly': '只读用户'
+        'user': '普通用户'
     };
     return map[role] || role;
 }
@@ -346,7 +345,6 @@ function showUserEditModal(user = null) {
                     el('label', { textContent: '角色' }),
                     el('select', { id: 'edit-role' }, [
                         el('option', { value: 'user', textContent: '普通用户', selected: user ? user.role === 'user' : true }),
-                        el('option', { value: 'readonly', textContent: '只读用户', selected: user ? user.role === 'readonly' : false }),
                     ]),
                 ]),
             ]),

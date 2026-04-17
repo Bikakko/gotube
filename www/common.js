@@ -99,8 +99,7 @@ function extractSource(url) {
 function formatRole(role) {
     const map = {
         'admin': '管理员',
-        'user': '普通用户',
-        'readonly': '只读用户'
+        'user': '普通用户'
     };
     return map[role] || role;
 }

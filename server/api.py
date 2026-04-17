@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 
-from .admin_api import verify_admin_authorization
+from .auth import get_current_user
 from .downloader import _read_meta_from_dir
 from .models import AddTaskRequest, TaskResponse
 from .path_utils import resolve_inside
@@ -157,7 +157,7 @@ async def transfer_guest_downloads(
     session_id: str,
     client_id: str = Query(..., description="客户端标识"),
     qm: QueueManager = Depends(get_queue_manager),
-    payload: dict = Depends(verify_admin_authorization),
+    current_user=Depends(get_current_user),
 ):
     """
     将游客临时视频转移到视频库。

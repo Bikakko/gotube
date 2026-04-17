@@ -252,7 +252,7 @@ venv\Scripts\python.exe -c "from server.main import app; print(app.title)"
 - 修改：`www/admin/js/render.js`
 - 修改：`www/common.js`
 
-- [ ] **步骤 1：抽取认证依赖**
+- [x] **步骤 1：抽取认证依赖**
 
 新增 `server/auth.py`，从 `admin_api.py` 迁移通用逻辑：
 
@@ -270,15 +270,15 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
     return user
 ```
 
-- [ ] **步骤 2：管理员 API 使用 require_admin**
+- [x] **步骤 2：管理员 API 使用 require_admin**
 
 把用户管理、邀请码管理、全局视频管理接口统一改为 `Depends(require_admin)`。
 
-- [ ] **步骤 3：普通用户 API 使用 get_current_user**
+- [x] **步骤 3：普通用户 API 使用 get_current_user**
 
 登录用户接口不再信任 `client_id` 判权。`client_id` 只保留给任务查询和 WebSocket 进度。
 
-- [ ] **步骤 4：删除 readonly 角色**
+- [x] **步骤 4：删除 readonly 角色**
 
 后端：
 
@@ -292,7 +292,7 @@ async def require_admin(user: User = Depends(get_current_user)) -> User:
 - 删除 readonly 禁用删除按钮的逻辑。
 - 删除 readonly 文案和样式。
 
-- [ ] **步骤 5：验证**
+- [x] **步骤 5：验证**
 
 运行：
 

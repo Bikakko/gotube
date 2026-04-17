@@ -281,7 +281,6 @@ a { color: inherit; text-decoration: none; }
 .role-badge { font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase; }
 .role-badge.admin { background: var(--primary); color: #fff; }
 .role-badge.user { background: var(--info); color: #fff; }
-.role-badge.readonly { background: var(--text-sec); color: #fff; }
 
 .users-container { background: var(--surface); border-radius: 8px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
 .users-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }

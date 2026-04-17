@@ -97,13 +97,13 @@ function renderNavbar() {
                         }),
                     ]),
                 ]),
-                user.role !== 'readonly' ? el('button', {
+                el('button', {
                     className: 'btn btn-danger',
                     textContent: '🗑️ 批量删除',
                     id: 'batch-delete-btn',
                     disabled: true,
                     onClick: () => handleBatchDelete(),
-                }) : null,
+                }),
                 el('button', {
                     className: 'btn btn-secondary',
                     textContent: '🍪 Cookie 管理',
@@ -396,14 +396,14 @@ function renderVideoCard(video) {
                     window.showShareModal(video);
                 },
             }),
-            state.currentUser && state.currentUser.role !== 'readonly' ? el('button', {
+            el('button', {
                 className: 'action-btn delete',
                 textContent: '🗑️ 删除',
                 onClick: (e) => {
                     e.stopPropagation();
                     window.handleDeleteVideo(video.filename);
                 },
-            }) : null,
+            }),
         ]),
         // 选择按钮放在最右边
         el('div', { className: 'action-group' }, [
@@ -515,11 +515,11 @@ function renderBatchBar() {
             textContent: '🎵 导出 m3u8',
             onClick: () => window.handleExportM3u8(),
         }),
-        state.currentUser && state.currentUser.role !== 'readonly' ? el('button', {
+        el('button', {
             className: 'btn btn-danger',
             textContent: '🗑️ 批量删除',
             onClick: () => window.handleBatchDelete(),
-        }) : null,
+        }),
         el('button', {
             className: 'btn btn-secondary',
             textContent: '取消选择',
