@@ -27,6 +27,7 @@ from .video_library import (
     create_item_from_existing_source,
     delete_user_video_item,
     get_user_video_asset_for_download,
+    get_asset_from_existing_source,
     list_user_video_items,
     register_completed_file,
     resolve_share_token,
@@ -255,6 +256,12 @@ async def add_task(
         raise HTTPException(status_code=403, detail="匿名用户下载功能已禁用")
     if is_guest:
         req.session_id = validate_guest_session_id(req.session_id)
+        existing_asset = get_asset_from_existing_source(db, req.url)
+        if existing_asset is not None:
+            db.commit()
+            task = qm.add_completed_guest_asset_task(req.url, client_id, req.session_id, existing_asset)
+            logger.info("游客复用已有视频: task=%s, asset=%s", task.task_id, existing_asset.id)
+            return _task_to_response(task)
 
     library_user = current_user if current_user is not None and current_user.role == "user" else None
     owner_user_id = library_user.id if library_user is not None else None
@@ -327,6 +334,7 @@ async def transfer_guest_downloads(
 @router.get("/guest-downloads/{session_id}/count")
 async def get_guest_download_count(
     session_id: str,
+    client_id: str | None = Query(None, description="客户端标识"),
     qm: QueueManager = Depends(get_queue_manager),
 ):
     """
@@ -336,6 +344,16 @@ async def get_guest_download_count(
     """
     session_id = validate_guest_session_id(session_id)
     count = qm.downloader.get_guest_download_count(session_id)
+    if client_id:
+        duplicate_count = sum(
+            1
+            for task in qm.get_client_tasks(client_id)
+            if task.is_guest
+            and task.session_id == session_id
+            and task.filename
+            and "/DUPLICATE/" in task.filename
+        )
+        count += duplicate_count
     return {"session_id": session_id, "count": count}
 
 

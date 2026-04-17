@@ -173,3 +173,34 @@
 未执行：
 
 - `pytest tests\test_security_boundaries.py`：当前 venv 未安装 `pytest`。
+
+## 修复记录：复用、容量和界面增长问题
+
+用户继续验收反馈后修复：
+
+- 用户界面会随视频增多变长：
+  - “我的视频库”增加前端分页，每页 8 个视频。
+- 不同用户或游客下载视频库已有 URL 仍走下载：
+  - 新增按来源 URL 读取已有媒体资产的服务函数；
+  - 普通用户继续直接创建自己的视频库条目；
+  - 游客命中已有媒体资产时创建完成态 guest 占位任务，不再启动下载。
+- 游客并发同视频时互相误伤：
+  - 全局 hash 去重索引排除 `temp_guest`，避免游客 2 复用游客 1 的临时文件；
+  - guest 转存支持 `DUPLICATE` 占位任务，即使 session 目录没有实体视频也能转入用户库。
+- 登录用户下载完成后容量超限：
+  - 用户库注册失败时，如果是本次新下载的非重复文件，删除落盘文件和目录；
+  - 避免“文件已落盘但无法入库”的残留状态。
+- 管理员退出登录：
+  - admin 退出后跳转到 `/`，不再停留在 `/admin` 并弹登录框。
+
+追加验证：
+
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_video_library_unittest -v`
+- `node --check www\download.js www\admin\js\auth.js`
+- `venv\Scripts\python.exe -m compileall server`
+- `git diff --check`
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_admin_management_unittest tests.test_auth_roles_unittest tests.test_video_library_unittest tests.test_v4_migrations_unittest tests.test_invites_unittest -v`
+- 临时 `uvicorn server.main:app --port 8766` 启动检查：
+  - `/health` 返回 200；
+  - `/static/download.js` 返回 200，包含 `libraryPageSize`；
+  - `/static/admin/js/auth.js` 返回 200，退出后跳转 `/`。

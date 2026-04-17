@@ -112,6 +112,25 @@ class QueueManager:
         logger.info("复用已有媒体资产创建完成任务: %s, asset=%s, item=%s", task.task_id, asset.id, item.id)
         return task
 
+    def add_completed_guest_asset_task(self, url: str, client_id: str, session_id: str, asset) -> DownloadTask:
+        """Create a completed guest task for an existing library asset."""
+        task = self.downloader.create_task(url, client_id)
+        task.status = "completed"
+        task.progress = 100.0
+        task.completed_at = datetime.now(UTC)
+        task.filename = f"temp_guest/{session_id}/DUPLICATE/{asset.filename}"
+        task.filepath = asset.filepath
+        task.title = asset.title
+        task.thumbnail = asset.thumbnail
+        task.duration = asset.duration or 0
+        task.file_hash = asset.file_hash
+        task.is_duplicate = True
+        task.is_guest = True
+        task.session_id = session_id
+        task.media_asset_id = asset.id
+        logger.info("复用已有媒体资产创建游客任务: %s, asset=%s, session=%s", task.task_id, asset.id, session_id)
+        return task
+
     def _find_task_by_url(self, client_id: str, url: str) -> DownloadTask | None:
         """
         查找同客户端下相同URL的非失败任务。
@@ -176,7 +195,28 @@ class QueueManager:
                 session.rollback()
                 task.status = "failed"
                 task.error = str(exc)
+                if not task.is_duplicate:
+                    self._delete_failed_library_download(task)
                 logger.error("注册用户视频库条目失败: task=%s, error=%s", task.task_id, exc)
+
+    def _delete_failed_library_download(self, task: DownloadTask) -> None:
+        """Remove a newly downloaded file that could not be registered to a user's library."""
+        if not task.filepath:
+            return
+        path = Path(task.filepath)
+        try:
+            if path.is_file():
+                parent = path.parent
+                path.unlink()
+                if parent != self.downloader.download_dir and parent.exists():
+                    import shutil
+
+                    shutil.rmtree(parent)
+                self.downloader.invalidate_file_index_cache()
+                self.downloader.invalidate_hash_index()
+                logger.info("已删除未入库下载文件: task=%s path=%s", task.task_id, path)
+        except OSError as exc:
+            logger.warning("删除未入库下载文件失败: task=%s path=%s error=%s", task.task_id, path, exc)
 
     def _build_callback(self, client_id: str) -> Callable:
         """构建进度回调函数"""

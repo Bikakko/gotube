@@ -11,6 +11,7 @@ from server.video_library import (
     admin_delete_media_asset,
     create_item_from_existing_source,
     delete_user_video_item,
+    get_asset_from_existing_source,
     register_completed_file,
     resolve_share_token,
 )
@@ -98,14 +99,18 @@ class VideoLibraryTests(unittest.TestCase):
             )
 
             reused = create_item_from_existing_source(session, bob.id, "https://example.test/a")
+            existing_asset = get_asset_from_existing_source(session, "https://example.test/a")
 
             self.assertIsNotNone(reused)
+            self.assertIsNotNone(existing_asset)
             self.assertEqual(session.query(MediaAsset).count(), 1)
             self.assertEqual(session.query(UserVideoItem).filter_by(owner_user_id=bob.id).count(), 1)
 
             video_file.unlink()
             stale = create_item_from_existing_source(session, bob.id, "https://example.test/a")
+            stale_asset = get_asset_from_existing_source(session, "https://example.test/a")
             self.assertIsNone(stale)
+            self.assertIsNone(stale_asset)
 
     def test_new_url_is_added_when_download_fingerprints_to_existing_media(self):
         with self.Session() as session:

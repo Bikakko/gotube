@@ -11,13 +11,16 @@ from server.api import (
     _register_transferred_guest_files,
     download_my_video,
     download_shared_video,
+    get_guest_download_count,
     get_my_quota,
     get_my_videos,
     get_shared_video_info,
     update_my_video_share,
 )
 from server.db import Base, User, UserVideoItem
+from server.downloader import DownloadTask
 from server.models import UpdateShareRequest
+from server.queue_manager import QueueManager
 from server.video_library import (
     get_user_video_asset_for_download,
     register_completed_file,
@@ -198,6 +201,58 @@ class UserLibraryTests(unittest.TestCase):
             self.assertEqual(task.filename, "Alpha_aaaaaaaa/aaaaaaaa.mp4")
             self.assertEqual(updated["updated_tasks"][0]["user_video_item_id"], task.user_video_item_id)
             self.assertTrue(updated["updated_tasks"][0]["share_token"])
+
+    def test_guest_count_includes_duplicate_placeholder_tasks(self):
+        class FakeTask:
+            is_guest = True
+            session_id = "guest_l2abc123_abcd123"
+            filename = "temp_guest/guest_l2abc123_abcd123/DUPLICATE/Alpha_aaaaaaaa/aaaaaaaa.mp4"
+
+        class FakeDownloader:
+            def get_guest_download_count(self, session_id):
+                return 0
+
+        class FakeQueue:
+            downloader = FakeDownloader()
+
+            def get_client_tasks(self, client_id):
+                return [FakeTask()]
+
+        result = asyncio.run(
+            get_guest_download_count(
+                "guest_l2abc123_abcd123",
+                client_id="client-1",
+                qm=FakeQueue(),
+            )
+        )
+
+        self.assertEqual(result["count"], 1)
+
+    def test_failed_library_registration_removes_newly_downloaded_file(self):
+        class FakeDownloader:
+            def __init__(self, download_dir):
+                self.download_dir = download_dir
+                self.file_cache_invalidated = False
+                self.hash_cache_invalidated = False
+
+            def invalidate_file_index_cache(self):
+                self.file_cache_invalidated = True
+
+            def invalidate_hash_index(self):
+                self.hash_cache_invalidated = True
+
+        video_file = self._video_file("TooLarge_aaaaaaaa", "aaaaaaaa.mp4")
+        task = DownloadTask("t1", "https://example.test/a", "client-1")
+        task.filepath = str(video_file)
+        task.is_duplicate = False
+        qm = QueueManager(FakeDownloader(self.download_dir))
+
+        qm._delete_failed_library_download(task)
+
+        self.assertFalse(video_file.exists())
+        self.assertFalse(video_file.parent.exists())
+        self.assertTrue(qm.downloader.file_cache_invalidated)
+        self.assertTrue(qm.downloader.hash_cache_invalidated)
 
     def test_share_info_and_download_work_with_share_token_and_preserve_extension(self):
         with self.Session() as session:

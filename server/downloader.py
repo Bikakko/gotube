@@ -333,6 +333,9 @@ class Downloader:
 
         for f in self.download_dir.rglob("*"):
             if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
+                rel_path = f.relative_to(self.download_dir)
+                if rel_path.parts and rel_path.parts[0] == "temp_guest":
+                    continue
                 # 从目录名提取 hash：标题_hash
                 parent_name = f.parent.name
                 if "_" in parent_name:
@@ -368,6 +371,9 @@ class Downloader:
         # 前缀匹配（降级到递归扫描）
         for f in self.download_dir.rglob("*"):
             if f.is_file() and f.name.startswith(file_hash):
+                rel_path = f.relative_to(self.download_dir)
+                if rel_path.parts and rel_path.parts[0] == "temp_guest":
+                    continue
                 self._hash_index[file_hash] = f
                 return f
         return None
@@ -541,19 +547,27 @@ class Downloader:
             session_dir = resolve_inside(self.guest_download_dir, session_id)
         except Exception as e:
             raise ValueError("非法 session_id") from e
-        if not session_dir.exists():
+
+        duplicate_files: list[str] = []
+        if client_id:
+            for task in self.get_tasks_by_client(client_id):
+                if task.is_guest and task.session_id == session_id and task.filename and "/DUPLICATE/" in task.filename:
+                    duplicate_files.append(task.filename.split("/DUPLICATE/", 1)[1])
+
+        if not session_dir.exists() and not duplicate_files:
             raise ValueError(f"游客 session 不存在: {session_id}")
 
         # 收集所有视频文件
         video_files = []
-        for f in session_dir.rglob("*"):
-            if f.is_file() and not f.is_symlink() and f.suffix.lower() in VIDEO_EXTENSIONS:
-                video_files.append(f)
+        if session_dir.exists():
+            for f in session_dir.rglob("*"):
+                if f.is_file() and not f.is_symlink() and f.suffix.lower() in VIDEO_EXTENSIONS:
+                    video_files.append(f)
 
-        if not video_files:
+        if not video_files and not duplicate_files:
             raise ValueError("该 session 下没有视频文件")
 
-        transferred = []
+        transferred = list(dict.fromkeys(duplicate_files))
         errors = []
 
         for video_file in video_files:

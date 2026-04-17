@@ -198,7 +198,7 @@ async function handleLogout() {
     }
 
     localStorage.removeItem('gotube_admin_token');
-    location.reload();
+    window.location.href = '/';
 }
 
 // 显式挂载到 window，确保全局可见性

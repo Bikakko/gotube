@@ -33,6 +33,8 @@
     let currentUser = null;
     let myVideos = [];
     let myQuota = null;
+    let libraryPage = 1;
+    const libraryPageSize = 8;
 
     function authHeaders(extra = {}) {
         const token = localStorage.getItem('gotube_admin_token');
@@ -585,6 +587,7 @@
         if (!isRegularUser()) {
             myVideos = [];
             myQuota = null;
+            libraryPage = 1;
             renderMyLibrary();
             return;
         }
@@ -600,6 +603,7 @@
             myQuota = await quotaRes.json();
             const videosData = await videosRes.json();
             myVideos = videosData.videos || [];
+            libraryPage = Math.min(libraryPage, Math.max(1, Math.ceil(myVideos.length / libraryPageSize)));
             renderMyLibrary();
         } catch (err) {
             console.error(err);
@@ -618,6 +622,7 @@
         if (!isRegularUser()) {
             myVideos = [];
             myQuota = null;
+            libraryPage = 1;
             quotaInfo.textContent = '';
             return;
         }
@@ -637,7 +642,12 @@
             return;
         }
 
-        myVideos.forEach(video => {
+        const totalPages = Math.max(1, Math.ceil(myVideos.length / libraryPageSize));
+        if (libraryPage > totalPages) libraryPage = totalPages;
+        const start = (libraryPage - 1) * libraryPageSize;
+        const visibleVideos = myVideos.slice(start, start + libraryPageSize);
+
+        visibleVideos.forEach(video => {
             const card = document.createElement('div');
             card.className = 'library-item';
 
@@ -679,6 +689,33 @@
             card.append(preview, body);
             list.appendChild(card);
         });
+
+        if (totalPages > 1) {
+            const pager = document.createElement('div');
+            pager.className = 'library-pager';
+            const prev = document.createElement('button');
+            prev.type = 'button';
+            prev.className = 'task-btn secondary';
+            prev.textContent = '上一页';
+            prev.disabled = libraryPage <= 1;
+            prev.addEventListener('click', () => {
+                libraryPage -= 1;
+                renderMyLibrary();
+            });
+            const info = document.createElement('span');
+            info.textContent = `${libraryPage} / ${totalPages}，共 ${myVideos.length} 个`;
+            const next = document.createElement('button');
+            next.type = 'button';
+            next.className = 'task-btn secondary';
+            next.textContent = '下一页';
+            next.disabled = libraryPage >= totalPages;
+            next.addEventListener('click', () => {
+                libraryPage += 1;
+                renderMyLibrary();
+            });
+            pager.append(prev, info, next);
+            list.appendChild(pager);
+        }
     }
 
     function addLibraryButton(parent, className, text, handler, disabled = false) {
@@ -932,6 +969,7 @@
         currentUser = null;
         myVideos = [];
         myQuota = null;
+        libraryPage = 1;
         updateLogoStyle();
         renderMyLibrary();
         rotateClientSession();
@@ -1120,7 +1158,7 @@
 
         try {
             // 获取当前 session 的下载数量
-            const countRes = await fetch(`/api/guest-downloads/${guestSessionId}/count`);
+            const countRes = await fetch(`/api/guest-downloads/${guestSessionId}/count?client_id=${encodeURIComponent(clientId)}`);
             if (!countRes.ok) {
                 console.warn('获取游客下载数量失败');
                 return;

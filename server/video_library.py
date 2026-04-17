@@ -186,6 +186,22 @@ def create_item_from_existing_source(
     )
 
 
+def get_asset_from_existing_source(session: Session, source_url: str) -> MediaAsset | None:
+    """Return a live media asset for an existing source URL without creating ownership."""
+    normalized = normalize_source_url(source_url)
+    if not normalized:
+        return None
+    source = session.query(MediaSource).filter(MediaSource.normalized_url == normalized).first()
+    if not source:
+        return None
+    asset = session.query(MediaAsset).filter(MediaAsset.id == source.media_asset_id).first()
+    if not asset or not Path(asset.filepath).is_file():
+        session.delete(source)
+        session.flush()
+        return None
+    return asset
+
+
 def list_user_video_items(session: Session, user: User, owner_user_id: int | None = None) -> list[dict[str, Any]]:
     """List visible user library items."""
     query = (
