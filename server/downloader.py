@@ -1627,6 +1627,9 @@ class Downloader:
             return "不支持的视频链接"
 
         # HTTP 状态码
+        if ("BiliBili" in error_str or "bilibili" in error_str.lower()) and "412" in error_str:
+            return "B 站访问被拦截（HTTP 412），请更新完整 Cookie 后重试"
+
         if "404" in error_str:
             return "视频不存在"
 
