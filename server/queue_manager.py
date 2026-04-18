@@ -30,6 +30,7 @@ class QueueManager:
         self.max_concurrent = max_concurrent
         self._semaphore = asyncio.Semaphore(max_concurrent)
         self._progress_callbacks: dict[str, Callable] = {}
+        self._running_tasks: dict[str, asyncio.Task] = {}
 
     def register_client(self, client_id: str, progress_callback: Callable) -> None:
         """
@@ -87,7 +88,9 @@ class QueueManager:
             task.session_id = session_id
 
         # 启动下载（受信号量控制并发数）
-        asyncio.create_task(self._execute_with_semaphore(task), name=f"download-{task.task_id}")
+        runner = asyncio.create_task(self._execute_with_semaphore(task), name=f"download-{task.task_id}")
+        self._running_tasks[task.task_id] = runner
+        runner.add_done_callback(lambda _runner, task_id=task.task_id: self._running_tasks.pop(task_id, None))
 
         logger.info("任务已加入队列: %s, client=%s, is_guest=%s", task.task_id, client_id, bool(session_id))
         return task
@@ -149,6 +152,30 @@ class QueueManager:
             if task.url == url and task.status not in retryable:
                 return task
         return None
+
+    def get_active_tasks_for_client(self, client_id: str) -> list[DownloadTask]:
+        """获取指定 client 的 pending/downloading 任务。"""
+        return [
+            task
+            for task in self.downloader.get_tasks_by_client(client_id)
+            if task.status in ("pending", "downloading")
+        ]
+
+    def get_active_tasks_for_guest_session(self, session_id: str) -> list[DownloadTask]:
+        """获取指定 guest session 的 pending/downloading 任务。"""
+        return [
+            task
+            for task in self.downloader.get_active_tasks()
+            if task.is_guest and task.session_id == session_id
+        ]
+
+    def get_active_tasks_for_owner(self, owner_user_id: int) -> list[DownloadTask]:
+        """获取指定登录用户的 pending/downloading 任务。"""
+        return [
+            task
+            for task in self.downloader.get_active_tasks()
+            if task.owner_user_id == owner_user_id and not task.is_guest
+        ]
 
     async def _execute_with_semaphore(self, task: DownloadTask) -> None:
         """使用信号量控制并发执行下载"""
