@@ -366,6 +366,9 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     logger.info("session 在延迟期间有新连接，保留 guest session: %s", session_id)
                 else:
                     logger.info("session 无新连接，清理 guest session: %s", session_id)
+                    cancelled = queue_mgr.cancel_guest_session_tasks(session_id, reason="游客页面已关闭")
+                    if cancelled:
+                        logger.info("已取消 %d 个 guest session 活跃下载: %s", cancelled, session_id)
                     cleaned = queue_mgr.downloader.cleanup_guest_session(session_id)
                     logger.info("已清理 %d 个 guest session 目录", cleaned)
                     _guest_connections.pop(session_id, None)

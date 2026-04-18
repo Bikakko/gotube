@@ -27,6 +27,15 @@ class DownloadCancellationApiContractTests(unittest.TestCase):
         self.assertGreaterEqual(cancel_active_idx, 0)
         self.assertGreater(dynamic_cancel_idx, cancel_active_idx)
 
+    def test_guest_disconnect_cleanup_cancels_active_tasks_before_directory_cleanup(self):
+        source = (ROOT / "server" / "main.py").read_text(encoding="utf-8")
+
+        cancel_idx = source.find("cancel_guest_session_tasks")
+        cleanup_idx = source.find("cleanup_guest_session")
+
+        self.assertGreaterEqual(cancel_idx, 0)
+        self.assertGreater(cleanup_idx, cancel_idx)
+
 
 class DownloadCancellationIndexTests(unittest.IsolatedAsyncioTestCase):
     async def test_running_task_is_indexed_by_client_and_session(self):
