@@ -619,6 +619,24 @@ class Downloader:
 
         return count
 
+    def _move_or_copy_guest_item(self, item: Path, target_item: Path) -> None:
+        """Move a guest transfer item, falling back to copy when Windows locks the source."""
+        try:
+            shutil.move(str(item), str(target_item))
+            return
+        except OSError as move_error:
+            logger.warning(
+                "移动 guest 文件失败，尝试复制兜底: %s -> %s, error=%s",
+                item,
+                target_item,
+                move_error,
+            )
+
+        if item.is_dir():
+            shutil.copytree(item, target_item, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, target_item)
+
     def transfer_guest_session(self, session_id: str, client_id: str | None = None) -> dict:
         """
         将游客 session 下的所有视频转移到主下载目录。
@@ -696,13 +714,19 @@ class Downloader:
                         for item in video_dir.iterdir():
                             target_item = resolve_inside(target_dir, item.name)
                             if not target_item.exists():
-                                shutil.move(str(item), str(target_item))
+                                self._move_or_copy_guest_item(item, target_item)
                                 logger.info("转移文件: %s -> %s", item.name, target_dir)
                             else:
                                 logger.info("目标文件已存在，跳过: %s", target_item)
                     else:
-                        shutil.move(str(video_dir), str(target_dir))
+                        self._move_or_copy_guest_item(video_dir, target_dir)
                         logger.info("转移目录: %s -> %s", video_dir.name, target_dir.parent)
+
+                    try:
+                        if video_dir.exists():
+                            shutil.rmtree(video_dir)
+                    except OSError as e:
+                        logger.warning("guest 源目录暂时无法删除，后续过期清理会重试 %s: %s", video_dir, e)
 
                     transferred.append(str(relative_to_session))
                 else:
