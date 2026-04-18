@@ -10,7 +10,9 @@ import binascii
 import json
 import logging
 import os
+import re
 import shutil
+import time
 import uuid
 from collections.abc import Callable
 from contextlib import suppress
@@ -28,6 +30,7 @@ logger = logging.getLogger(__name__)
 
 # 视频文件扩展名集合
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".avi", ".mov"}
+DOWNLOAD_ARTIFACT_EXTENSIONS = VIDEO_EXTENSIONS | {".m4a", ".mp3", ".aac", ".opus", ".part", ".ytdl", ".temp"}
 
 
 def _download_thumbnail(url: str, save_path: Path) -> bool:
@@ -421,6 +424,74 @@ class Downloader:
                         logger.warning("删除临时文件失败 %s: %s", f.name, e)
         if count:
             logger.info("已清理 %d 个临时文件 (task_id=%s)", count, task_id)
+        return count
+
+    def _is_download_artifact_path(self, path: Path) -> bool:
+        """确认待清理路径仍位于下载根目录内。"""
+        try:
+            path.resolve().relative_to(self.download_dir.resolve())
+            return True
+        except ValueError:
+            return False
+
+    @staticmethod
+    def _artifact_base_name(path: Path) -> str:
+        """返回 yt-dlp 分离音视频同一输出族的基础文件名。"""
+        name = path.name
+        if name.endswith(".part"):
+            name = name[:-5]
+        stem = Path(name).stem
+        return re.sub(r"\.f\d+$", "", stem)
+
+    def _collect_artifact_siblings(self, path: Path) -> set[Path]:
+        """收集同一 yt-dlp 输出族的最终文件、音视频分片和 part 文件。"""
+        if not path.parent.exists() or not self._is_download_artifact_path(path):
+            return set()
+
+        base = self._artifact_base_name(path)
+        if not base:
+            return set()
+
+        artifacts: set[Path] = set()
+        for candidate in path.parent.iterdir():
+            if not candidate.is_file():
+                continue
+            if candidate.suffix.lower() not in DOWNLOAD_ARTIFACT_EXTENSIONS:
+                continue
+            candidate_base = self._artifact_base_name(candidate)
+            if candidate_base == base:
+                artifacts.add(candidate)
+        return artifacts
+
+    def cleanup_download_artifacts(self, task: DownloadTask, temp_file: str | None = None) -> int:
+        """
+        清理一次下载可能产生的完整输出族。
+
+        yt-dlp 在 YouTube/Bilibili 等分离音视频场景下可能生成
+        title.f137.mp4、title.f140.m4a、title.mp4.part 等同源文件。失败时只删
+        temp_file 会留下孤儿音频或 part 文件，所以这里按最终输出前缀成组清理。
+        """
+        roots: list[Path] = []
+        if temp_file:
+            roots.append(Path(temp_file))
+        if task.filepath:
+            roots.append(Path(task.filepath))
+
+        artifacts: set[Path] = set()
+        for root in roots:
+            if self._is_download_artifact_path(root):
+                artifacts.add(root)
+                artifacts.update(self._collect_artifact_siblings(root))
+
+        count = 0
+        for artifact in artifacts:
+            try:
+                if artifact.exists() and artifact.is_file() and self._is_download_artifact_path(artifact):
+                    artifact.unlink()
+                    count += 1
+                    logger.info("清理下载残留文件: %s", artifact)
+            except OSError as e:
+                logger.warning("清理下载残留文件失败 %s: %s", artifact, e)
         return count
 
     def cleanup_guest_session(self, session_id: str) -> int:
@@ -1002,17 +1073,37 @@ class Downloader:
         if progress_callback is None:
             return await self._do_download_impl(url, task)
 
-        # 有回调时，启动定期推送任务
+        # 有回调时，启动定期推送任务。不能只按百分比节流：
+        # 分离音视频或未知总大小时，字节数会变化但百分比可能长期不变。
         stop_event = asyncio.Event()
-        last_pushed = 0.0
+        last_progress = task.progress
+        last_downloaded = task.downloaded_bytes
+        last_push_at = 0.0
+
+        async def push_once() -> bool:
+            try:
+                await progress_callback(task)
+                return True
+            except Exception as e:
+                logger.debug("下载进度推送失败，继续下载: %s", e)
+                return False
 
         async def push_progress():
-            nonlocal last_pushed
+            nonlocal last_progress, last_downloaded, last_push_at
             try:
                 while not stop_event.is_set():
-                    if task.status == "downloading" and task.progress < 100 and task.progress - last_pushed >= 1.0:
-                        await progress_callback(task)
-                        last_pushed = task.progress
+                    now = time.monotonic()
+                    progress_changed = abs(task.progress - last_progress) >= 1.0
+                    bytes_changed = task.downloaded_bytes != last_downloaded
+                    heartbeat_due = now - last_push_at >= 1.0
+                    should_push = task.status == "downloading" and (
+                        progress_changed or bytes_changed or heartbeat_due
+                    )
+                    if should_push:
+                        if await push_once():
+                            last_progress = task.progress
+                            last_downloaded = task.downloaded_bytes
+                            last_push_at = now
                     await asyncio.sleep(0.2)  # 200ms间隔
             except asyncio.CancelledError:
                 pass
@@ -1020,10 +1111,17 @@ class Downloader:
         pusher = asyncio.create_task(push_progress())
 
         try:
+            if await push_once():
+                last_progress = task.progress
+                last_downloaded = task.downloaded_bytes
+                last_push_at = time.monotonic()
             return await self._do_download_impl(url, task)
         finally:
             stop_event.set()
             pusher.cancel()
+            with suppress(asyncio.CancelledError):
+                await pusher
+            await push_once()
 
     async def _do_download_impl(self, url: str, task: DownloadTask) -> str | None:
         """实际执行 yt-dlp 下载的底层方法"""
@@ -1048,11 +1146,12 @@ class Downloader:
             }
         )
 
-        # 添加文件大小限制（yt-dlp 原生功能，单位：字节）
         if settings.max_video_size_mb > 0:
-            max_size_bytes = settings.max_video_size_mb * 1024 * 1024
-            opts["max_filesize"] = max_size_bytes
-            logger.debug("已设置文件大小限制: %d MB (%d 字节)", settings.max_video_size_mb, max_size_bytes)
+            logger.debug(
+                "最终合并文件大小限制: %d MB (%d 字节)",
+                settings.max_video_size_mb,
+                settings.max_video_size_mb * 1024 * 1024,
+            )
 
         logger.debug("第二阶段：开始下载视频")
         logger.debug("download_dir: %s", self.download_dir)
@@ -1103,6 +1202,26 @@ class Downloader:
             loop.run_in_executor(None, _download),
             timeout=7200,  # 2 小时超时兜底
         )
+
+    def _enforce_final_size_limit(self, filepath: str, max_size_bytes: int | None = None) -> None:
+        """按最终合并文件大小执行单视频限制。"""
+        limit = max_size_bytes
+        if limit is None:
+            if settings.max_video_size_mb <= 0:
+                return
+            limit = settings.max_video_size_mb * 1024 * 1024
+        if limit <= 0:
+            return
+
+        path = Path(filepath)
+        if not path.exists():
+            return
+
+        size = path.stat().st_size
+        if size > limit:
+            size_mb = size / 1024 / 1024
+            limit_mb = limit / 1024 / 1024
+            raise ValueError(f"视频文件超过大小限制：{size_mb:.2f} MB / {limit_mb:.2f} MB")
 
     async def _post_process(self, temp_file: str, task: DownloadTask) -> tuple[str, str]:
         """
@@ -1255,6 +1374,7 @@ class Downloader:
         logger.debug("下载任务开始 - task_id: %s, url: %s", task.task_id, task.url)
         logger.debug("========================================")
 
+        temp_file: str | None = None
         try:
             # 第一阶段：提取信息
             logger.debug("进入第一阶段：信息提取")
@@ -1275,6 +1395,7 @@ class Downloader:
                 await progress_callback(task)
                 return
 
+            self._enforce_final_size_limit(temp_file)
             await progress_callback(task)
 
             # 第三阶段：后处理
@@ -1314,6 +1435,7 @@ class Downloader:
             logger.error("堆栈跟踪:\n%s", traceback.format_exc())
             logger.error("========================================")
             # 清理残留临时文件，避免重试时冲突
+            self.cleanup_download_artifacts(task, temp_file=temp_file)
             self.cleanup_temp_files(task.task_id)
             await progress_callback(task)
 
@@ -1347,6 +1469,9 @@ class Downloader:
 
         # 播放列表/多视频检测
         if isinstance(error, ValueError) and ("播放列表" in error_str or "多视频" in error_str):
+            return error_str
+
+        if isinstance(error, ValueError) and "视频文件超过大小限制" in error_str:
             return error_str
 
         # URL/网站支持

@@ -38,6 +38,41 @@
 - `venv\Scripts\python.exe -m unittest tests.test_frontend_session_contract_unittest -v`
 - `node --check www\common.js www\download.js www\admin\js\auth.js www\admin\js\users.js`
 
+## 2026-04-18 进度推送与大文件边界补丁
+
+### 背景
+
+手工检查基本通过后，发现两个下载链路边界：
+
+- 极短视频和大文件下载时，前端进度条可能一直不动，需要刷新页面后才看到状态变化。
+- 单文件大小限制使用 yt-dlp 的单流 `max_filesize`，在 Bilibili/YouTube 分离音视频场景下不等于最终合并文件大小；失败路径只清理部分临时文件，可能留下孤儿音频或 `.part` 文件。
+
+### 根因
+
+- 下载进度通过后台轮询推送，旧逻辑只在 `progress` 比上次增加至少 1% 时推送。短视频可能在轮询首次触发前已经完成；未知总大小或大文件阶段可能只有 `downloaded_bytes` 变化，百分比不明显。
+- `max_filesize` 是 yt-dlp 对单个请求格式的限制，不适合表达“最终视频文件最大大小”。分离音视频下载中，视频流、音频流、合并文件和 `.part` 属于同一输出族，失败时需要按输出族清理。
+
+### 本次变更
+
+- 下载阶段开始和结束都主动推送一次任务状态。
+- 进度推送触发条件从“百分比变化”扩展为：
+  - 百分比变化达到 1%；
+  - 已下载字节数变化；
+  - 下载中超过 1 秒没有推送时发送心跳。
+- 移除 yt-dlp `max_filesize`，改为下载合并完成后检查最终文件大小。
+- 新增 `cleanup_download_artifacts`，按同一输出基础名清理最终文件、分离视频、分离音频、`.part`、`.ytdl`、`.temp` 等下载残留。
+- 下载失败路径同时调用完整输出族清理和旧的 task 临时文件清理。
+- 文件超限错误直接透出具体大小提示。
+
+### 验证
+
+- `venv\Scripts\python.exe -m unittest tests.test_downloader_transfer_boundaries_unittest`
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_video_library_unittest tests.test_admin_management_unittest`
+- `venv\Scripts\python.exe -m py_compile server\downloader.py`
+- `venv\Scripts\python.exe -m unittest tests.test_admin_management_unittest tests.test_auth_roles_unittest tests.test_downloader_transfer_boundaries_unittest tests.test_frontend_session_contract_unittest tests.test_invites_unittest tests.test_user_library_unittest tests.test_v4_migrations_unittest tests.test_video_library_unittest`
+
+说明：`venv\Scripts\python.exe -m unittest discover tests` 仍会因为 `tests/test_security_boundaries.py` 直接依赖未安装的 `pytest` 而报 `ModuleNotFoundError: No module named 'pytest'`。其余 `*_unittest.py` 集合已通过。
+
 ## 设计结论
 
 - `client_id` 不等价于登录用户，只是下载页任务视图的本地会话标识；
