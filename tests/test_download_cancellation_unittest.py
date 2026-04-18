@@ -7,6 +7,27 @@ from server.downloader import Downloader
 from server.queue_manager import QueueManager
 
 
+ROOT = Path(__file__).resolve().parents[1]
+
+
+class DownloadCancellationApiContractTests(unittest.TestCase):
+    def test_api_exposes_cancel_endpoints(self):
+        source = (ROOT / "server" / "api.py").read_text(encoding="utf-8")
+
+        self.assertIn('@router.get("/tasks/active"', source)
+        self.assertIn('@router.post("/tasks/cancel-active"', source)
+        self.assertIn('@router.post("/tasks/{task_id}/cancel"', source)
+
+    def test_cancel_active_route_precedes_dynamic_cancel_route(self):
+        source = (ROOT / "server" / "api.py").read_text(encoding="utf-8")
+
+        cancel_active_idx = source.find('@router.post("/tasks/cancel-active"')
+        dynamic_cancel_idx = source.find('@router.post("/tasks/{task_id}/cancel"')
+
+        self.assertGreaterEqual(cancel_active_idx, 0)
+        self.assertGreater(dynamic_cancel_idx, cancel_active_idx)
+
+
 class DownloadCancellationIndexTests(unittest.IsolatedAsyncioTestCase):
     async def test_running_task_is_indexed_by_client_and_session(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -401,6 +401,38 @@ async def get_tasks(
     return [_task_to_response(t) for t in tasks]
 
 
+@router.get("/tasks/active", response_model=list[TaskResponse])
+async def get_active_tasks(
+    client_id: str = Query(..., description="客户端标识"),
+    qm: QueueManager = Depends(get_queue_manager),
+):
+    """返回当前客户端仍在排队或下载中的任务。"""
+    tasks = qm.get_active_tasks_for_client(client_id)
+    return [_task_to_response(t) for t in tasks]
+
+
+@router.post("/tasks/cancel-active")
+async def cancel_active_tasks(
+    client_id: str = Query(..., description="客户端标识"),
+    qm: QueueManager = Depends(get_queue_manager),
+):
+    """取消当前客户端仍在排队或下载中的任务。"""
+    count = qm.cancel_client_tasks(client_id, reason="退出登录时取消下载")
+    return {"status": "ok", "cancelled_count": count}
+
+
+@router.post("/tasks/{task_id}/cancel")
+async def cancel_task(
+    task_id: str,
+    client_id: str = Query(..., description="客户端标识"),
+    qm: QueueManager = Depends(get_queue_manager),
+):
+    """取消当前客户端拥有的单个活跃下载任务。"""
+    if not qm.cancel_task(task_id, client_id=client_id, reason="用户取消下载"):
+        raise HTTPException(status_code=404, detail="任务不存在、无权取消或已不可取消")
+    return {"status": "ok"}
+
+
 @router.delete("/tasks/{task_id}")
 async def delete_task(
     task_id: str,
