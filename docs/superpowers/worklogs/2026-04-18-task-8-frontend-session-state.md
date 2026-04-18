@@ -73,6 +73,37 @@
 
 说明：`venv\Scripts\python.exe -m unittest discover tests` 仍会因为 `tests/test_security_boundaries.py` 直接依赖未安装的 `pytest` 而报 `ModuleNotFoundError: No module named 'pytest'`。其余 `*_unittest.py` 集合已通过。
 
+## 2026-04-18 播放按钮与单文件大小限制体验补丁
+
+### 背景
+
+进一步手工检查发现：
+
+- 下载页正在下载新任务时，已经下载好的游客文件播放按钮可能存在但点击无反应。
+- 仅在最终文件完成后校验大小虽然能避免分离音视频孤儿文件，但体验上会让用户等待完整下载后才失败并删除文件。
+
+### 根因
+
+- 任务卡播放按钮的渲染条件是 `completed + filename`，但 `openModal()` 的点击入口先要求 `file_hash/share_token`。普通 guest 本地文件其实可以直接通过 `filename + guest session` 播放，不应该依赖分享 hash。
+- yt-dlp 原生单流大小限制不可用；只做最终文件校验又过晚，需要增加下载前预估和下载中保护。
+
+### 本次变更
+
+- 下载页 `openModal()` 拆分播放条件：
+  - guest 本地已完成文件：凭 `temp_guest/...` 文件名走 guest stream；
+  - 已入库或去重文件：继续凭 `share_token/file_hash` 走 `/watch`。
+- 下载前提取信息时使用和实际下载一致的格式选择，并基于 `requested_formats` 汇总分离音视频预计大小；确定超过单文件限制时直接拒绝，不开始下载。
+- 大小未知时允许开始下载，但下载中按同一输出族已落盘大小持续保护，超过限制即由 progress hook 中断 yt-dlp。
+- 下载后保留最终合并文件大小兜底校验。
+
+### 验证
+
+- `venv\Scripts\python.exe -m unittest tests.test_downloader_transfer_boundaries_unittest tests.test_frontend_session_contract_unittest`
+- `node --check www\download.js`
+- `venv\Scripts\python.exe -m py_compile server\downloader.py`
+- `venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_video_library_unittest tests.test_admin_management_unittest`
+- `venv\Scripts\python.exe -m unittest tests.test_admin_management_unittest tests.test_auth_roles_unittest tests.test_downloader_transfer_boundaries_unittest tests.test_frontend_session_contract_unittest tests.test_invites_unittest tests.test_user_library_unittest tests.test_v4_migrations_unittest tests.test_video_library_unittest`
+
 ## 设计结论
 
 - `client_id` 不等价于登录用户，只是下载页任务视图的本地会话标识；

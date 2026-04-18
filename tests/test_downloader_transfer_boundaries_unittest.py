@@ -91,3 +91,42 @@ class DownloaderArtifactCleanupTest(unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 downloader._enforce_final_size_limit(str(final_file), max_size_bytes=4)
+
+    def test_preflight_size_limit_sums_split_audio_video_formats(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            downloader = self.make_downloader(Path(tmp))
+            info = {
+                "requested_formats": [
+                    {"filesize": 6},
+                    {"filesize": 5},
+                ]
+            }
+
+            with self.assertRaises(ValueError):
+                downloader._enforce_preflight_size_limit(info, max_size_bytes=10)
+
+    def test_preflight_size_limit_allows_unknown_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            downloader = self.make_downloader(Path(tmp))
+            info = {"requested_formats": [{"format_id": "video"}, {"format_id": "audio"}]}
+
+            downloader._enforce_preflight_size_limit(info, max_size_bytes=10)
+
+    def test_progress_hook_aborts_when_split_artifacts_exceed_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            downloader = self.make_downloader(root)
+            split_video = root / "Example.f137.mp4"
+            split_audio = root / "Example.f140.m4a"
+            split_video.write_bytes(b"123456")
+            split_audio.write_bytes(b"12345")
+            task = DownloadTask("limit1", "https://example.com/v", "client")
+            hook = downloader._make_progress_hook(task, max_size_bytes=10)
+
+            with self.assertRaises(ValueError):
+                hook({
+                    "status": "downloading",
+                    "filename": str(split_audio),
+                    "downloaded_bytes": 5,
+                    "total_bytes": 5,
+                })

@@ -216,26 +216,27 @@
 
     function openModal(id) {
         const t = tasks[id];
-        if (!t || (!t.file_hash && !t.share_token)) return;
+        const canPlayGuestFile = Boolean(t && t.filename && t.filename.startsWith('temp_guest/') && !t.filename.includes('/DUPLICATE/'));
+        const canPlaySharedFile = Boolean(t && (t.file_hash || t.share_token));
+        if (!t || (!canPlayGuestFile && !canPlaySharedFile)) return;
 
         // 根据是否为 guest 文件选择 URL
         let videoUrl;
-        if (t.filename && t.filename.startsWith('temp_guest/')) {
+        if (canPlayGuestFile) {
+            // guest 文件：去掉 temp_guest/{session_id}/ 前缀
+            const relativePath = t.filename.replace(/^temp_guest\/[^\/]+\//, '');
+            videoUrl = `/api/guest-downloads/stream/${guestSessionId}/${encodeURIComponent(relativePath)}`;
+        } else if (t.filename && t.filename.startsWith('temp_guest/')) {
             // 检查是否为去重文件（DUPLICATE/ 标记）
-            const isDuplicate = t.filename.includes('/DUPLICATE/');
-            if (isDuplicate) {
-                videoUrl = `/watch?v=${encodeURIComponent(t.share_token || t.file_hash)}`;
-            } else {
-                // guest 文件：去掉 temp_guest/{session_id}/ 前缀
-                const relativePath = t.filename.replace(/^temp_guest\/[^\/]+\//, '');
-                videoUrl = `/api/guest-downloads/stream/${guestSessionId}/${encodeURIComponent(relativePath)}`;
-            }
+            videoUrl = `/watch?v=${encodeURIComponent(t.share_token || t.file_hash)}`;
         } else {
             videoUrl = `/watch?v=${encodeURIComponent(t.share_token || t.file_hash)}`;
         }
         
         const shareToken = t.share_token || t.file_hash;
-        const shareUrl = `${location.origin}/watch?v=${encodeURIComponent(shareToken)}`;
+        const shareUrl = shareToken
+            ? `${location.origin}/watch?v=${encodeURIComponent(shareToken)}`
+            : `${location.origin}${videoUrl}`;
 
         $('#modal-title').textContent = t.title || '未知标题';
         const modalVideo = $('#modal-video');

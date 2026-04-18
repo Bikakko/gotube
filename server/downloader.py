@@ -31,6 +31,11 @@ logger = logging.getLogger(__name__)
 # 视频文件扩展名集合
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".webm", ".avi", ".mov"}
 DOWNLOAD_ARTIFACT_EXTENSIONS = VIDEO_EXTENSIONS | {".m4a", ".mp3", ".aac", ".opus", ".part", ".ytdl", ".temp"}
+YTDLP_VIDEO_FORMAT = "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+
+
+class DownloadSizeLimitError(ValueError):
+    """下载文件超过单视频大小限制。"""
 
 
 def _download_thumbnail(url: str, save_path: Path) -> bool:
@@ -104,6 +109,8 @@ class DownloadTask:
         self.duration = 0
         self.downloaded_bytes = 0
         self.total_bytes = 0
+        self.download_artifact_path = ""
+        self.estimated_size_bytes: int | None = None
         self.video_id = ""
         self.file_hash = ""
         self.is_duplicate = False
@@ -476,6 +483,8 @@ class Downloader:
             roots.append(Path(temp_file))
         if task.filepath:
             roots.append(Path(task.filepath))
+        if task.download_artifact_path:
+            roots.append(Path(task.download_artifact_path))
 
         artifacts: set[Path] = set()
         for root in roots:
@@ -793,6 +802,8 @@ class Downloader:
         task.completed_at = None
         task.downloaded_bytes = 0
         task.total_bytes = 0
+        task.download_artifact_path = ""
+        task.estimated_size_bytes = None
 
         # 清理残留临时文件
         self.cleanup_temp_files(task.task_id)
@@ -857,6 +868,92 @@ class Downloader:
         if self.cookies_file:
             opts["cookiefile"] = str(self.cookies_file)
         return opts
+
+    @staticmethod
+    def _known_format_size(fmt: dict) -> int | None:
+        """读取 yt-dlp 格式记录中的已知大小。"""
+        size = fmt.get("filesize") or fmt.get("filesize_approx")
+        if not size:
+            return None
+        try:
+            size_int = int(size)
+        except (TypeError, ValueError):
+            return None
+        return size_int if size_int > 0 else None
+
+    def _estimate_selected_download_size(self, info: dict) -> int | None:
+        """
+        估算当前 yt-dlp 选择结果的总大小。
+
+        分离音视频时优先汇总 requested_formats；如果其中任一流大小未知，
+        返回 None，避免用不完整估算误拒绝下载。
+        """
+        requested_formats = info.get("requested_formats")
+        if isinstance(requested_formats, list) and requested_formats:
+            sizes = [self._known_format_size(fmt) for fmt in requested_formats]
+            if all(size is not None for size in sizes):
+                return sum(size for size in sizes if size is not None)
+            return None
+
+        return self._known_format_size(info)
+
+    @staticmethod
+    def _format_size_limit_error(actual_size: int, limit: int, *, estimated: bool) -> str:
+        actual_mb = actual_size / 1024 / 1024
+        limit_mb = limit / 1024 / 1024
+        prefix = "预计视频文件大小超过限制" if estimated else "视频文件超过大小限制"
+        return f"{prefix}：{actual_mb:.2f} MB / {limit_mb:.2f} MB"
+
+    def _size_limit_bytes(self, max_size_bytes: int | None = None) -> int | None:
+        if max_size_bytes is not None:
+            return max_size_bytes if max_size_bytes > 0 else None
+        if settings.max_video_size_mb <= 0:
+            return None
+        return settings.max_video_size_mb * 1024 * 1024
+
+    def _enforce_preflight_size_limit(self, info: dict, max_size_bytes: int | None = None) -> None:
+        """下载前用 yt-dlp 提取结果预判最终文件大小。"""
+        limit = self._size_limit_bytes(max_size_bytes)
+        if not limit:
+            return
+        estimate = self._estimate_selected_download_size(info)
+        if estimate is None:
+            return
+        if estimate > limit:
+            raise DownloadSizeLimitError(self._format_size_limit_error(estimate, limit, estimated=True))
+
+    def _artifact_family_size(self, path: Path) -> int:
+        """统计同一输出族当前已落盘大小。"""
+        artifacts = self._collect_artifact_siblings(path)
+        if self._is_download_artifact_path(path):
+            artifacts.add(path)
+        total = 0
+        for artifact in artifacts:
+            try:
+                if artifact.exists() and artifact.is_file():
+                    total += artifact.stat().st_size
+            except OSError:
+                continue
+        return total
+
+    def _enforce_active_size_limit(
+        self,
+        filepath: str | None,
+        downloaded_bytes: int,
+        max_size_bytes: int | None = None,
+    ) -> None:
+        """下载中按同一输出族已落盘大小执行保护。"""
+        limit = self._size_limit_bytes(max_size_bytes)
+        if not limit:
+            return
+
+        actual_size = 0
+        if filepath:
+            actual_size = self._artifact_family_size(Path(filepath))
+        if actual_size <= 0:
+            actual_size = downloaded_bytes or 0
+        if actual_size > limit:
+            raise DownloadSizeLimitError(self._format_size_limit_error(actual_size, limit, estimated=False))
 
     def _check_playlist_url(self, info: dict, url: str) -> None:
         """
@@ -973,7 +1070,7 @@ class Downloader:
         except Exception as e:
             logger.warning("[DEBUG] 文件完整性检查失败: %s", e)
 
-    def _make_progress_hook(self, task: DownloadTask) -> Callable:
+    def _make_progress_hook(self, task: DownloadTask, max_size_bytes: int | None = None) -> Callable:
         """创建 yt-dlp 进度回调钩子"""
 
         def hook(d: dict) -> None:
@@ -983,6 +1080,9 @@ class Downloader:
                     total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
                     speed = d.get("speed") or 0
                     eta = d.get("eta") or 0
+                    artifact_path = d.get("filename") or d.get("tmpfilename") or ""
+                    if artifact_path:
+                        task.download_artifact_path = artifact_path
 
                     if total > 0:
                         task.progress = (downloaded / total) * 100
@@ -997,11 +1097,14 @@ class Downloader:
                     task.eta = eta
                     task.downloaded_bytes = downloaded
                     task.total_bytes = total
+                    self._enforce_active_size_limit(artifact_path, downloaded, max_size_bytes=max_size_bytes)
 
                 elif d["status"] == "finished":
                     task.progress = 100.0
                     task.speed = 0
                     task.eta = 0
+            except DownloadSizeLimitError:
+                raise
             except Exception as e:
                 logger.warning("进度回调异常: %s", e)
 
@@ -1024,6 +1127,8 @@ class Downloader:
                 "quiet": True,
                 "no_warnings": True,
                 "skip_download": True,
+                "format": YTDLP_VIDEO_FORMAT,
+                "merge_output_format": "mp4",
             }
         )
 
@@ -1050,6 +1155,8 @@ class Downloader:
         task.title = info.get("title", "")
         task.thumbnail = info.get("thumbnail", "")
         task.duration = info.get("duration", 0)
+        task.estimated_size_bytes = self._estimate_selected_download_size(info)
+        self._enforce_preflight_size_limit(info)
 
         logger.debug("提取成功 - title: %s, video_id: %s, duration: %s", task.title, task.video_id, task.duration)
         logger.debug("缩略图 URL: %s", task.thumbnail)
@@ -1136,7 +1243,7 @@ class Downloader:
                 "quiet": False,
                 "no_warnings": False,
                 "merge_output_format": "mp4",
-                "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                "format": YTDLP_VIDEO_FORMAT,
                 "retries": 3,
                 "fragment_retries": 3,
                 # ffmpeg 详细错误日志，便于排查合并失败原因
@@ -1205,12 +1312,8 @@ class Downloader:
 
     def _enforce_final_size_limit(self, filepath: str, max_size_bytes: int | None = None) -> None:
         """按最终合并文件大小执行单视频限制。"""
-        limit = max_size_bytes
-        if limit is None:
-            if settings.max_video_size_mb <= 0:
-                return
-            limit = settings.max_video_size_mb * 1024 * 1024
-        if limit <= 0:
+        limit = self._size_limit_bytes(max_size_bytes)
+        if not limit:
             return
 
         path = Path(filepath)
@@ -1219,9 +1322,7 @@ class Downloader:
 
         size = path.stat().st_size
         if size > limit:
-            size_mb = size / 1024 / 1024
-            limit_mb = limit / 1024 / 1024
-            raise ValueError(f"视频文件超过大小限制：{size_mb:.2f} MB / {limit_mb:.2f} MB")
+            raise DownloadSizeLimitError(self._format_size_limit_error(size, limit, estimated=False))
 
     async def _post_process(self, temp_file: str, task: DownloadTask) -> tuple[str, str]:
         """

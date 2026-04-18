@@ -44,6 +44,13 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertGreaterEqual(common_idx, 0)
         self.assertGreater(download_idx, common_idx)
 
+    def test_guest_completed_task_can_play_without_share_hash(self):
+        source = read_text("www/download.js")
+
+        self.assertIn("const canPlayGuestFile", source)
+        self.assertIn("if (!t || (!canPlayGuestFile && !canPlaySharedFile)) return;", source)
+        self.assertIn("if (canPlayGuestFile)", source)
+
 
 if __name__ == "__main__":
     unittest.main()
