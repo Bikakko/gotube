@@ -38,6 +38,10 @@ class DownloadSizeLimitError(ValueError):
     """下载文件超过单视频大小限制。"""
 
 
+class DownloadCancelledError(Exception):
+    """下载任务被用户或会话生命周期取消。"""
+
+
 def _download_thumbnail(url: str, save_path: Path) -> bool:
     """
     从远程 URL 下载缩略图到本地。
@@ -1082,6 +1086,9 @@ class Downloader:
 
         def hook(d: dict) -> None:
             try:
+                if task.cancel_requested:
+                    raise DownloadCancelledError(task.cancel_reason or "下载已取消")
+
                 if d["status"] == "downloading":
                     downloaded = d.get("downloaded_bytes", 0)
                     total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
@@ -1110,7 +1117,7 @@ class Downloader:
                     task.progress = 100.0
                     task.speed = 0
                     task.eta = 0
-            except DownloadSizeLimitError:
+            except (DownloadSizeLimitError, DownloadCancelledError):
                 raise
             except Exception as e:
                 logger.warning("进度回调异常: %s", e)
@@ -1529,6 +1536,15 @@ class Downloader:
             # 使缓存失效
             self.invalidate_file_index_cache()
             self.invalidate_hash_index()
+            await progress_callback(task)
+
+        except DownloadCancelledError as e:
+            task.status = "cancelled"
+            task.error = str(e) or "下载已取消"
+            task.completed_at = datetime.now(UTC)
+            logger.info("下载已取消: task_id=%s, reason=%s", task.task_id, task.error)
+            self.cleanup_download_artifacts(task, temp_file=temp_file)
+            self.cleanup_temp_files(task.task_id)
             await progress_callback(task)
 
         except Exception as e:

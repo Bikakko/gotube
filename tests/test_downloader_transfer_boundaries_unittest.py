@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from server.downloader import DownloadTask, Downloader
+from server.downloader import DownloadCancelledError, DownloadTask, Downloader
 
 
 class DownloaderTransferBoundariesTest(unittest.IsolatedAsyncioTestCase):
@@ -56,7 +56,7 @@ class DownloaderTransferBoundariesTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(downloaded > 0 for _, downloaded in events))
 
 
-class DownloadTaskCancellationStateTest(unittest.TestCase):
+class DownloadTaskCancellationStateTest(unittest.IsolatedAsyncioTestCase):
     def test_task_can_record_cancel_request(self):
         task = DownloadTask("cancel1", "https://example.com/v", "client")
 
@@ -64,6 +64,49 @@ class DownloadTaskCancellationStateTest(unittest.TestCase):
 
         self.assertTrue(task.cancel_requested)
         self.assertEqual(task.cancel_reason, "用户取消下载")
+
+    def test_progress_hook_raises_when_task_cancel_requested(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            downloader = Downloader(download_dir=Path(tmp), cookies_file=None)
+            task = DownloadTask("cancel2", "https://example.com/v", "client")
+            task.request_cancel("用户取消下载")
+            hook = downloader._make_progress_hook(task)
+
+            with self.assertRaises(DownloadCancelledError) as ctx:
+                hook({"status": "downloading", "downloaded_bytes": 1, "total_bytes": 10})
+
+            self.assertIn("用户取消下载", str(ctx.exception))
+
+    async def test_download_marks_cancelled_and_cleans_artifacts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            downloader = Downloader(download_dir=root, cookies_file=None)
+            task = DownloadTask("cancel3", "https://example.com/v", "client")
+            artifact = root / "Example.mp4.part"
+            artifact.write_bytes(b"x")
+            task.download_artifact_path = str(artifact)
+            events = []
+
+            async def fake_do_download(url, task, progress_callback):
+                task.request_cancel("用户取消下载")
+                raise DownloadCancelledError("用户取消下载")
+
+            async def fake_extract_info(url, task):
+                task.title = "Example"
+                return {}
+
+            async def progress_callback(task):
+                events.append((task.status, task.error))
+
+            downloader._extract_info = fake_extract_info
+            downloader._do_download = fake_do_download
+
+            await downloader.download(task, progress_callback)
+
+            self.assertEqual(task.status, "cancelled")
+            self.assertEqual(task.error, "用户取消下载")
+            self.assertFalse(artifact.exists())
+            self.assertIn(("cancelled", "用户取消下载"), events)
 
 
 class DownloaderArtifactCleanupTest(unittest.TestCase):
