@@ -96,6 +96,33 @@ class DownloadCancellationIndexTests(unittest.IsolatedAsyncioTestCase):
 
             release.set()
 
+    async def test_cancel_downloading_task_keeps_runner_alive_for_cleanup(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            downloader = Downloader(download_dir=Path(tmp), cookies_file=None)
+            qm = QueueManager(downloader, max_concurrent=1)
+            started = asyncio.Event()
+            observed_cancel = asyncio.Event()
+            finished = asyncio.Event()
+
+            async def fake_download(task, callback):
+                task.status = "downloading"
+                started.set()
+                while not task.cancel_requested:
+                    await asyncio.sleep(0.01)
+                observed_cancel.set()
+                await asyncio.sleep(0.01)
+                task.status = "cancelled"
+                finished.set()
+
+            downloader.download = fake_download
+            task = await qm.add_task("https://example.com/v", "client-a")
+            await started.wait()
+
+            self.assertTrue(qm.cancel_task(task.task_id, client_id="client-a", reason="用户取消下载"))
+            await asyncio.wait_for(observed_cancel.wait(), timeout=1)
+            await asyncio.wait_for(finished.wait(), timeout=1)
+            self.assertEqual(task.status, "cancelled")
+
     async def test_cancel_guest_session_active_tasks(self):
         with tempfile.TemporaryDirectory() as tmp:
             downloader = Downloader(download_dir=Path(tmp), cookies_file=None)

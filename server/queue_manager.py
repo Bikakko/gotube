@@ -187,13 +187,14 @@ class QueueManager:
         if task.status not in ("pending", "downloading"):
             return False
 
+        was_pending = task.status == "pending"
         task.request_cancel(reason)
         task.status = "cancelled"
         task.error = task.cancel_reason
         task.completed_at = datetime.now(UTC)
 
         runner = self._running_tasks.get(task_id)
-        if runner and not runner.done():
+        if was_pending and runner and not runner.done():
             runner.cancel()
 
         self.downloader.cleanup_download_artifacts(task)
@@ -221,6 +222,8 @@ class QueueManager:
         """使用信号量控制并发执行下载"""
         try:
             async with self._semaphore:
+                if task.cancel_requested:
+                    return
                 callback = self._build_callback(task.client_id)
                 await self.downloader.download(task, callback)
                 if task.status == "completed" and task.owner_user_id and not task.is_guest:
