@@ -51,6 +51,12 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("if (!t || (!canPlayGuestFile && !canPlaySharedFile)) return;", source)
         self.assertIn("if (canPlayGuestFile)", source)
 
+    def test_download_page_renders_cancelled_status(self):
+        source = read_text("www/download.js")
+
+        self.assertIn("cancelled: '已取消'", source)
+        self.assertIn("status-cancelled", source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -56,6 +56,16 @@ class DownloaderTransferBoundariesTest(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(any(downloaded > 0 for _, downloaded in events))
 
 
+class DownloadTaskCancellationStateTest(unittest.TestCase):
+    def test_task_can_record_cancel_request(self):
+        task = DownloadTask("cancel1", "https://example.com/v", "client")
+
+        task.request_cancel("用户取消下载")
+
+        self.assertTrue(task.cancel_requested)
+        self.assertEqual(task.cancel_reason, "用户取消下载")
+
+
 class DownloaderArtifactCleanupTest(unittest.TestCase):
     def make_downloader(self, root: Path) -> Downloader:
         return Downloader(download_dir=root, cookies_file=None)

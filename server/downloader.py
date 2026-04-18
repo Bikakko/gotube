@@ -111,6 +111,8 @@ class DownloadTask:
         self.total_bytes = 0
         self.download_artifact_path = ""
         self.estimated_size_bytes: int | None = None
+        self.cancel_requested = False
+        self.cancel_reason = ""
         self.video_id = ""
         self.file_hash = ""
         self.is_duplicate = False
@@ -120,6 +122,11 @@ class DownloadTask:
         self.user_video_item_id: int | None = None
         self.media_asset_id: int | None = None
         self.share_token = ""
+
+    def request_cancel(self, reason: str = "下载已取消") -> None:
+        """标记任务需要取消，由下载执行阶段负责中断和清理。"""
+        self.cancel_requested = True
+        self.cancel_reason = reason or "下载已取消"
 
 
 class Downloader:

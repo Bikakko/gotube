@@ -67,6 +67,7 @@
             downloading: '下载中',
             completed: '已完成',
             failed: '失败',
+            cancelled: '已取消',
             duplicate: '已去重'
         };
 
@@ -84,7 +85,8 @@
             title.textContent = t.title || '获取信息中...';
 
             const status = document.createElement('span');
-            status.className = `task-status status-${t.status}`;
+            const statusClass = t.status === 'cancelled' ? 'status-cancelled' : `status-${t.status}`;
+            status.className = `task-status ${statusClass}`;
             status.textContent = labels[t.status] || t.status;
             header.append(title, status);
 
