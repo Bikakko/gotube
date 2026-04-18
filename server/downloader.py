@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 import yt_dlp
 
 from .config import settings
+from .cookie_store import get_runtime_cookies_file
 from .path_utils import resolve_inside
 from .security import validate_guest_session_id
 
@@ -152,7 +153,7 @@ class Downloader:
         """
         self.download_dir = download_dir or settings.get_download_dir()
         self.download_dir.mkdir(parents=True, exist_ok=True)
-        self.cookies_file = cookies_file or settings.get_cookies_file()
+        self.cookies_file = cookies_file or get_runtime_cookies_file()
         self.warp_proxy = warp_proxy or settings.warp_proxy
         self._tasks: dict[str, DownloadTask] = {}
 
@@ -212,7 +213,7 @@ class Downloader:
         if self.cookies_file and self.cookies_file.exists():
             logger.info("Cookies 文件已加载: %s", self.cookies_file)
         else:
-            cookie_path_display = self.cookies_file or settings.get_cookies_file()
+            cookie_path_display = self.cookies_file or get_runtime_cookies_file()
             if not cookie_path_display:
                 logger.warning(
                     "未配置 Cookies 文件。部分视频站点（如 YouTube）可能需要登录认证。"

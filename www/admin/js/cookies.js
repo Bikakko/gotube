@@ -450,7 +450,7 @@ async function uploadCookiesText() {
  * 删除上传的 cookies
  */
 async function deleteCookies() {
-    if (!confirm('确定要删除上传的 cookies 文件吗？\n\n删除后会恢复到 .env 配置的路径。')) {
+    if (!confirm('确定要删除上传的 cookies 文件吗？\n\n删除后下载器将停止使用 Cookie，不会自动回退到根目录 cookies.txt。')) {
         return;
     }
 

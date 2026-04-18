@@ -24,6 +24,12 @@ from sqlalchemy.orm import Session
 
 from .auth import get_current_user, get_db, require_admin
 from .config import settings
+from .cookie_store import (
+    delete_uploaded_cookies_file,
+    get_active_cookies_file_for_status,
+    get_data_dir,
+    get_uploaded_cookies_path,
+)
 from .db import AuthToken, MediaAsset, User, UserVideoItem
 from .models import (
     ChangePasswordRequest,
@@ -1211,14 +1217,12 @@ async def get_stats(
 
 def _get_or_create_data_dir() -> Path:
     """获取或创建 data 目录（用于存储 cookies 等运行时数据）"""
-    data_dir = settings.project_root / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir
+    return get_data_dir()
 
 
 def _get_cookies_storage_path() -> Path:
     """获取 cookies 存储路径（固定在 data 目录）"""
-    return _get_or_create_data_dir() / "cookies.txt"
+    return get_uploaded_cookies_path()
 
 
 def _parse_cookies_domains(cookies_path: Path) -> list[str]:
@@ -1335,9 +1339,7 @@ def _get_active_cookies_content() -> str | None:
     Returns:
         文件内容，如果不存在返回 None。
     """
-    data_cookies = _get_cookies_storage_path()
-    env_cookies = settings.get_cookies_file()
-    active_cookies = data_cookies if data_cookies.exists() else env_cookies
+    active_cookies = get_active_cookies_file_for_status()
 
     if not active_cookies or not active_cookies.exists():
         return None
@@ -1410,7 +1412,7 @@ def _validate_cookies_format(content: str) -> tuple[bool, str]:
     return True, ""
 
 
-def _reload_cookies_in_downloader(cookies_path: Path) -> None:
+def _reload_cookies_in_downloader(cookies_path: Path | None) -> None:
     """
     热重载下载器的 cookies 配置。
 
@@ -1418,7 +1420,7 @@ def _reload_cookies_in_downloader(cookies_path: Path) -> None:
     """
     try:
         qm = _get_queue_manager()
-        qm.downloader.reload_cookies(cookies_path if cookies_path.exists() else None)
+        qm.downloader.reload_cookies(cookies_path if cookies_path and cookies_path.exists() else None)
     except Exception as e:
         logger.error("热重载 cookies 失败: %s", e)
         raise HTTPException(status_code=500, detail=f"热重载 cookies 失败: {e}") from e
@@ -1439,18 +1441,13 @@ async def get_cookies_status(
     - source: 来源（.env 配置或上传）
     """
     try:
-        # 优先检查 data 目录的 cookies（上传的）
-        data_cookies = _get_cookies_storage_path()
-        env_cookies = settings.get_cookies_file()
-
-        # 确定当前使用的 cookies 文件
-        active_cookies = data_cookies if data_cookies.exists() else env_cookies
+        active_cookies = get_active_cookies_file_for_status()
 
         if not active_cookies or not active_cookies.exists():
             return {
                 "has_cookies": False,
                 "source": "none",
-                "message": "未配置 cookies 文件",
+                "message": "未上传 cookies 文件",
             }
 
         # 获取文件信息
@@ -1461,12 +1458,6 @@ async def get_cookies_status(
         # 解析域名
         domains = _parse_cookies_domains(active_cookies)
 
-        # 判断来源
-        if active_cookies == data_cookies:
-            source = "upload"
-        else:
-            source = "env_config"
-
         return {
             "has_cookies": True,
             "file_size": file_size,
@@ -1474,7 +1465,7 @@ async def get_cookies_status(
             "modified_time": modified_time,
             "domains": domains,
             "domain_count": len(domains),
-            "source": source,
+            "source": "upload",
             "file_path": str(active_cookies.relative_to(settings.project_root)),
         }
     except Exception as e:
@@ -1694,16 +1685,14 @@ async def delete_cookies(
         backup_path = _backup_cookies_file(cookies_path)
 
         # 删除
-        cookies_path.unlink()
+        delete_uploaded_cookies_file()
         logger.info("已删除上传的 cookies 文件")
 
-        # 热重载下载器（恢复到 .env 配置）
-        env_cookies = settings.get_cookies_file()
-        _reload_cookies_in_downloader(env_cookies if env_cookies else Path("/nonexistent"))
+        _reload_cookies_in_downloader(None)
 
         return {
             "status": "ok",
-            "message": "cookies 已删除，恢复到 .env 配置",
+            "message": "cookies 已删除，下载器已停止使用 Cookie",
             "backup": backup_path.name if backup_path else None,
         }
     except HTTPException:
