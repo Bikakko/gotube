@@ -177,14 +177,57 @@ class QueueManager:
             if task.owner_user_id == owner_user_id and not task.is_guest
         ]
 
+    def cancel_task(self, task_id: str, client_id: str | None = None, reason: str = "下载已取消") -> bool:
+        """取消一个 pending/downloading 任务。"""
+        task = self.downloader.get_task(task_id)
+        if not task:
+            return False
+        if client_id is not None and task.client_id != client_id:
+            return False
+        if task.status not in ("pending", "downloading"):
+            return False
+
+        task.request_cancel(reason)
+        task.status = "cancelled"
+        task.error = task.cancel_reason
+        task.completed_at = datetime.now(UTC)
+
+        runner = self._running_tasks.get(task_id)
+        if runner and not runner.done():
+            runner.cancel()
+
+        self.downloader.cleanup_download_artifacts(task)
+        self.downloader.cleanup_temp_files(task.task_id)
+        logger.info("已取消下载任务: task=%s, client=%s, reason=%s", task_id, task.client_id, task.error)
+        return True
+
+    def cancel_client_tasks(self, client_id: str, reason: str = "下载已取消") -> int:
+        """取消指定 client 的所有活跃任务。"""
+        return sum(
+            1
+            for task in list(self.get_active_tasks_for_client(client_id))
+            if self.cancel_task(task.task_id, client_id=client_id, reason=reason)
+        )
+
+    def cancel_guest_session_tasks(self, session_id: str, reason: str = "游客会话已关闭") -> int:
+        """取消指定 guest session 的所有活跃任务。"""
+        return sum(
+            1
+            for task in list(self.get_active_tasks_for_guest_session(session_id))
+            if self.cancel_task(task.task_id, reason=reason)
+        )
+
     async def _execute_with_semaphore(self, task: DownloadTask) -> None:
         """使用信号量控制并发执行下载"""
-        async with self._semaphore:
-            callback = self._build_callback(task.client_id)
-            await self.downloader.download(task, callback)
-            if task.status == "completed" and task.owner_user_id and not task.is_guest:
-                self._register_completed_library_item(task)
-                await callback(task)
+        try:
+            async with self._semaphore:
+                callback = self._build_callback(task.client_id)
+                await self.downloader.download(task, callback)
+                if task.status == "completed" and task.owner_user_id and not task.is_guest:
+                    self._register_completed_library_item(task)
+                    await callback(task)
+        except asyncio.CancelledError:
+            logger.info("下载任务 runner 已取消: task=%s", task.task_id)
 
     def _register_completed_library_item(self, task: DownloadTask) -> None:
         """Persist completed logged-in downloads into the v4 video library."""

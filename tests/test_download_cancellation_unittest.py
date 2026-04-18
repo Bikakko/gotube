@@ -40,6 +40,62 @@ class DownloadCancellationIndexTests(unittest.IsolatedAsyncioTestCase):
 
             release.set()
 
+    async def test_cancel_client_active_tasks_marks_cancel_requested(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            downloader = Downloader(download_dir=Path(tmp), cookies_file=None)
+            qm = QueueManager(downloader, max_concurrent=1)
+            started = asyncio.Event()
+            release = asyncio.Event()
+
+            async def fake_download(task, callback):
+                task.status = "downloading"
+                started.set()
+                await release.wait()
+
+            downloader.download = fake_download
+            task = await qm.add_task("https://example.com/v", "client-a")
+            await started.wait()
+
+            cancelled = qm.cancel_client_tasks("client-a", "退出登录时取消")
+
+            self.assertEqual(cancelled, 1)
+            self.assertTrue(task.cancel_requested)
+            self.assertEqual(task.status, "cancelled")
+            self.assertEqual(task.error, "退出登录时取消")
+            self.assertEqual(qm.get_active_tasks_for_client("client-a"), [])
+
+            release.set()
+
+    async def test_cancel_guest_session_active_tasks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            downloader = Downloader(download_dir=Path(tmp), cookies_file=None)
+            qm = QueueManager(downloader, max_concurrent=1)
+            started = asyncio.Event()
+            release = asyncio.Event()
+
+            async def fake_download(task, callback):
+                task.status = "downloading"
+                started.set()
+                await release.wait()
+
+            downloader.download = fake_download
+            task = await qm.add_task(
+                "https://example.com/v",
+                "client-guest",
+                session_id="guest_abcdefghijklmnop",
+            )
+            await started.wait()
+
+            cancelled = qm.cancel_guest_session_tasks("guest_abcdefghijklmnop", "游客页面已关闭")
+
+            self.assertEqual(cancelled, 1)
+            self.assertTrue(task.cancel_requested)
+            self.assertEqual(task.status, "cancelled")
+            self.assertEqual(task.error, "游客页面已关闭")
+            self.assertEqual(qm.get_active_tasks_for_guest_session("guest_abcdefghijklmnop"), [])
+
+            release.set()
+
     async def test_running_task_is_indexed_by_owner(self):
         with tempfile.TemporaryDirectory() as tmp:
             downloader = Downloader(download_dir=Path(tmp), cookies_file=None)
