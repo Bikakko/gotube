@@ -496,9 +496,7 @@ async function handleChangePassword(user) {
         
         if (isSelf) {
             setTimeout(() => {
-                localStorage.removeItem('gotube_admin_token');
-                sessionStorage.removeItem('gotube_client_id');
-                sessionStorage.removeItem('gotube_authenticated_client');
+                window.GoTubeSession.clearAuthState();
                 window.location.href = '/';
             }, 1500);
         }

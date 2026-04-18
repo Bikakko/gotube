@@ -6,28 +6,14 @@
 
     const $ = (s) => document.querySelector(s);
 
-    function newClientId() {
-        return 'c_' + Math.random().toString(36).substr(2, 9);
-    }
-
-    const CLIENT_SESSION_STORAGE_KEY = 'gotube_client_id';
-    const AUTH_CLIENT_STORAGE_KEY = 'gotube_authenticated_client';
-    const GUEST_SESSION_STORAGE_KEY = 'gotube_guest_session_id';
-
-    let clientId = sessionStorage.getItem(CLIENT_SESSION_STORAGE_KEY) || newClientId();
-    sessionStorage.setItem(CLIENT_SESSION_STORAGE_KEY, clientId);
+    const session = window.GoTubeSession;
+    let clientId = session.getDownloadClientId();
 
     // ── 匿名用户 Session 管理 ──
     // 使用 sessionStorage：刷新页面复用，关闭标签页后失效，避免旧路人 session 被新登录用户转存。
-    localStorage.removeItem(GUEST_SESSION_STORAGE_KEY);
-    let guestSessionId = sessionStorage.getItem(GUEST_SESSION_STORAGE_KEY);
-    if (!guestSessionId) {
-        guestSessionId = 'guest_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
-        sessionStorage.setItem(GUEST_SESSION_STORAGE_KEY, guestSessionId);
-        console.log('[Session] 创建新 session:', guestSessionId);
-    } else {
-        console.log('[Session] 复用已有 session:', guestSessionId);
-    }
+    session.dropLegacyGuestLocalStorage();
+    let guestSessionId = session.getGuestSessionId();
+    console.log('[Session] 当前 session:', guestSessionId);
 
     const tasks = {};
     let ws = null;
@@ -179,8 +165,7 @@
     }
 
     function resetClientSession() {
-        clientId = newClientId();
-        sessionStorage.setItem(CLIENT_SESSION_STORAGE_KEY, clientId);
+        clientId = session.resetDownloadClient();
         clearTasks();
     }
 
@@ -190,8 +175,7 @@
     }
 
     function rotateGuestSession() {
-        guestSessionId = 'guest_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
-        sessionStorage.setItem(GUEST_SESSION_STORAGE_KEY, guestSessionId);
+        guestSessionId = session.rotateGuestSession();
     }
 
     async function retryTask(id) {
@@ -904,8 +888,8 @@
     async function checkLoginStatus() {
         const token = localStorage.getItem('gotube_admin_token');
         if (!token) {
-            if (sessionStorage.getItem(AUTH_CLIENT_STORAGE_KEY) === '1') {
-                sessionStorage.removeItem(AUTH_CLIENT_STORAGE_KEY);
+            if (session.wasAuthenticatedClient()) {
+                session.clearAuthenticatedClient();
                 resetClientSession();
             }
             isLoggedIn = false;
@@ -929,13 +913,15 @@
             const data = await response.json();
             isLoggedIn = data.valid && data.user;
             currentUser = data.user || null;
+            if (isLoggedIn) {
+                session.markAuthenticatedClient();
+            }
             updateLogoStyle();
             await loadMyLibrary();
         } catch (err) {
             console.debug('Check auth failed:', err.message);
-            localStorage.removeItem('gotube_admin_token');
-            sessionStorage.removeItem(AUTH_CLIENT_STORAGE_KEY);
-            resetClientSession();
+            clientId = session.clearAuthState({ resetDownloadClient: true });
+            clearTasks();
             isLoggedIn = false;
             currentUser = null;
             updateLogoStyle();
@@ -986,8 +972,7 @@
                 headers: { 'Authorization': `Bearer ${token}` },
             }).catch(() => {});
         }
-        localStorage.removeItem('gotube_admin_token');
-        sessionStorage.removeItem(AUTH_CLIENT_STORAGE_KEY);
+        session.clearAuthState();
         isLoggedIn = false;
         currentUser = null;
         myVideos = [];
@@ -1083,7 +1068,7 @@
             const data = await response.json();
             const previousUserId = currentUser && currentUser.id;
             localStorage.setItem('gotube_admin_token', data.token);
-            sessionStorage.setItem(AUTH_CLIENT_STORAGE_KEY, '1');
+            session.markAuthenticatedClient();
             isLoggedIn = true;
             currentUser = data.user || null;
             if (previousUserId && currentUser && previousUserId !== currentUser.id) {

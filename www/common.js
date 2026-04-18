@@ -5,6 +5,95 @@
 
 // ========== 基础工具函数 ==========
 
+window.GoTubeSession = window.GoTubeSession || (() => {
+    const CLIENT_KEY = 'gotube_client_id';
+    const AUTH_CLIENT_KEY = 'gotube_authenticated_client';
+    const GUEST_KEY = 'gotube_guest_session_id';
+    const AUTH_TOKEN_KEY = 'gotube_admin_token';
+
+    function newClientId() {
+        return 'c_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    function newGuestSessionId() {
+        return 'guest_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
+    }
+
+    function getDownloadClientId() {
+        let clientId = sessionStorage.getItem(CLIENT_KEY);
+        if (!clientId) {
+            clientId = newClientId();
+            sessionStorage.setItem(CLIENT_KEY, clientId);
+        }
+        return clientId;
+    }
+
+    function resetDownloadClient() {
+        const clientId = newClientId();
+        sessionStorage.setItem(CLIENT_KEY, clientId);
+        return clientId;
+    }
+
+    function clearDownloadClient() {
+        sessionStorage.removeItem(CLIENT_KEY);
+        clearAuthenticatedClient();
+    }
+
+    function getGuestSessionId() {
+        let sessionId = sessionStorage.getItem(GUEST_KEY);
+        if (!sessionId) {
+            sessionId = newGuestSessionId();
+            sessionStorage.setItem(GUEST_KEY, sessionId);
+        }
+        return sessionId;
+    }
+
+    function rotateGuestSession() {
+        const sessionId = newGuestSessionId();
+        sessionStorage.setItem(GUEST_KEY, sessionId);
+        return sessionId;
+    }
+
+    function dropLegacyGuestLocalStorage() {
+        localStorage.removeItem(GUEST_KEY);
+    }
+
+    function markAuthenticatedClient() {
+        sessionStorage.setItem(AUTH_CLIENT_KEY, '1');
+    }
+
+    function clearAuthenticatedClient() {
+        sessionStorage.removeItem(AUTH_CLIENT_KEY);
+    }
+
+    function wasAuthenticatedClient() {
+        return sessionStorage.getItem(AUTH_CLIENT_KEY) === '1';
+    }
+
+    function clearAuthState({ resetDownloadClient: shouldResetDownloadClient = false } = {}) {
+        localStorage.removeItem(AUTH_TOKEN_KEY);
+        clearAuthenticatedClient();
+        if (shouldResetDownloadClient) {
+            return resetDownloadClient();
+        }
+        clearDownloadClient();
+        return '';
+    }
+
+    return {
+        getDownloadClientId,
+        resetDownloadClient,
+        clearDownloadClient,
+        getGuestSessionId,
+        rotateGuestSession,
+        dropLegacyGuestLocalStorage,
+        markAuthenticatedClient,
+        clearAuthenticatedClient,
+        wasAuthenticatedClient,
+        clearAuthState,
+    };
+})();
+
 /**
  * querySelector 快捷方式
  */
@@ -144,9 +233,7 @@ async function apiFetch(endpoint, options = {}) {
     
     // 401 表示未授权，清除 token
     if (response.status === 401) {
-        localStorage.removeItem('gotube_admin_token');
-        sessionStorage.removeItem('gotube_client_id');
-        sessionStorage.removeItem('gotube_authenticated_client');
+        window.GoTubeSession.clearAuthState();
         throw new Error('UNAUTHORIZED');
     }
     

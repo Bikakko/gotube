@@ -4,8 +4,7 @@
  */
 
 function clearDownloadPageSession() {
-    sessionStorage.removeItem('gotube_client_id');
-    sessionStorage.removeItem('gotube_authenticated_client');
+    window.GoTubeSession.clearDownloadClient();
 }
 
 /**
