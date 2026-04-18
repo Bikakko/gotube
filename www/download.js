@@ -166,6 +166,26 @@
         renderTasks();
     }
 
+    async function getActiveDownloads() {
+        const res = await fetch(`/api/tasks/active?client_id=${encodeURIComponent(clientId)}`, {
+            headers: authHeaders(),
+        });
+        if (!res.ok) return [];
+        return await res.json();
+    }
+
+    async function cancelActiveDownloads() {
+        const res = await fetch(`/api/tasks/cancel-active?client_id=${encodeURIComponent(clientId)}`, {
+            method: 'POST',
+            headers: authHeaders(),
+        });
+        if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.detail || '取消下载失败');
+        }
+        return await res.json();
+    }
+
     function resetClientSession() {
         clientId = session.resetDownloadClient();
         clearTasks();
@@ -966,7 +986,28 @@
     }
 
     async function logout() {
-        if (!confirm('确定要退出登录吗？')) return;
+        let shouldCancelDownloads = false;
+        const activeDownloads = await getActiveDownloads();
+        if (activeDownloads.length > 0) {
+            shouldCancelDownloads = confirm(
+                `当前有 ${activeDownloads.length} 个下载任务正在进行。\n\n` +
+                '点击“确定”会取消这些下载并退出登录。\n' +
+                '点击“取消”会继续后台下载并退出登录。'
+            );
+        } else if (!confirm('确定要退出登录吗？')) {
+            return;
+        }
+
+        if (shouldCancelDownloads) {
+            try {
+                await cancelActiveDownloads();
+                clearTasks();
+            } catch (err) {
+                showToast('⚠️ ' + err.message, '#d29922');
+                return;
+            }
+        }
+
         const token = localStorage.getItem('gotube_admin_token');
         if (token) {
             const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';

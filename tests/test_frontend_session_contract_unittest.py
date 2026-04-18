@@ -57,6 +57,14 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("cancelled: '已取消'", source)
         self.assertIn("status-cancelled", source)
 
+    def test_logout_checks_active_downloads_before_clearing_session(self):
+        source = read_text("www/download.js")
+
+        self.assertIn("getActiveDownloads", source)
+        self.assertIn("/api/tasks/active", source)
+        self.assertIn("cancelActiveDownloads", source)
+        self.assertIn("/api/tasks/cancel-active", source)
+
 
 if __name__ == "__main__":
     unittest.main()
