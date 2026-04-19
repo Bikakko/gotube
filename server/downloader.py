@@ -1600,6 +1600,9 @@ class Downloader:
         """
         error_str = str(error)
 
+        if isinstance(error, DownloadSizeLimitError):
+            return error_str
+
         # 视频内容相关
         if "No video could be found" in error_str or "No videos found" in error_str:
             return "该链接没有视频文件"
