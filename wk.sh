@@ -4,8 +4,9 @@
 
 set -e
 
-PROJECT_DIR="/root/gotubeweb"
-VENV_DIR="/root/gotube/venv"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$SCRIPT_DIR"
+VENV_DIR="${GOTUBE_VENV_DIR:-$PROJECT_DIR/venv}"
 PIDFILE="$PROJECT_DIR/.server.pid"
 LOGFILE="$PROJECT_DIR/server.log"
 
@@ -40,7 +41,29 @@ is_running() {
 
 # 获取端口
 get_port() {
-    grep GOTUBE_PORT "$PROJECT_DIR/.env" | cut -d= -f2
+    if [ -n "${GOTUBE_PORT:-}" ]; then
+        echo "$GOTUBE_PORT"
+        return 0
+    fi
+
+    if [ -f "$PROJECT_DIR/.env" ]; then
+        local port
+        port=$(awk -F= '
+            /^[[:space:]]*GOTUBE_PORT[[:space:]]*=/ {
+                value=$2
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+                gsub(/^["'\'']|["'\'']$/, "", value)
+                print value
+                exit
+            }
+        ' "$PROJECT_DIR/.env")
+        if [ -n "$port" ]; then
+            echo "$port"
+            return 0
+        fi
+    fi
+
+    echo "8000"
 }
 
 # 检查端口是否被占用
@@ -106,11 +129,11 @@ get_workers() {
 
 build_frontend() {
     echo -e "${GREEN}正在混淆前端代码 (www -> www_dist)...${NC}"
-    if [ ! -d "node_modules" ]; then
+    if [ ! -d "$PROJECT_DIR/node_modules" ]; then
         echo -e "${YELLOW}首次运行，正在安装混淆工具依赖...${NC}"
-        npm install --silent
+        (cd "$PROJECT_DIR" && npm install --silent)
     fi
-    node build.js
+    (cd "$PROJECT_DIR" && node build.js)
     if [ $? -ne 0 ]; then
         echo -e "${RED}✗ 前端混淆失败，请检查构建日志${NC}"
         exit 1
@@ -149,6 +172,12 @@ start() {
     echo -e "  Workers: ${YELLOW}$WORKERS${NC}"
 
     # 激活虚拟环境并启动
+    if [ ! -f "$VENV_DIR/bin/activate" ]; then
+        echo -e "${RED}✗ 未找到虚拟环境: $VENV_DIR${NC}"
+        echo -e "${YELLOW}请先在项目目录执行: python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt${NC}"
+        exit 1
+    fi
+
     source "$VENV_DIR/bin/activate"
     cd "$PROJECT_DIR"
 
@@ -250,6 +279,11 @@ status() {
 }
 
 update_ytdlp() {
+    if [ ! -f "$VENV_DIR/bin/activate" ]; then
+        echo -e "${RED}✗ 未找到虚拟环境: $VENV_DIR${NC}"
+        exit 1
+    fi
+
     source "$VENV_DIR/bin/activate"
     echo -e "${YELLOW}正在更新 yt-dlp...${NC}"
 
