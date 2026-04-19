@@ -171,14 +171,20 @@ start() {
     echo -e "  端口:    ${YELLOW}$PORT${NC}"
     echo -e "  Workers: ${YELLOW}$WORKERS${NC}"
 
-    # 激活虚拟环境并启动
+    # 激活虚拟环境并启动，若不存在则自动创建
     if [ ! -f "$VENV_DIR/bin/activate" ]; then
-        echo -e "${RED}✗ 未找到虚拟环境: $VENV_DIR${NC}"
-        echo -e "${YELLOW}请先在项目目录执行: python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt${NC}"
-        exit 1
+        echo -e "${YELLOW}首次启动或环境丢失，正在自动创建虚拟环境...${NC}"
+        python3 -m venv "$VENV_DIR"
+        source "$VENV_DIR/bin/activate"
+        echo -e "${YELLOW}正在自动安装项目依赖 (requirements.txt)...${NC}"
+        pip install --upgrade pip >/dev/null 2>&1
+        pip install -r "$PROJECT_DIR/requirements.txt"
+        # 由于 wk.sh 依赖 gunicorn，如果 requirements.txt 没写，也强制安装一下
+        pip install gunicorn >/dev/null 2>&1
+        echo -e "${GREEN}✓ 环境配置完成${NC}"
+    else
+        source "$VENV_DIR/bin/activate"
     fi
-
-    source "$VENV_DIR/bin/activate"
     cd "$PROJECT_DIR"
 
     # 如果配置了 GOTUBE_AUTO_UPDATE_YTDLP=1，则启动时自动更新 yt-dlp
