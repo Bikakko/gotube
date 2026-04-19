@@ -3,8 +3,9 @@
 
 set -e
 
-PROJECT_DIR="/root/gotube"
-VENV_DIR="$PROJECT_DIR/venv"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$SCRIPT_DIR"
+VENV_DIR="${GOTUBE_VENV_DIR:-$PROJECT_DIR/venv}"
 PIDFILE="$PROJECT_DIR/.server.pid"
 
 # 颜色输出
@@ -37,7 +38,29 @@ is_running() {
 
 # 获取端口
 get_port() {
-    grep GOTUBE_PORT "$PROJECT_DIR/.env" | cut -d= -f2
+    if [ -n "${GOTUBE_PORT:-}" ]; then
+        echo "$GOTUBE_PORT"
+        return 0
+    fi
+
+    if [ -f "$PROJECT_DIR/.env" ]; then
+        local port
+        port=$(awk -F= '
+            /^[[:space:]]*GOTUBE_PORT[[:space:]]*=/ {
+                value=$2
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+                gsub(/^["'\'']|["'\'']$/, "", value)
+                print value
+                exit
+            }
+        ' "$PROJECT_DIR/.env")
+        if [ -n "$port" ]; then
+            echo "$port"
+            return 0
+        fi
+    fi
+
+    echo "8000"
 }
 
 # 检查端口是否被占用
@@ -139,11 +162,17 @@ start() {
     echo -e "${GREEN}正在启动 GoTube 开发服务器...${NC}"
 
     # 激活虚拟环境并启动
+    if [ ! -f "$VENV_DIR/bin/activate" ]; then
+        echo -e "${RED}✗ 未找到虚拟环境: $VENV_DIR${NC}"
+        echo -e "${YELLOW}请先在项目目录执行: python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt${NC}"
+        exit 1
+    fi
+
     source "$VENV_DIR/bin/activate"
     cd "$PROJECT_DIR"
 
     # 后台启动 uvicorn
-    uvicorn server.main:app --host 0.0.0.0 --port "$PORT" --reload &
+    python -m uvicorn server.main:app --host 0.0.0.0 --port "$PORT" --reload &
     local pid=$!
     echo "$pid" > "$PIDFILE"
 
