@@ -99,6 +99,8 @@ class DownloadTask:
     def __init__(self, task_id: str, url: str, client_id: str) -> None:
         self.task_id = task_id
         self.url = url
+        self.source_url = url
+        self.original_url = url
         self.client_id = client_id
         self.status = "pending"  # pending | downloading | completed | failed
         self.progress = 0.0
@@ -1039,7 +1041,8 @@ class Downloader:
             "video_id": task.video_id,
             "duration": task.duration,
             "file_hash": task.file_hash,
-            "url": task.url,
+            "url": task.source_url,
+            "original_url": task.original_url,
             "tags": [],
             "created_at": datetime.now(UTC).isoformat(),
         }

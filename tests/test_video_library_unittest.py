@@ -182,6 +182,31 @@ class VideoLibraryTests(unittest.TestCase):
             self.assertEqual(session.query(MediaAsset).count(), 1)
             self.assertEqual(session.query(UserVideoItem).filter_by(owner_user_id=bob.id).count(), 1)
 
+    def test_existing_source_reuse_matches_platform_canonical_url_variants(self):
+        with self.Session() as session:
+            alice = self._user(session, "alice")
+            bob = self._user(session, "bob")
+            video_file = self._video_file("Tweet_abcd1234", "abcd1234.mp4")
+            register_completed_file(
+                session,
+                owner_user_id=alice.id,
+                filepath=video_file,
+                download_dir=self.download_dir,
+                source_url="https://twitter.com/someone/status/2042105224727269424?s=20",
+                title="Tweet",
+                file_hash="abcd1234",
+            )
+
+            reused = create_item_from_existing_source(
+                session,
+                bob.id,
+                "https://x.com/i/status/2042105224727269424",
+            )
+
+            self.assertIsNotNone(reused)
+            self.assertEqual(session.query(MediaAsset).count(), 1)
+            self.assertEqual(session.query(UserVideoItem).count(), 2)
+
     def test_new_url_is_added_when_download_fingerprints_to_existing_media(self):
         with self.Session() as session:
             alice = self._user(session, "alice")

@@ -23,6 +23,7 @@ from .quota import get_effective_quota_bytes, refresh_user_storage_usage
 from .queue_manager import QueueManager
 from .config import settings
 from .security import validate_guest_session_id, validate_hash_id
+from .url_normalizer import normalize_media_url
 from .video_library import (
     create_item_from_existing_source,
     delete_user_video_item,
@@ -284,6 +285,8 @@ async def add_task(
 
     # 验证 URL 格式（必须 http/https 开头）
     _validate_url_format(req.url)
+    normalized_url = normalize_media_url(req.url)
+    source_url = normalized_url.canonical_url or req.url
 
     # 未登录用户使用 guest session；普通用户进入个人视频库流程；管理员下载不绑定个人库。
     is_guest = current_user is None and bool(req.session_id)
@@ -291,7 +294,7 @@ async def add_task(
         raise HTTPException(status_code=403, detail="匿名用户下载功能已禁用")
     if is_guest:
         req.session_id = validate_guest_session_id(req.session_id)
-        existing_asset = get_asset_from_existing_source(db, req.url)
+        existing_asset = get_asset_from_existing_source(db, source_url)
         if existing_asset is not None:
             db.commit()
             task = qm.add_completed_guest_asset_task(req.url, client_id, req.session_id, existing_asset)
@@ -322,6 +325,7 @@ async def add_task(
         client_id,
         session_id=req.session_id if is_guest else None,
         owner_user_id=owner_user_id,
+        source_url=source_url,
     )
     if task is None:
         # 同客户端相同URL且不可重试

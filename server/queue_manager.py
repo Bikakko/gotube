@@ -11,6 +11,7 @@ from pathlib import Path
 from collections.abc import Callable
 
 from .downloader import Downloader, DownloadTask
+from .url_normalizer import normalize_media_url
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ class QueueManager:
         client_id: str,
         session_id: str | None = None,
         owner_user_id: int | None = None,
+        source_url: str | None = None,
     ) -> DownloadTask | None:
         """
         添加下载任务并启动下载（受信号量控制并发）。
@@ -74,12 +76,15 @@ class QueueManager:
             新创建或已有的 DownloadTask 对象，如果URL重复且不可重试则返回None。
         """
         # 检查同客户端是否有相同URL的非失败任务
-        existing = self._find_task_by_url(client_id, url)
+        source_url = source_url or normalize_media_url(url).canonical_url or url
+        existing = self._find_task_by_url(client_id, source_url)
         if existing is not None:
             logger.info("URL重复，返回已有任务: %s, url=%s", existing.task_id, url[:80])
             return existing
 
         task = self.downloader.create_task(url, client_id)
+        task.source_url = source_url
+        task.original_url = url
         task.owner_user_id = owner_user_id
 
         # 设置 guest 标识
@@ -98,6 +103,8 @@ class QueueManager:
     def add_completed_library_task(self, url: str, client_id: str, item, asset) -> DownloadTask:
         """Create a completed in-memory task for a reused library item."""
         task = self.downloader.create_task(url, client_id)
+        task.source_url = normalize_media_url(url).canonical_url or url
+        task.original_url = url
         task.status = "completed"
         task.progress = 100.0
         task.completed_at = datetime.now(UTC)
@@ -118,6 +125,8 @@ class QueueManager:
     def add_completed_guest_asset_task(self, url: str, client_id: str, session_id: str, asset) -> DownloadTask:
         """Create a completed guest task for an existing library asset."""
         task = self.downloader.create_task(url, client_id)
+        task.source_url = normalize_media_url(url).canonical_url or url
+        task.original_url = url
         task.status = "completed"
         task.progress = 100.0
         task.completed_at = datetime.now(UTC)
@@ -134,7 +143,7 @@ class QueueManager:
         logger.info("复用已有媒体资产创建游客任务: %s, asset=%s, session=%s", task.task_id, asset.id, session_id)
         return task
 
-    def _find_task_by_url(self, client_id: str, url: str) -> DownloadTask | None:
+    def _find_task_by_url(self, client_id: str, source_url: str) -> DownloadTask | None:
         """
         查找同客户端下相同URL的非失败任务。
 
@@ -149,7 +158,8 @@ class QueueManager:
         """
         retryable = {"failed"}
         for task in self.downloader.get_tasks_by_client(client_id):
-            if task.url == url and task.status not in retryable:
+            task_source_url = getattr(task, "source_url", "") or normalize_media_url(task.url).canonical_url or task.url
+            if task_source_url == source_url and task.status not in retryable:
                 return task
         return None
 
@@ -246,13 +256,14 @@ class QueueManager:
                     owner_user_id=task.owner_user_id,
                     filepath=Path(task.filepath),
                     download_dir=self.downloader.download_dir,
-                    source_url=task.url,
+                    source_url=task.source_url,
                     title=task.title,
                     file_hash=task.file_hash,
                     thumbnail=task.thumbnail,
                     duration=task.duration,
                     meta={
-                        "url": task.url,
+                        "url": task.source_url,
+                        "original_url": task.original_url,
                         "title": task.title,
                         "thumbnail": task.thumbnail,
                         "video_id": task.video_id,

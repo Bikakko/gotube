@@ -9,7 +9,7 @@ from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import urlparse
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -18,44 +18,13 @@ from .db import MediaAsset, MediaSource, User, UserVideoItem
 from .downloader import VIDEO_EXTENSIONS
 from .media_fingerprint import fingerprint_file
 from .quota import refresh_user_storage_usage, user_can_add_media
+from .url_normalizer import normalize_media_url
 
 logger = logging.getLogger(__name__)
 
-TRANSIENT_SOURCE_QUERY_KEYS = {
-    "t",
-    "start",
-    "time_continue",
-    "progress",
-    "seek",
-    "spm_id_from",
-    "vd_source",
-    "share_source",
-    "share_medium",
-    "share_plat",
-    "share_session_id",
-    "timestamp",
-    "share_times",
-}
-
-
 def normalize_source_url(url: str) -> str:
     """Normalize a source URL for reuse lookup without changing its semantics."""
-    url = (url or "").strip()
-    if not url:
-        return ""
-    try:
-        parsed = urlparse(url)
-    except Exception:
-        return url
-    query_pairs = [
-        (key, value)
-        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
-        if key.lower() not in TRANSIENT_SOURCE_QUERY_KEYS
-    ]
-    query = urlencode(sorted(query_pairs))
-    netloc = parsed.netloc.lower()
-    path = parsed.path.rstrip("/") or parsed.path
-    return urlunparse((parsed.scheme.lower(), netloc, path, "", query, ""))
+    return normalize_media_url(url).canonical_url
 
 
 def source_platform(url: str) -> str:
