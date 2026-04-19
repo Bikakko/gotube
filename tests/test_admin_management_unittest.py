@@ -1,7 +1,7 @@
 import asyncio
 import tempfile
 import unittest
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -38,7 +38,15 @@ class AdminManagementTests(unittest.TestCase):
         session.refresh(user)
         return user
 
-    def _asset(self, session, title: str, file_hash: str, size: int = 128) -> MediaAsset:
+    def _asset(
+        self,
+        session,
+        title: str,
+        file_hash: str,
+        size: int = 128,
+        created_at: datetime | None = None,
+    ) -> MediaAsset:
+        created_at = created_at or datetime.now(UTC)
         asset = MediaAsset(
             fingerprint=f"fp-{file_hash}",
             file_hash=file_hash,
@@ -50,8 +58,8 @@ class AdminManagementTests(unittest.TestCase):
             duration=12.0,
             source_url=f"https://example.test/{file_hash}",
             meta_json="{}",
-            created_at=datetime.now(UTC),
-            last_seen_at=datetime.now(UTC),
+            created_at=created_at,
+            last_seen_at=created_at,
         )
         session.add(asset)
         session.commit()
@@ -150,6 +158,49 @@ class AdminManagementTests(unittest.TestCase):
             self.assertEqual(legacy["media_asset_id"], legacy_asset.id)
             self.assertEqual([row["title"] for row in owner_result["videos"]], ["Alpha"])
             self.assertEqual([row["title"] for row in legacy_result["videos"]], ["Legacy"])
+
+    def test_get_videos_groups_shared_media_asset_once(self):
+        with self.Session() as session:
+            admin = self._user(session, "admin", role="admin")
+            alice = self._user(session, "alice")
+            bob = self._user(session, "bob")
+            shared_asset = self._asset(session, "Shared", "dddddddd")
+            self._item(session, alice, shared_asset)
+            self._item(session, bob, shared_asset)
+
+            result = asyncio.run(get_videos(page=1, per_page=20, admin=admin, db=session))
+
+            self.assertEqual(result["total"], 1)
+            row = result["videos"][0]
+            self.assertEqual(row["media_asset_id"], shared_asset.id)
+            self.assertEqual(row["owner_count"], 2)
+            self.assertEqual(row["reference_count"], 2)
+            self.assertEqual(row["owner_username"], "2 个用户")
+            self.assertCountEqual(
+                [owner["username"] for owner in row["owners"]],
+                ["alice", "bob"],
+            )
+
+    def test_get_videos_time_filter_handles_iso_created_at_strings(self):
+        with self.Session() as session:
+            admin = self._user(session, "admin", role="admin")
+            today_asset = self._asset(session, "Today", "eeeeeeee")
+            old_asset = self._asset(
+                session,
+                "Old",
+                "ffffffff",
+                created_at=datetime.now(UTC) - timedelta(days=90),
+            )
+
+            earlier_result = asyncio.run(
+                get_videos(time="earlier", page=1, per_page=20, admin=admin, db=session)
+            )
+            today_result = asyncio.run(
+                get_videos(time="today", page=1, per_page=20, admin=admin, db=session)
+            )
+
+            self.assertEqual([row["media_asset_id"] for row in earlier_result["videos"]], [old_asset.id])
+            self.assertEqual([row["media_asset_id"] for row in today_result["videos"]], [today_asset.id])
 
 
 if __name__ == "__main__":
