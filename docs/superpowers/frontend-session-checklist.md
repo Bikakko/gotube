@@ -214,6 +214,18 @@ venv\Scripts\python.exe -m unittest tests.test_user_library_unittest tests.test_
 git diff --check
 ```
 
+## 发布前运行巡检
+
+在 V4.0.0 合并前，管理员应在服务启动后执行以下检查：
+
+- 管理后台 Cookie 诊断中，目标平台的关键字段处于可接受状态。
+- 管理员接口 `/admin/api/runtime/health` 可访问，且 `blockers` 为空。
+- `download_dir_writable` 为 `true`，下载目录可写。
+- `database_writable` 为 `true`，SQLite 数据库路径可打开且具备写入条件。
+- `ffmpeg_available` 为 `true`，否则分离音视频合并会失败。
+- `yt_dlp_version` 非空，确认运行环境能导入 yt-dlp。
+- `cookie_source` 应符合预期：未上传 Cookie 时为 `none`，管理后台上传后为 `upload`。
+
 ## 判定原则
 
 - 未登录页面只能使用 guest session 和 guest client。

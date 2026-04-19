@@ -32,6 +32,7 @@ from .cookie_store import (
     get_uploaded_cookies_path,
 )
 from .db import AuthToken, MediaAsset, User, UserVideoItem
+from .health_checks import collect_runtime_health
 from .models import (
     ChangePasswordRequest,
     CreateInviteRequest,
@@ -1472,6 +1473,14 @@ async def get_cookies_status(
     except Exception as e:
         logger.error("获取 cookies 状态失败: %s", e)
         raise HTTPException(status_code=500, detail=f"获取 cookies 状态失败: {e}") from e
+
+
+@router.get("/runtime/health")
+async def get_runtime_health(
+    admin: User = Depends(require_admin),
+) -> dict:
+    """Return release-readiness runtime checks for administrators."""
+    return collect_runtime_health()
 
 
 @router.post("/cookies/check_merge")
