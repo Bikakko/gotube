@@ -26,6 +26,7 @@ from .auth import get_current_user, get_db, require_admin
 from .config import settings
 from .cookie_store import (
     delete_uploaded_cookies_file,
+    diagnose_cookie_content,
     get_active_cookies_file_for_status,
     get_data_dir,
     get_uploaded_cookies_path,
@@ -1445,6 +1446,7 @@ async def get_cookies_status(
                 "has_cookies": False,
                 "source": "none",
                 "message": "未上传 cookies 文件",
+                "diagnostics": diagnose_cookie_content(""),
             }
 
         # 获取文件信息
@@ -1454,6 +1456,7 @@ async def get_cookies_status(
 
         # 解析域名
         domains = _parse_cookies_domains(active_cookies)
+        content = active_cookies.read_text(encoding="utf-8")
 
         return {
             "has_cookies": True,
@@ -1464,6 +1467,7 @@ async def get_cookies_status(
             "domain_count": len(domains),
             "source": "upload",
             "file_path": str(active_cookies.relative_to(settings.project_root)),
+            "diagnostics": diagnose_cookie_content(content),
         }
     except Exception as e:
         logger.error("获取 cookies 状态失败: %s", e)

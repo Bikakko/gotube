@@ -14,6 +14,18 @@ from .config import settings
 COOKIE_FILENAME = "cookies.txt"
 IMPORT_MARKER_FILENAME = ".cookies_env_imported"
 
+PLATFORM_COOKIE_REQUIREMENTS = {
+    "bilibili": {"SESSDATA", "bili_jct", "DedeUserID"},
+    "twitter": {"auth_token", "ct0"},
+    "youtube": {"SAPISID", "__Secure-1PSID", "__Secure-3PSID"},
+}
+
+PLATFORM_DOMAIN_KEYWORDS = {
+    "bilibili": ("bilibili.com", "b23.tv"),
+    "twitter": ("x.com", "twitter.com"),
+    "youtube": ("youtube.com", "google.com", "googlevideo.com", "youtu.be"),
+}
+
 
 def get_data_dir() -> Path:
     data_dir = settings.project_root / "data"
@@ -74,3 +86,40 @@ def delete_uploaded_cookies_file() -> bool:
     uploaded_cookies.unlink()
     _mark_env_import_checked()
     return True
+
+
+def diagnose_cookie_content(content: str) -> dict[str, dict[str, object]]:
+    """Report platform cookie-name coverage without exposing cookie values."""
+    observed: dict[str, dict[str, set[str]]] = {
+        platform: {"names": set(), "domains": set()}
+        for platform in PLATFORM_COOKIE_REQUIREMENTS
+    }
+
+    for raw_line in content.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 7:
+            continue
+        domain = parts[0].strip()
+        name = parts[5].strip()
+        if not domain or not name:
+            continue
+        normalized_domain = domain.lstrip(".").lower()
+        for platform, keywords in PLATFORM_DOMAIN_KEYWORDS.items():
+            if any(keyword in normalized_domain for keyword in keywords):
+                observed[platform]["names"].add(name)
+                observed[platform]["domains"].add(domain)
+
+    diagnostics: dict[str, dict[str, object]] = {}
+    for platform, required in PLATFORM_COOKIE_REQUIREMENTS.items():
+        present = observed[platform]["names"] & required
+        missing = required - present
+        diagnostics[platform] = {
+            "has_required": not missing,
+            "present": sorted(present),
+            "missing": sorted(missing),
+            "domains": sorted(observed[platform]["domains"]),
+        }
+    return diagnostics

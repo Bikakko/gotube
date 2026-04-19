@@ -91,6 +91,58 @@ async function loadCookiesStatus() {
 /**
  * 渲染 cookies 状态
  */
+const COOKIE_PLATFORM_LABELS = {
+    bilibili: 'Bilibili',
+    twitter: 'X/Twitter',
+    youtube: 'YouTube',
+};
+
+function escapeCookieHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    }[ch]));
+}
+
+function renderCookieDiagnostics(data) {
+    const diagnostics = data.diagnostics || {};
+    const platforms = Object.keys(COOKIE_PLATFORM_LABELS);
+
+    return `
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border);">
+            <div style="font-size: 13px; color: var(--text-sec); margin-bottom: 10px;">平台登录态诊断</div>
+            <div style="display: grid; gap: 10px;">
+                ${platforms.map((platform) => {
+                    const item = diagnostics[platform] || {};
+                    const hasRequired = Boolean(item.has_required);
+                    const present = Array.isArray(item.present) ? item.present : [];
+                    const missing = Array.isArray(item.missing) ? item.missing : [];
+                    const domains = Array.isArray(item.domains) ? item.domains : [];
+                    return `
+                        <div style="padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;">
+                            <div style="display: flex; justify-content: space-between; gap: 10px; align-items: center;">
+                                <strong>${escapeCookieHtml(COOKIE_PLATFORM_LABELS[platform])}</strong>
+                                <span style="color: ${hasRequired ? 'var(--success)' : 'var(--warning)'};">
+                                    ${hasRequired ? '完整' : '缺字段'}
+                                </span>
+                            </div>
+                            <div style="margin-top: 6px; font-size: 12px; color: var(--text-sec); line-height: 1.6;">
+                                已有：${present.length ? present.map(escapeCookieHtml).join(', ') : '无'}
+                                <br>
+                                缺少：${missing.length ? missing.map(escapeCookieHtml).join(', ') : '无'}
+                                ${domains.length ? `<br>域名：${domains.slice(0, 6).map(escapeCookieHtml).join(', ')}${domains.length > 6 ? ` 等 ${domains.length} 个` : ''}` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        </div>
+    `;
+}
+
 function renderCookiesStatus(container, data) {
     if (!data.has_cookies) {
         container.innerHTML = `
@@ -121,6 +173,7 @@ function renderCookiesStatus(container, data) {
             </div>
         `
         : '';
+    const diagnosticsHtml = renderCookieDiagnostics(data);
 
     container.innerHTML = `
         <div style="padding: 20px; background: var(--surface); border-radius: 8px;">
@@ -151,6 +204,7 @@ function renderCookiesStatus(container, data) {
                 </div>
             </div>
             ${domainsHtml}
+            ${diagnosticsHtml}
         </div>
     `;
 }
