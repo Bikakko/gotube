@@ -65,6 +65,15 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("cancelActiveDownloads", source)
         self.assertIn("/api/tasks/cancel-active", source)
 
+    def test_logout_active_download_prompt_allows_staying_logged_in(self):
+        source = read_text("www/download.js")
+
+        self.assertIn("confirmLogoutWithActiveDownloads", source)
+        self.assertIn("取消下载并退出", source)
+        self.assertIn("保留下载并退出", source)
+        self.assertIn("不退出", source)
+        self.assertIn("logoutAction === 'stay'", source)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,6 +2,7 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from server.downloader import DownloadCancelledError, DownloadTask, Downloader
 
@@ -54,6 +55,34 @@ class DownloaderTransferBoundariesTest(unittest.IsolatedAsyncioTestCase):
             await downloader._do_download(task.url, task, progress_callback)
 
             self.assertTrue(any(downloaded > 0 for _, downloaded in events))
+
+    async def test_guest_transfer_copies_file_when_windows_move_is_blocked(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            downloader = self.make_downloader(root)
+            session_id = "guest_abc_abcd1234"
+            session_dir = root / "temp_guest" / session_id
+            video_dir = session_dir / "LockedVideo_12345678"
+            video_file = video_dir / "12345678.mp4"
+            meta_file = video_dir / "meta.json"
+            video_dir.mkdir(parents=True)
+            video_file.write_bytes(b"video")
+            meta_file.write_text("{}", encoding="utf-8")
+
+            def locked_move(source, target):
+                raise OSError(32, "另一个程序正在使用此文件")
+
+            with patch("server.downloader.shutil.move", side_effect=locked_move):
+                result = downloader.transfer_guest_session(session_id)
+
+            target_file = root / "LockedVideo_12345678" / "12345678.mp4"
+            target_meta = root / "LockedVideo_12345678" / "meta.json"
+
+            self.assertEqual(result["transferred_count"], 1)
+            self.assertEqual(result["errors"], [])
+            self.assertTrue(target_file.exists())
+            self.assertEqual(target_file.read_bytes(), b"video")
+            self.assertTrue(target_meta.exists())
 
 
 class DownloadTaskCancellationStateTest(unittest.IsolatedAsyncioTestCase):

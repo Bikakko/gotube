@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 import yt_dlp
 
 from .config import settings
+from .cookie_store import get_runtime_cookies_file
 from .path_utils import resolve_inside
 from .security import validate_guest_session_id
 
@@ -98,6 +99,8 @@ class DownloadTask:
     def __init__(self, task_id: str, url: str, client_id: str) -> None:
         self.task_id = task_id
         self.url = url
+        self.source_url = url
+        self.original_url = url
         self.client_id = client_id
         self.status = "pending"  # pending | downloading | completed | failed
         self.progress = 0.0
@@ -152,7 +155,7 @@ class Downloader:
         """
         self.download_dir = download_dir or settings.get_download_dir()
         self.download_dir.mkdir(parents=True, exist_ok=True)
-        self.cookies_file = cookies_file or settings.get_cookies_file()
+        self.cookies_file = cookies_file or get_runtime_cookies_file()
         self.warp_proxy = warp_proxy or settings.warp_proxy
         self._tasks: dict[str, DownloadTask] = {}
 
@@ -212,7 +215,7 @@ class Downloader:
         if self.cookies_file and self.cookies_file.exists():
             logger.info("Cookies 文件已加载: %s", self.cookies_file)
         else:
-            cookie_path_display = self.cookies_file or settings.get_cookies_file()
+            cookie_path_display = self.cookies_file or get_runtime_cookies_file()
             if not cookie_path_display:
                 logger.warning(
                     "未配置 Cookies 文件。部分视频站点（如 YouTube）可能需要登录认证。"
@@ -619,6 +622,24 @@ class Downloader:
 
         return count
 
+    def _move_or_copy_guest_item(self, item: Path, target_item: Path) -> None:
+        """Move a guest transfer item, falling back to copy when Windows locks the source."""
+        try:
+            shutil.move(str(item), str(target_item))
+            return
+        except OSError as move_error:
+            logger.warning(
+                "移动 guest 文件失败，尝试复制兜底: %s -> %s, error=%s",
+                item,
+                target_item,
+                move_error,
+            )
+
+        if item.is_dir():
+            shutil.copytree(item, target_item, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, target_item)
+
     def transfer_guest_session(self, session_id: str, client_id: str | None = None) -> dict:
         """
         将游客 session 下的所有视频转移到主下载目录。
@@ -696,13 +717,19 @@ class Downloader:
                         for item in video_dir.iterdir():
                             target_item = resolve_inside(target_dir, item.name)
                             if not target_item.exists():
-                                shutil.move(str(item), str(target_item))
+                                self._move_or_copy_guest_item(item, target_item)
                                 logger.info("转移文件: %s -> %s", item.name, target_dir)
                             else:
                                 logger.info("目标文件已存在，跳过: %s", target_item)
                     else:
-                        shutil.move(str(video_dir), str(target_dir))
+                        self._move_or_copy_guest_item(video_dir, target_dir)
                         logger.info("转移目录: %s -> %s", video_dir.name, target_dir.parent)
+
+                    try:
+                        if video_dir.exists():
+                            shutil.rmtree(video_dir)
+                    except OSError as e:
+                        logger.warning("guest 源目录暂时无法删除，后续过期清理会重试 %s: %s", video_dir, e)
 
                     transferred.append(str(relative_to_session))
                 else:
@@ -1014,7 +1041,8 @@ class Downloader:
             "video_id": task.video_id,
             "duration": task.duration,
             "file_hash": task.file_hash,
-            "url": task.url,
+            "url": task.source_url,
+            "original_url": task.original_url,
             "tags": [],
             "created_at": datetime.now(UTC).isoformat(),
         }
@@ -1575,6 +1603,9 @@ class Downloader:
         """
         error_str = str(error)
 
+        if isinstance(error, DownloadSizeLimitError):
+            return error_str
+
         # 视频内容相关
         if "No video could be found" in error_str or "No videos found" in error_str:
             return "该链接没有视频文件"
@@ -1603,6 +1634,9 @@ class Downloader:
             return "不支持的视频链接"
 
         # HTTP 状态码
+        if ("BiliBili" in error_str or "bilibili" in error_str.lower()) and "412" in error_str:
+            return "B 站访问被拦截（HTTP 412），请更新完整 Cookie 后重试"
+
         if "404" in error_str:
             return "视频不存在"
 

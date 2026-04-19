@@ -12,7 +12,7 @@ import shutil
 import time
 import zipfile
 from collections import Counter
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any
@@ -24,7 +24,15 @@ from sqlalchemy.orm import Session
 
 from .auth import get_current_user, get_db, require_admin
 from .config import settings
+from .cookie_store import (
+    delete_uploaded_cookies_file,
+    diagnose_cookie_content,
+    get_active_cookies_file_for_status,
+    get_data_dir,
+    get_uploaded_cookies_path,
+)
 from .db import AuthToken, MediaAsset, User, UserVideoItem
+from .health_checks import collect_runtime_health
 from .models import (
     ChangePasswordRequest,
     CreateInviteRequest,
@@ -35,11 +43,18 @@ from .models import (
     UserResponse,
 )
 from .invites import create_invite, list_invites, revoke_invite
-from .video_library import admin_delete_media_asset, list_user_video_items
+from .video_library import admin_delete_media_asset, list_admin_media_assets
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def get_local_timezone() -> ZoneInfo | timezone:
+    try:
+        return ZoneInfo("Asia/Shanghai")
+    except Exception:
+        return timezone(timedelta(hours=8))
 
 
 # ── Token 管理 ──
@@ -219,16 +234,6 @@ def _list_all_videos(download_dir: Path) -> list[dict[str, Any]]:
     return videos
 
 
-def _reference_counts(db: Session) -> dict[int, int]:
-    rows = (
-        db.query(UserVideoItem.media_asset_id, func.count(UserVideoItem.id))
-        .filter(UserVideoItem.deleted_at.is_(None))
-        .group_by(UserVideoItem.media_asset_id)
-        .all()
-    )
-    return {int(media_asset_id): int(count) for media_asset_id, count in rows}
-
-
 def _normalize_route_value(value: Any, fallback: Any = None) -> Any:
     """Support direct unit-test calls where FastAPI Query defaults are not resolved."""
     if value.__class__.__module__.startswith("fastapi."):
@@ -286,6 +291,15 @@ def _legacy_media_to_admin_dict(asset: MediaAsset, ref_counts: dict[int, int]) -
     }
 
 
+def _admin_media_asset_to_admin_dict(row: dict[str, Any]) -> dict[str, Any]:
+    row = {**row}
+    thumbnail = row.get("thumbnail") or ""
+    if thumbnail and not thumbnail.startswith(("http://", "https://")):
+        row["thumbnail"] = f"/api/thumbnail/{row.get('file_hash', '')}"
+    row["source"] = _extract_source_from_url(row.get("source_url") or row.get("url") or "")
+    return row
+
+
 def _list_admin_media_videos(
     db: Session,
     admin: User,
@@ -293,29 +307,10 @@ def _list_admin_media_videos(
     owner_user_id: int | None = None,
     owner: str | None = None,
 ) -> list[dict[str, Any]]:
-    ref_counts = _reference_counts(db)
-    owner = (owner or "").strip().lower() or None
-
-    videos: list[dict[str, Any]] = []
-    if owner != "legacy":
-        videos.extend(
-            _library_video_to_admin_dict(row, ref_counts)
-            for row in list_user_video_items(db, admin, owner_user_id=owner_user_id)
-        )
-
-    if owner == "legacy" or (owner is None and owner_user_id is None):
-        legacy_assets = (
-            db.query(MediaAsset)
-            .outerjoin(
-                UserVideoItem,
-                (UserVideoItem.media_asset_id == MediaAsset.id) & (UserVideoItem.deleted_at.is_(None)),
-            )
-            .filter(UserVideoItem.id.is_(None))
-            .order_by(MediaAsset.created_at.desc())
-            .all()
-        )
-        videos.extend(_legacy_media_to_admin_dict(asset, ref_counts) for asset in legacy_assets)
-
+    videos = [
+        _admin_media_asset_to_admin_dict(row)
+        for row in list_admin_media_assets(db, admin, owner_user_id=owner_user_id, owner=owner)
+    ]
     videos.sort(key=lambda row: row.get("created_at") or "", reverse=True)
     return videos
 
@@ -382,42 +377,52 @@ def _filter_videos_by_time_range(videos: list, time_filter: str) -> list:
     - month: 本月（从1号0点开始，包含本周和今天）
     - earlier: 更早（本月1号0点之前的所有视频）
     """
-    try:
-        local_tz = get_local_timezone()
-        now = datetime.now(local_tz)
-        
-        # 计算各时间范围的起始点
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        today_weekday = now.weekday()  # 0=周一, 6=周日
-        week_start = now - timedelta(days=today_weekday)
-        week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        
-        # 根据筛选条件确定起始时间
-        if time_filter == "today":
-            threshold = today_start
-        elif time_filter == "week":
-            threshold = week_start
-        elif time_filter == "month":
-            threshold = month_start
-        elif time_filter == "earlier":
-            # earlier 是本月之前的，所以筛选条件是 < month_start
-            return [v for v in videos if _get_video_local_time(v["created_at"]) < month_start]
-        else:
-            return videos
-        
-        # 包含范围筛选：created_at >= threshold
-        return [v for v in videos if _get_video_local_time(v["created_at"]) >= threshold]
-    except Exception:
+    local_tz = get_local_timezone()
+    now = datetime.now(local_tz)
+
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    today_weekday = now.weekday()
+    week_start = now - timedelta(days=today_weekday)
+    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    if time_filter == "today":
+        threshold = today_start
+    elif time_filter == "week":
+        threshold = week_start
+    elif time_filter == "month":
+        threshold = month_start
+    elif time_filter == "earlier":
+        return [
+            v for v in videos
+            if (created_at := _try_get_video_local_time(v.get("created_at"))) is not None
+            and created_at < month_start
+        ]
+    else:
         return videos
 
+    return [
+        v for v in videos
+        if (created_at := _try_get_video_local_time(v.get("created_at"))) is not None
+        and created_at >= threshold
+    ]
 
-def _get_video_local_time(created_at: datetime) -> datetime:
+
+def _try_get_video_local_time(created_at: Any) -> datetime | None:
+    try:
+        return _get_video_local_time(created_at)
+    except (TypeError, ValueError):
+        return None
+
+
+def _get_video_local_time(created_at: datetime | str) -> datetime:
     """
     获取视频创建时间的本地时区表示。
     """
+    if isinstance(created_at, str):
+        created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
     local_tz = get_local_timezone()
     if created_at.tzinfo is None:
         created_at = created_at.replace(tzinfo=local_tz)
@@ -1211,14 +1216,12 @@ async def get_stats(
 
 def _get_or_create_data_dir() -> Path:
     """获取或创建 data 目录（用于存储 cookies 等运行时数据）"""
-    data_dir = settings.project_root / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    return data_dir
+    return get_data_dir()
 
 
 def _get_cookies_storage_path() -> Path:
     """获取 cookies 存储路径（固定在 data 目录）"""
-    return _get_or_create_data_dir() / "cookies.txt"
+    return get_uploaded_cookies_path()
 
 
 def _parse_cookies_domains(cookies_path: Path) -> list[str]:
@@ -1335,9 +1338,7 @@ def _get_active_cookies_content() -> str | None:
     Returns:
         文件内容，如果不存在返回 None。
     """
-    data_cookies = _get_cookies_storage_path()
-    env_cookies = settings.get_cookies_file()
-    active_cookies = data_cookies if data_cookies.exists() else env_cookies
+    active_cookies = get_active_cookies_file_for_status()
 
     if not active_cookies or not active_cookies.exists():
         return None
@@ -1410,7 +1411,7 @@ def _validate_cookies_format(content: str) -> tuple[bool, str]:
     return True, ""
 
 
-def _reload_cookies_in_downloader(cookies_path: Path) -> None:
+def _reload_cookies_in_downloader(cookies_path: Path | None) -> None:
     """
     热重载下载器的 cookies 配置。
 
@@ -1418,7 +1419,7 @@ def _reload_cookies_in_downloader(cookies_path: Path) -> None:
     """
     try:
         qm = _get_queue_manager()
-        qm.downloader.reload_cookies(cookies_path if cookies_path.exists() else None)
+        qm.downloader.reload_cookies(cookies_path if cookies_path and cookies_path.exists() else None)
     except Exception as e:
         logger.error("热重载 cookies 失败: %s", e)
         raise HTTPException(status_code=500, detail=f"热重载 cookies 失败: {e}") from e
@@ -1439,18 +1440,14 @@ async def get_cookies_status(
     - source: 来源（.env 配置或上传）
     """
     try:
-        # 优先检查 data 目录的 cookies（上传的）
-        data_cookies = _get_cookies_storage_path()
-        env_cookies = settings.get_cookies_file()
-
-        # 确定当前使用的 cookies 文件
-        active_cookies = data_cookies if data_cookies.exists() else env_cookies
+        active_cookies = get_active_cookies_file_for_status()
 
         if not active_cookies or not active_cookies.exists():
             return {
                 "has_cookies": False,
                 "source": "none",
-                "message": "未配置 cookies 文件",
+                "message": "未上传 cookies 文件",
+                "diagnostics": diagnose_cookie_content(""),
             }
 
         # 获取文件信息
@@ -1460,12 +1457,7 @@ async def get_cookies_status(
 
         # 解析域名
         domains = _parse_cookies_domains(active_cookies)
-
-        # 判断来源
-        if active_cookies == data_cookies:
-            source = "upload"
-        else:
-            source = "env_config"
+        content = active_cookies.read_text(encoding="utf-8")
 
         return {
             "has_cookies": True,
@@ -1474,12 +1466,21 @@ async def get_cookies_status(
             "modified_time": modified_time,
             "domains": domains,
             "domain_count": len(domains),
-            "source": source,
+            "source": "upload",
             "file_path": str(active_cookies.relative_to(settings.project_root)),
+            "diagnostics": diagnose_cookie_content(content),
         }
     except Exception as e:
         logger.error("获取 cookies 状态失败: %s", e)
         raise HTTPException(status_code=500, detail=f"获取 cookies 状态失败: {e}") from e
+
+
+@router.get("/runtime/health")
+async def get_runtime_health(
+    admin: User = Depends(require_admin),
+) -> dict:
+    """Return release-readiness runtime checks for administrators."""
+    return collect_runtime_health()
 
 
 @router.post("/cookies/check_merge")
@@ -1694,16 +1695,14 @@ async def delete_cookies(
         backup_path = _backup_cookies_file(cookies_path)
 
         # 删除
-        cookies_path.unlink()
+        delete_uploaded_cookies_file()
         logger.info("已删除上传的 cookies 文件")
 
-        # 热重载下载器（恢复到 .env 配置）
-        env_cookies = settings.get_cookies_file()
-        _reload_cookies_in_downloader(env_cookies if env_cookies else Path("/nonexistent"))
+        _reload_cookies_in_downloader(None)
 
         return {
             "status": "ok",
-            "message": "cookies 已删除，恢复到 .env 配置",
+            "message": "cookies 已删除，下载器已停止使用 Cookie",
             "backup": backup_path.name if backup_path else None,
         }
     except HTTPException:

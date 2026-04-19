@@ -985,20 +985,89 @@
         }
     }
 
+    function confirmLogoutWithActiveDownloads(count) {
+        return new Promise(resolve => {
+            const overlay = document.createElement('div');
+            overlay.style.cssText = `
+                position: fixed;
+                inset: 0;
+                z-index: 10001;
+                background: rgba(0, 0, 0, 0.62);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 20px;
+            `;
+
+            const dialog = document.createElement('div');
+            dialog.style.cssText = `
+                width: min(420px, 100%);
+                background: #161b22;
+                border: 1px solid #30363d;
+                border-radius: 8px;
+                padding: 20px;
+                color: #f0f6fc;
+                box-shadow: 0 16px 48px rgba(0, 0, 0, 0.36);
+            `;
+
+            const title = document.createElement('h3');
+            title.textContent = '有下载正在进行';
+            title.style.cssText = 'margin: 0 0 10px; font-size: 18px;';
+
+            const body = document.createElement('p');
+            body.textContent = `当前有 ${count} 个下载任务正在进行。请选择退出方式。`;
+            body.style.cssText = 'margin: 0 0 18px; color: #8b949e; line-height: 1.6;';
+
+            const actions = document.createElement('div');
+            actions.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end;';
+
+            const finish = (action) => {
+                document.body.removeChild(overlay);
+                document.removeEventListener('keydown', onKeydown);
+                resolve(action);
+            };
+            const onKeydown = (event) => {
+                if (event.key === 'Escape') finish('stay');
+            };
+
+            const addButton = (text, action, primary = false) => {
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.textContent = text;
+                button.style.cssText = `
+                    border: 1px solid ${primary ? '#f85149' : '#30363d'};
+                    background: ${primary ? '#da3633' : '#21262d'};
+                    color: #f0f6fc;
+                    border-radius: 8px;
+                    padding: 9px 12px;
+                    cursor: pointer;
+                `;
+                button.addEventListener('click', () => finish(action));
+                actions.appendChild(button);
+            };
+
+            addButton('不退出', 'stay');
+            addButton('保留下载并退出', 'keep-downloads');
+            addButton('取消下载并退出', 'cancel-downloads', true);
+
+            dialog.append(title, body, actions);
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+            document.addEventListener('keydown', onKeydown);
+        });
+    }
+
     async function logout() {
-        let shouldCancelDownloads = false;
+        let logoutAction = 'logout';
         const activeDownloads = await getActiveDownloads();
         if (activeDownloads.length > 0) {
-            shouldCancelDownloads = confirm(
-                `当前有 ${activeDownloads.length} 个下载任务正在进行。\n\n` +
-                '点击“确定”会取消这些下载并退出登录。\n' +
-                '点击“取消”会继续后台下载并退出登录。'
-            );
+            logoutAction = await confirmLogoutWithActiveDownloads(activeDownloads.length);
+            if (logoutAction === 'stay') return;
         } else if (!confirm('确定要退出登录吗？')) {
             return;
         }
 
-        if (shouldCancelDownloads) {
+        if (logoutAction === 'cancel-downloads') {
             try {
                 await cancelActiveDownloads();
                 clearTasks();

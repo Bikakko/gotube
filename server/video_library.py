@@ -9,7 +9,7 @@ from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import urlparse
 
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -18,44 +18,13 @@ from .db import MediaAsset, MediaSource, User, UserVideoItem
 from .downloader import VIDEO_EXTENSIONS
 from .media_fingerprint import fingerprint_file
 from .quota import refresh_user_storage_usage, user_can_add_media
+from .url_normalizer import normalize_media_url
 
 logger = logging.getLogger(__name__)
 
-TRANSIENT_SOURCE_QUERY_KEYS = {
-    "t",
-    "start",
-    "time_continue",
-    "progress",
-    "seek",
-    "spm_id_from",
-    "vd_source",
-    "share_source",
-    "share_medium",
-    "share_plat",
-    "share_session_id",
-    "timestamp",
-    "share_times",
-}
-
-
 def normalize_source_url(url: str) -> str:
     """Normalize a source URL for reuse lookup without changing its semantics."""
-    url = (url or "").strip()
-    if not url:
-        return ""
-    try:
-        parsed = urlparse(url)
-    except Exception:
-        return url
-    query_pairs = [
-        (key, value)
-        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
-        if key.lower() not in TRANSIENT_SOURCE_QUERY_KEYS
-    ]
-    query = urlencode(sorted(query_pairs))
-    netloc = parsed.netloc.lower()
-    path = parsed.path.rstrip("/") or parsed.path
-    return urlunparse((parsed.scheme.lower(), netloc, path, "", query, ""))
+    return normalize_media_url(url).canonical_url
 
 
 def source_platform(url: str) -> str:
@@ -239,6 +208,55 @@ def list_user_video_items(session: Session, user: User, owner_user_id: int | Non
     rows = []
     for item, asset, owner in query.order_by(UserVideoItem.saved_at.desc()).all():
         rows.append(_item_to_dict(item, asset, owner))
+    return rows
+
+
+def list_admin_media_assets(
+    session: Session,
+    admin: User,
+    *,
+    owner_user_id: int | None = None,
+    owner: str | None = None,
+) -> list[dict[str, Any]]:
+    """List global media assets once, with active owner references aggregated."""
+    if admin.role != "admin":
+        raise HTTPException(status_code=403, detail="权限不足")
+
+    owner = (owner or "").strip().lower() or None
+    query = session.query(MediaAsset)
+
+    if owner_user_id is not None:
+        query = (
+            query.join(UserVideoItem, UserVideoItem.media_asset_id == MediaAsset.id)
+            .filter(
+                UserVideoItem.owner_user_id == owner_user_id,
+                UserVideoItem.deleted_at.is_(None),
+            )
+            .distinct()
+        )
+    elif owner == "legacy":
+        query = (
+            query.outerjoin(
+                UserVideoItem,
+                (UserVideoItem.media_asset_id == MediaAsset.id) & (UserVideoItem.deleted_at.is_(None)),
+            )
+            .filter(UserVideoItem.id.is_(None))
+            .distinct()
+        )
+
+    rows: list[dict[str, Any]] = []
+    for asset in query.order_by(MediaAsset.created_at.desc()).all():
+        owner_rows = (
+            session.query(UserVideoItem, User)
+            .join(User, User.id == UserVideoItem.owner_user_id)
+            .filter(
+                UserVideoItem.media_asset_id == asset.id,
+                UserVideoItem.deleted_at.is_(None),
+            )
+            .order_by(UserVideoItem.saved_at.desc(), UserVideoItem.id.desc())
+            .all()
+        )
+        rows.append(_admin_media_asset_to_dict(session, asset, owner_rows))
     return rows
 
 
@@ -521,4 +539,65 @@ def _item_to_dict(item: UserVideoItem, asset: MediaAsset, owner: User) -> dict[s
         "size": asset.size_bytes,
         "source_url": asset.source_url,
         "saved_at": item.saved_at.isoformat() if item.saved_at else None,
+    }
+
+
+def _admin_media_asset_to_dict(
+    session: Session,
+    asset: MediaAsset,
+    owner_rows: list[tuple[UserVideoItem, User]],
+) -> dict[str, Any]:
+    owners = [
+        {
+            "item_id": item.id,
+            "user_id": owner.id,
+            "username": owner.username,
+            "share_enabled": item.share_enabled,
+            "share_token": item.share_token,
+            "saved_at": item.saved_at.isoformat() if item.saved_at else None,
+            "display_title": item.display_title or asset.title,
+        }
+        for item, owner in owner_rows
+    ]
+    owner_count = len(owners)
+    first_owner = owners[0] if owners else None
+    first_enabled_share = next((owner for owner in owners if owner.get("share_enabled")), first_owner)
+    source_count = session.query(MediaSource).filter(MediaSource.media_asset_id == asset.id).count()
+    source_url = asset.source_url or ""
+
+    if owner_count == 0:
+        owner_username = "未归属"
+    elif owner_count == 1:
+        owner_username = str(first_owner["username"])
+    else:
+        owner_username = f"{owner_count} 个用户"
+
+    return {
+        "id": f"media-{asset.id}",
+        "item_id": first_owner["item_id"] if first_owner else None,
+        "owner_user_id": first_owner["user_id"] if first_owner else None,
+        "owner_username": owner_username,
+        "owners": owners,
+        "owner_count": owner_count,
+        "media_asset_id": asset.id,
+        "title": asset.title,
+        "filename": asset.filename,
+        "filepath": asset.filepath,
+        "file_hash": asset.file_hash,
+        "share_token": first_enabled_share["share_token"] if first_enabled_share else "",
+        "share_enabled": bool(first_enabled_share and first_enabled_share.get("share_enabled")),
+        "thumbnail": asset.thumbnail,
+        "thumbnail_url": f"/api/thumbnail/{asset.file_hash}" if asset.thumbnail else "",
+        "video_id": "",
+        "duration": asset.duration or 0,
+        "size": asset.size_bytes,
+        "source_url": source_url,
+        "url": source_url,
+        "source": source_platform(source_url),
+        "created_at": asset.created_at.isoformat() if asset.created_at else datetime.now(UTC).isoformat(),
+        "saved_at": first_owner["saved_at"] if first_owner else None,
+        "tags": [],
+        "reference_count": owner_count,
+        "source_count": source_count,
+        "is_legacy": owner_count == 0,
     }
