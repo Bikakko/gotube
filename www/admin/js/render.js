@@ -388,6 +388,10 @@ function renderVideoCard(video) {
             className: 'video-owner',
             textContent: `${video.is_legacy ? '未归属' : (video.owner_username || '未知用户')} · 关联 ${video.reference_count || 0}`,
         }),
+        el('div', { className: 'video-asset-stats' }, [
+            el('span', { textContent: `${video.owner_count || 0} 个拥有者` }),
+            el('span', { textContent: `${video.source_count || 0} 个来源` }),
+        ]),
     ]);
 
     const checkbox = el('button', {
@@ -407,6 +411,14 @@ function renderVideoCard(video) {
 
     const actionsBar = el('div', { className: 'video-actions-bar' }, [
         el('div', { className: 'action-group' }, [
+            el('button', {
+                className: 'action-btn',
+                textContent: '详情',
+                onClick: (e) => {
+                    e.stopPropagation();
+                    window.showMediaDetailsModal(video);
+                },
+            }),
             el('button', {
                 className: 'action-btn share',
                 textContent: '分享',

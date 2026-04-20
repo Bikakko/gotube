@@ -562,7 +562,14 @@ def _admin_media_asset_to_dict(
     owner_count = len(owners)
     first_owner = owners[0] if owners else None
     first_enabled_share = next((owner for owner in owners if owner.get("share_enabled")), first_owner)
-    source_count = session.query(MediaSource).filter(MediaSource.media_asset_id == asset.id).count()
+    source_rows = (
+        session.query(MediaSource)
+        .filter(MediaSource.media_asset_id == asset.id)
+        .order_by(MediaSource.created_at.asc(), MediaSource.id.asc())
+        .all()
+    )
+    source_urls = [row.source_url for row in source_rows if row.source_url]
+    source_count = len(source_urls)
     source_url = asset.source_url or ""
 
     if owner_count == 0:
@@ -592,6 +599,7 @@ def _admin_media_asset_to_dict(
         "duration": asset.duration or 0,
         "size": asset.size_bytes,
         "source_url": source_url,
+        "source_urls": source_urls,
         "url": source_url,
         "source": source_platform(source_url),
         "created_at": asset.created_at.isoformat() if asset.created_at else datetime.now(UTC).isoformat(),

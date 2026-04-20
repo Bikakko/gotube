@@ -9,7 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from server.admin_api import get_videos, list_users, update_user
-from server.db import Base, MediaAsset, User, UserVideoItem
+from server.db import Base, MediaAsset, MediaSource, User, UserVideoItem
 from server.models import UpdateUserRequest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,6 +81,19 @@ class AdminManagementTests(unittest.TestCase):
         session.commit()
         session.refresh(item)
         return item
+
+    def _source(self, session, asset: MediaAsset, url: str) -> MediaSource:
+        source = MediaSource(
+            media_asset_id=asset.id,
+            source_url=url,
+            normalized_url=url,
+            platform="test",
+            platform_video_id="",
+        )
+        session.add(source)
+        session.commit()
+        session.refresh(source)
+        return source
 
     def test_list_users_includes_library_usage_summary(self):
         with self.Session() as session:
@@ -169,6 +182,8 @@ class AdminManagementTests(unittest.TestCase):
             shared_asset = self._asset(session, "Shared", "dddddddd")
             self._item(session, alice, shared_asset)
             self._item(session, bob, shared_asset)
+            self._source(session, shared_asset, "https://example.test/shared/1")
+            self._source(session, shared_asset, "https://example.test/shared/2")
 
             result = asyncio.run(get_videos(page=1, per_page=20, admin=admin, db=session))
 
@@ -181,6 +196,11 @@ class AdminManagementTests(unittest.TestCase):
             self.assertCountEqual(
                 [owner["username"] for owner in row["owners"]],
                 ["alice", "bob"],
+            )
+            self.assertEqual(row["source_count"], 2)
+            self.assertCountEqual(
+                row["source_urls"],
+                ["https://example.test/shared/1", "https://example.test/shared/2"],
             )
 
     def test_get_videos_time_filter_handles_iso_created_at_strings(self):
@@ -232,6 +252,15 @@ class AdminManagementTests(unittest.TestCase):
         self.assertIn("bindAdminShellEvents", admin_js)
         self.assertIn("switchAdminView('overview')", admin_js)
         self.assertIn("[data-admin-nav]", events_js)
+
+    def test_media_view_scripts_expose_asset_details_entry(self):
+        render_js = (ROOT / "www/admin/js/render.js").read_text(encoding="utf-8")
+        modals_js = (ROOT / "www/admin/js/modals.js").read_text(encoding="utf-8")
+
+        self.assertIn("showMediaDetailsModal", render_js)
+        self.assertIn("source_count", render_js)
+        self.assertIn("owner_count", render_js)
+        self.assertIn("showMediaDetailsModal", modals_js)
 
 
 if __name__ == "__main__":

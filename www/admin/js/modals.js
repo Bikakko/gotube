@@ -88,6 +88,88 @@ function showShareModal(video) {
     });
 }
 
+function showMediaDetailsModal(video) {
+    const owners = Array.isArray(video.owners) ? video.owners : [];
+    const sourceUrls = Array.isArray(video.source_urls) ? video.source_urls : [];
+
+    const ownerList = owners.length
+        ? el('div', { className: 'detail-list' }, owners.map(owner => (
+            el('div', { className: 'detail-list-row' }, [
+                el('span', {
+                    className: 'detail-list-main',
+                    textContent: `${owner.username}${owner.share_enabled ? ' · 已分享' : ''}`,
+                }),
+                el('span', {
+                    className: 'detail-list-sub',
+                    textContent: owner.saved_at ? new Date(owner.saved_at).toLocaleString('zh-CN') : '无保存时间',
+                }),
+            ])
+        )))
+        : el('div', { className: 'empty-state', textContent: '暂无拥有者' });
+
+    const sourceList = sourceUrls.length
+        ? el('div', { className: 'detail-list' }, sourceUrls.map(url => (
+            el('div', { className: 'detail-list-row detail-list-row-block' }, [
+                el('span', { className: 'detail-list-main detail-url', textContent: url }),
+            ])
+        )))
+        : el('div', { className: 'empty-state', textContent: '暂无来源链接' });
+
+    const overlay = el('div', { className: 'modal active', id: 'media-detail-modal' }, [
+        el('div', { className: 'modal-content' }, [
+            el('div', { className: 'modal-header' }, [
+                el('div', {
+                    className: 'modal-title',
+                    textContent: video.title || '媒体详情',
+                }),
+                el('button', {
+                    className: 'modal-close',
+                    textContent: '×',
+                    onClick: () => closeModal('media-detail-modal'),
+                }),
+            ]),
+            el('div', { className: 'modal-body' }, [
+                el('div', { className: 'detail-summary-grid' }, [
+                    el('div', { className: 'system-panel-card' }, [
+                        el('div', { className: 'overview-card-label', textContent: '文件大小' }),
+                        el('div', { className: 'overview-card-value detail-value-sm', textContent: formatBytes(video.size || 0) }),
+                    ]),
+                    el('div', { className: 'system-panel-card' }, [
+                        el('div', { className: 'overview-card-label', textContent: '拥有者' }),
+                        el('div', { className: 'overview-card-value detail-value-sm', textContent: String(video.owner_count || 0) }),
+                    ]),
+                    el('div', { className: 'system-panel-card' }, [
+                        el('div', { className: 'overview-card-label', textContent: '来源数' }),
+                        el('div', { className: 'overview-card-value detail-value-sm', textContent: String(video.source_count || 0) }),
+                    ]),
+                    el('div', { className: 'system-panel-card' }, [
+                        el('div', { className: 'overview-card-label', textContent: '状态' }),
+                        el('div', { className: 'overview-card-value detail-value-sm', textContent: video.is_legacy ? '未归属' : '已归属' }),
+                    ]),
+                ]),
+                el('div', { className: 'detail-columns' }, [
+                    el('section', { className: 'detail-section' }, [
+                        el('h3', { textContent: '拥有者' }),
+                        ownerList,
+                    ]),
+                    el('section', { className: 'detail-section' }, [
+                        el('h3', { textContent: '来源链接' }),
+                        sourceList,
+                    ]),
+                ]),
+            ]),
+        ]),
+    ]);
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            closeModal('media-detail-modal');
+        }
+    });
+
+    document.body.appendChild(overlay);
+}
+
 /**
  * 关闭模态框
  */
@@ -110,4 +192,5 @@ function closeModal(modalId) {
 // 显式挂载到 window，确保全局可见性
 window.showPlayerModal = showPlayerModal;
 window.showShareModal = showShareModal;
+window.showMediaDetailsModal = showMediaDetailsModal;
 window.closeModal = closeModal;
