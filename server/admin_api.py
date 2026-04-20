@@ -43,7 +43,7 @@ from .models import (
     UserResponse,
 )
 from .invites import create_invite, list_invites, revoke_invite
-from .video_library import admin_delete_media_asset, list_admin_media_assets
+from .video_library import admin_delete_media_asset, list_admin_media_assets, list_user_video_items
 
 logger = logging.getLogger(__name__)
 
@@ -538,6 +538,37 @@ async def list_users(
             data["is_system_account"] = True
         result.append(data)
     return result
+
+
+@router.get("/users/{user_id}/library")
+async def get_user_library(
+    user_id: int,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Return one user's video library without mixing it into the global media view."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    items = list_user_video_items(db, admin, owner_user_id=user_id)
+    return {
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role,
+            "is_active": user.is_active,
+            "storage_quota_mb": user.storage_quota_mb,
+            "storage_used_bytes": user.storage_used_bytes,
+        },
+        "items": [
+            {
+                **item,
+                "source": _extract_source_from_url(item.get("source_url") or ""),
+            }
+            for item in items
+        ],
+    }
 
 
 @router.post("/users", response_model=UserResponse)

@@ -20,6 +20,7 @@ let state = {
         source: '',
         time: 'all',
         owner: 'all',
+        ownerSearchKeyword: '',
     },
     pagination: {
         page: 1,
@@ -35,6 +36,11 @@ let state = {
 
     overview: {
         ready: false,
+    },
+    userLibrary: {
+        user: null,
+        items: [],
+        loading: false,
     },
     system: {
         ready: false,

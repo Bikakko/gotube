@@ -8,7 +8,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from server.admin_api import get_videos, list_users, update_user
+from server.admin_api import get_user_library, get_videos, list_users, update_user
 from server.db import Base, MediaAsset, MediaSource, User, UserVideoItem
 from server.models import UpdateUserRequest
 
@@ -261,6 +261,36 @@ class AdminManagementTests(unittest.TestCase):
         self.assertIn("source_count", render_js)
         self.assertIn("owner_count", render_js)
         self.assertIn("showMediaDetailsModal", modals_js)
+
+    def test_get_user_library_returns_user_scoped_items(self):
+        with self.Session() as session:
+            admin = self._user(session, "admin", role="admin")
+            alice = self._user(session, "alice")
+            bob = self._user(session, "bob")
+            alice_asset = self._asset(session, "Alpha", "aaaaaaaa")
+            bob_asset = self._asset(session, "Beta", "bbbbbbbb")
+            self._item(session, alice, alice_asset)
+            self._item(session, bob, bob_asset)
+
+            result = asyncio.run(get_user_library(alice.id, admin=admin, db=session))
+
+            self.assertEqual(result["user"]["username"], "alice")
+            self.assertEqual(len(result["items"]), 1)
+            self.assertEqual(result["items"][0]["owner_user_id"], alice.id)
+            self.assertEqual(result["items"][0]["title"], "Alpha")
+
+    def test_user_view_scripts_expose_library_entry(self):
+        users_js = (ROOT / "www/admin/js/users.js").read_text(encoding="utf-8")
+        data_js = (ROOT / "www/admin/js/data.js").read_text(encoding="utf-8")
+        render_js = (ROOT / "www/admin/js/render.js").read_text(encoding="utf-8")
+        modals_js = (ROOT / "www/admin/js/modals.js").read_text(encoding="utf-8")
+
+        self.assertIn("showUserLibraryModal", users_js)
+        self.assertIn("loadUserLibrary", users_js)
+        self.assertIn("/users/${userId}/library", data_js)
+        self.assertIn("owner-search-input", render_js)
+        self.assertIn("page-size-select", render_js)
+        self.assertIn("showAllOwners", modals_js)
 
 
 if __name__ == "__main__":

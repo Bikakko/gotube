@@ -1,17 +1,10 @@
 /**
  * GoTube Admin - 模态框模块
- * 播放器、分享、标签管理器、删除确认等模态框
+ * 播放器、分享、媒体详情等弹窗
  */
 
-/**
- * 显示播放器模态框
- */
 function showPlayerModal(video) {
-    console.log('[Player] video object:', JSON.stringify(video));
-    console.log('[Player] video.file_hash:', video.file_hash);
     const videoSrc = `/watch?v=${encodeURIComponent(video.file_hash)}`;
-    console.log('[Player] video src URL:', videoSrc);
-
     const overlay = el('div', { className: 'modal active', id: 'player-modal' }, [
         el('div', { className: 'modal-content' }, [
             el('div', { className: 'modal-header' }, [
@@ -40,7 +33,6 @@ function showPlayerModal(video) {
         ]),
     ]);
 
-    // 点击背景关闭
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) {
             closeModal('player-modal');
@@ -48,29 +40,20 @@ function showPlayerModal(video) {
     });
 
     document.body.appendChild(overlay);
-
-    // 自动聚焦到 video 元素，使浏览器能处理所有键盘操作（空格暂停、方向键快进快退）
     const videoEl = overlay.querySelector('#player-video');
     if (videoEl) {
         videoEl.focus();
     }
 }
 
-/**
- * 显示分享模态框 - 直接复制链接并提示
- */
 function showShareModal(video) {
     const shareUrl = `${window.location.origin}/watch?v=${video.file_hash}`;
 
-    // 直接复制链接，不弹窗
     navigator.clipboard.writeText(shareUrl).then(() => {
         if (typeof showToast === 'function') {
-            showToast('✅ 链接已复制到剪贴板', 'success');
-        } else {
-            alert('链接已复制到剪贴板');
+            showToast('链接已复制到剪贴板', 'success');
         }
     }).catch(() => {
-        // Fallback: 使用 execCommand 兼容旧浏览器
         const input = document.createElement('input');
         input.value = shareUrl;
         input.style.position = 'fixed';
@@ -81,9 +64,7 @@ function showShareModal(video) {
         document.body.removeChild(input);
 
         if (typeof showToast === 'function') {
-            showToast('✅ 链接已复制到剪贴板', 'success');
-        } else {
-            alert('链接已复制到剪贴板');
+            showToast('链接已复制到剪贴板', 'success');
         }
     });
 }
@@ -91,29 +72,88 @@ function showShareModal(video) {
 function showMediaDetailsModal(video) {
     const owners = Array.isArray(video.owners) ? video.owners : [];
     const sourceUrls = Array.isArray(video.source_urls) ? video.source_urls : [];
+    let showAllOwners = false;
+    let showAllSources = false;
 
-    const ownerList = owners.length
-        ? el('div', { className: 'detail-list' }, owners.map(owner => (
-            el('div', { className: 'detail-list-row' }, [
-                el('span', {
-                    className: 'detail-list-main',
-                    textContent: `${owner.username}${owner.share_enabled ? ' · 已分享' : ''}`,
-                }),
-                el('span', {
-                    className: 'detail-list-sub',
-                    textContent: owner.saved_at ? new Date(owner.saved_at).toLocaleString('zh-CN') : '无保存时间',
-                }),
-            ])
-        )))
-        : el('div', { className: 'empty-state', textContent: '暂无拥有者' });
+    const renderOwnerRow = (owner) => (
+        el('div', { className: 'detail-list-row' }, [
+            el('span', {
+                className: 'detail-list-main',
+                textContent: `${owner.username}${owner.share_enabled ? ' · 已分享' : ''}`,
+            }),
+            el('span', {
+                className: 'detail-list-sub',
+                textContent: owner.saved_at ? new Date(owner.saved_at).toLocaleString('zh-CN') : '无保存时间',
+            }),
+        ])
+    );
 
-    const sourceList = sourceUrls.length
-        ? el('div', { className: 'detail-list' }, sourceUrls.map(url => (
-            el('div', { className: 'detail-list-row detail-list-row-block' }, [
-                el('span', { className: 'detail-list-main detail-url', textContent: url }),
-            ])
-        )))
-        : el('div', { className: 'empty-state', textContent: '暂无来源链接' });
+    const renderSourceRow = (url) => (
+        el('div', { className: 'detail-list-row detail-list-row-block' }, [
+            el('span', { className: 'detail-list-main detail-url', textContent: url }),
+        ])
+    );
+
+    function createSectionList(items, renderItem, emptyText, expanded, expandLabel) {
+        if (!items.length) {
+            return el('div', { className: 'empty-state', textContent: emptyText });
+        }
+
+        const visibleItems = expanded ? items : items.slice(0, 10);
+        const wrapper = el('div', { className: 'detail-list-stack' });
+        wrapper.appendChild(el('div', {
+            className: `detail-list ${expanded ? 'detail-list-expanded' : 'detail-list-collapsed'}`,
+        }, visibleItems.map(renderItem)));
+
+        if (items.length > 10) {
+            wrapper.appendChild(el('button', {
+                className: 'btn btn-secondary detail-list-toggle',
+                textContent: expanded ? '收起' : `${expandLabel} (${items.length})`,
+            }));
+        }
+
+        return wrapper;
+    }
+
+    function renderLists() {
+        const ownerHost = $('#media-detail-owners');
+        const sourceHost = $('#media-detail-sources');
+        if (!ownerHost || !sourceHost) return;
+
+        ownerHost.innerHTML = '';
+        sourceHost.innerHTML = '';
+
+        ownerHost.appendChild(createSectionList(
+            owners,
+            renderOwnerRow,
+            '暂无拥有者',
+            showAllOwners,
+            '展开全部'
+        ));
+        sourceHost.appendChild(createSectionList(
+            sourceUrls,
+            renderSourceRow,
+            '暂无来源链接',
+            showAllSources,
+            '展开全部'
+        ));
+
+        const ownerToggle = ownerHost.querySelector('.detail-list-toggle');
+        if (ownerToggle) {
+            ownerToggle.addEventListener('click', () => {
+                showAllOwners = !showAllOwners;
+                renderLists();
+            });
+        }
+
+        const sourceToggle = sourceHost.querySelector('.detail-list-toggle');
+        if (sourceToggle) {
+            sourceToggle.addEventListener('click', () => {
+                showAllSources = !showAllSources;
+                renderLists();
+            });
+        }
+    }
 
     const overlay = el('div', { className: 'modal active', id: 'media-detail-modal' }, [
         el('div', { className: 'modal-content' }, [
@@ -150,11 +190,11 @@ function showMediaDetailsModal(video) {
                 el('div', { className: 'detail-columns' }, [
                     el('section', { className: 'detail-section' }, [
                         el('h3', { textContent: '拥有者' }),
-                        ownerList,
+                        el('div', { id: 'media-detail-owners' }),
                     ]),
                     el('section', { className: 'detail-section' }, [
                         el('h3', { textContent: '来源链接' }),
-                        sourceList,
+                        el('div', { id: 'media-detail-sources' }),
                     ]),
                 ]),
             ]),
@@ -168,20 +208,17 @@ function showMediaDetailsModal(video) {
     });
 
     document.body.appendChild(overlay);
+    renderLists();
 }
 
-/**
- * 关闭模态框
- */
 function closeModal(modalId) {
     const modal = $(`#${modalId}`);
     if (modal) {
-        // 如果是播放器模态框，先停止视频播放
         if (modalId === 'player-modal') {
             const videoEl = modal.querySelector('video');
             if (videoEl) {
                 videoEl.pause();
-                videoEl.src = ''; // 清空源确保完全停止
+                videoEl.src = '';
                 videoEl.load();
             }
         }
@@ -189,7 +226,6 @@ function closeModal(modalId) {
     }
 }
 
-// 显式挂载到 window，确保全局可见性
 window.showPlayerModal = showPlayerModal;
 window.showShareModal = showShareModal;
 window.showMediaDetailsModal = showMediaDetailsModal;

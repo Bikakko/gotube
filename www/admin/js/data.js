@@ -131,6 +131,10 @@ async function loadStats() {
     }
 }
 
+async function loadUserLibrary(userId) {
+    return apiFetch(`/users/${userId}/library`);
+}
+
 /**
  * 删除单个视频（入口函数）
  */
@@ -341,6 +345,7 @@ async function handleBatchDelete() {
 // 显式挂载到 window，确保全局可见性
 window.loadVideos = loadVideos;
 window.loadStats = loadStats;
+window.loadUserLibrary = loadUserLibrary;
 window.handleDeleteVideo = handleDeleteVideo;
 window.showDeleteConfirmModal = showDeleteConfirmModal;
 window.handleBatchDelete = handleBatchDelete;

@@ -31,6 +31,19 @@ function handleOwnerChange(owner) {
     window.loadVideos();
 }
 
+function handleOwnerSearchInput(keyword) {
+    state.filters.ownerSearchKeyword = keyword;
+    window.updateOwnerDropdownOptions();
+}
+
+function handlePerPageChange(value) {
+    const parsed = Number.parseInt(value, 10);
+    if (!Number.isInteger(parsed) || parsed <= 0) return;
+    state.pagination.perPage = parsed;
+    state.pagination.page = 1;
+    window.loadVideos();
+}
+
 function toggleVideoSelection(filename, selected) {
     if (selected) {
         state.selectedVideos.add(filename);
@@ -158,6 +171,8 @@ window.handleKeywordChange = handleKeywordChange;
 window.handleSourceChange = handleSourceChange;
 window.handleTimeChange = handleTimeChange;
 window.handleOwnerChange = handleOwnerChange;
+window.handleOwnerSearchInput = handleOwnerSearchInput;
+window.handlePerPageChange = handlePerPageChange;
 window.toggleVideoSelection = toggleVideoSelection;
 window.toggleSelectAll = toggleSelectAll;
 window.updateSelectAllCheckbox = updateSelectAllCheckbox;

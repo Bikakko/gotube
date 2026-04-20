@@ -1,6 +1,6 @@
 /**
  * GoTube Admin - 用户管理模块
- * 用户列表加载、创建、编辑、删除、状态切换
+ * 用户列表加载、创建、编辑、删除、状态切换、用户视频库查看
  */
 
 function refreshNavTabs() {
@@ -99,11 +99,13 @@ function renderUsersTable(users) {
     }
 
     const container = el('div', { className: 'user-table-wrapper' });
-
     container.appendChild(el('div', { className: 'admin-section-header' }, [
         el('div', {}, [
             el('h2', { textContent: '用户' }),
-            el('p', { className: 'info-text', textContent: '这里管理账号状态、容量和密码。' }),
+            el('p', {
+                className: 'info-text',
+                textContent: '用户页只处理账号状态、容量和用户个人视频库入口，不直接混入全局媒体卡片。',
+            }),
         ]),
         el('button', {
             className: 'btn btn-primary',
@@ -131,7 +133,11 @@ function renderUsersTable(users) {
 
             return el('tr', { className: user.is_active ? '' : 'inactive' }, [
                 el('td', { textContent: user.id }),
-                el('td', { textContent: isSystemAccount ? `管理员 ${user.username}` : user.username + (isSelf ? ' (我)' : '') }),
+                el('td', {
+                    textContent: isSystemAccount
+                        ? `管理员 ${user.username}`
+                        : `${user.username}${isSelf ? ' (我)' : ''}`,
+                }),
                 el('td', { textContent: formatRole(user.role) }),
                 el('td', {}, [
                     el('span', {
@@ -145,8 +151,16 @@ function renderUsersTable(users) {
                         ? '不限'
                         : `${formatBytes(user.storage_used_bytes || 0)} / ${formatUserQuota(user.storage_quota_mb)}`,
                 }),
-                el('td', { textContent: user.last_login ? new Date(user.last_login).toLocaleString() : '从未登录' }),
+                el('td', { textContent: user.last_login ? new Date(user.last_login).toLocaleString('zh-CN') : '从未登录' }),
                 el('td', { className: 'user-actions' }, [
+                    el('button', {
+                        className: 'action-btn-sm',
+                        textContent: '视频库',
+                        onClick: (e) => {
+                            e.stopPropagation();
+                            showUserLibraryModal(user);
+                        },
+                    }),
                     isSystemAccount ? null : el('button', {
                         className: 'action-btn-sm',
                         textContent: '编辑',
@@ -187,6 +201,106 @@ function renderUsersTable(users) {
     slot.innerHTML = '';
     container.appendChild(table);
     slot.appendChild(container);
+}
+
+async function showUserLibraryModal(user) {
+    state.userLibrary.user = user;
+    state.userLibrary.items = [];
+    state.userLibrary.loading = true;
+
+    const overlay = el('div', { className: 'modal active', id: 'user-library-modal' }, [
+        el('div', { className: 'modal-content' }, [
+            el('div', { className: 'modal-header' }, [
+                el('div', {
+                    className: 'modal-title',
+                    textContent: `${user.username} 的视频库`,
+                }),
+                el('button', {
+                    className: 'modal-close',
+                    textContent: '×',
+                    onClick: () => closeModal('user-library-modal'),
+                }),
+            ]),
+            el('div', { className: 'modal-body', id: 'user-library-body' }, [
+                el('div', { className: 'loading', textContent: '加载中' }),
+            ]),
+        ]),
+    ]);
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            closeModal('user-library-modal');
+        }
+    });
+
+    document.body.appendChild(overlay);
+    await fetchUserLibraryAndRender(user.id);
+}
+
+async function fetchUserLibraryAndRender(userId) {
+    try {
+        const data = await window.loadUserLibrary(userId);
+        state.userLibrary.user = data.user;
+        state.userLibrary.items = data.items || [];
+        state.userLibrary.loading = false;
+        renderUserLibraryModal();
+    } catch (err) {
+        state.userLibrary.loading = false;
+        const body = $('#user-library-body');
+        if (body) {
+            body.innerHTML = `<div class="error">加载失败: ${err.message}</div>`;
+        }
+    }
+}
+
+function renderUserLibraryModal() {
+    const body = $('#user-library-body');
+    if (!body) return;
+
+    const items = state.userLibrary.items || [];
+    body.innerHTML = '';
+
+    if (items.length === 0) {
+        body.appendChild(el('div', { className: 'empty-state', textContent: '该用户暂无视频' }));
+        return;
+    }
+
+    const list = el('div', { className: 'user-library-list' });
+    items.forEach(item => {
+        list.appendChild(el('article', { className: 'user-library-item' }, [
+            el('div', { className: 'user-library-thumb' }, [
+                item.thumbnail_url
+                    ? el('img', { src: item.thumbnail_url, alt: item.title, loading: 'lazy' })
+                    : el('div', { className: 'preview-thumb-empty', textContent: '🎬' }),
+            ]),
+            el('div', { className: 'user-library-main' }, [
+                el('div', { className: 'preview-title', textContent: item.title || '未命名视频' }),
+                el('div', { className: 'user-library-meta' }, [
+                    el('span', { textContent: formatBytes(item.size || 0) }),
+                    el('span', { textContent: item.source || 'Unknown' }),
+                    el('span', { textContent: item.saved_at ? new Date(item.saved_at).toLocaleString('zh-CN') : '无保存时间' }),
+                ]),
+                el('div', { className: 'video-asset-stats' }, [
+                    el('span', { textContent: item.share_enabled ? '分享已开启' : '分享未开启' }),
+                ]),
+            ]),
+            el('div', { className: 'user-library-actions' }, [
+                el('button', {
+                    className: 'action-btn',
+                    textContent: '播放',
+                    onClick: () => window.showPlayerModal(item),
+                }),
+                el('button', {
+                    className: 'action-btn share',
+                    textContent: '分享',
+                    ...(!item.share_token ? { disabled: true } : {}),
+                    onClick: () => window.showShareModal(item),
+                }),
+            ]),
+        ]));
+    });
+
+    body.appendChild(list);
 }
 
 function formatRole(role) {
@@ -437,5 +551,6 @@ window.showVideoManagement = showVideoManagement;
 window.switchAdminView = switchAdminView;
 window.refreshNavTabs = refreshNavTabs;
 window.loadUsers = loadUsers;
+window.showUserLibraryModal = showUserLibraryModal;
 window.renderUsersTable = renderUsersTable;
 window.initClickOutsideListener = initClickOutsideListener;

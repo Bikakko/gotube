@@ -28,9 +28,6 @@ function ensureViewContainerVisible(view) {
     });
 }
 
-/**
- * 渲染整个管理页面
- */
 async function renderPage() {
     state.nav.current = 'overview';
     state.currentView = 'overview';
@@ -45,9 +42,6 @@ async function renderPage() {
     ensureViewContainerVisible('overview');
 }
 
-/**
- * 渲染顶部栏
- */
 function renderNavbar() {
     const user = state.currentUser || { username: 'Unknown', role: 'user' };
     const brief = $('#admin-user-brief');
@@ -68,9 +62,6 @@ function renderNavbar() {
     });
 }
 
-/**
- * 渲染主布局
- */
 function renderMainLayout() {
     ensureViewContainerVisible(state.nav.current || 'overview');
 }
@@ -154,7 +145,7 @@ function renderSystemSection() {
                 el('h2', { textContent: '系统' }),
                 el('p', {
                     className: 'info-text',
-                    textContent: '16.1 先收口入口。Cookie 管理、巡检和诊断在后续页面接入。',
+                    textContent: '先收口系统入口。Cookie 管理、巡检和诊断在后续页面继续并入。',
                 }),
             ]),
         ]),
@@ -171,7 +162,7 @@ function renderSystemSection() {
             ]),
             el('div', { className: 'system-panel-card' }, [
                 el('div', { className: 'overview-card-label', textContent: '统计面板' }),
-                el('p', { className: 'overview-card-desc', textContent: '媒体页保留旧统计组件，系统页只给入口。' }),
+                el('p', { className: 'overview-card-desc', textContent: '媒体页保留旧统计组件，系统页只保留入口。' }),
                 el('button', {
                     type: 'button',
                     className: 'btn btn-secondary',
@@ -183,9 +174,6 @@ function renderSystemSection() {
     ]));
 }
 
-/**
- * 渲染统计面板
- */
 function renderStatsPanel() {
     const slot = $('#stats-slot');
     if (!slot) return;
@@ -293,6 +281,19 @@ function renderFilters() {
                 el('div', { className: 'custom-dropdown-menu', id: 'time-dropdown-menu' }),
             ]),
         ]),
+        el('div', { className: 'filter-group' }, [
+            el('span', { className: 'filter-label', textContent: '每页' }),
+            el('select', {
+                id: 'page-size-select',
+                className: 'filter-select',
+                value: String(state.pagination.perPage),
+                onChange: (e) => handlePerPageChange(e.target.value),
+            }, [
+                el('option', { value: '20', textContent: '20' }),
+                el('option', { value: '50', textContent: '50' }),
+                el('option', { value: '100', textContent: '100' }),
+            ]),
+        ]),
         state.currentUser && state.currentUser.role === 'admin' ? el('div', { className: 'filter-group' }, [
             el('span', { className: 'filter-label', textContent: '归属' }),
             el('div', { className: 'custom-dropdown', id: 'owner-dropdown' }, [
@@ -303,7 +304,20 @@ function renderFilters() {
                     el('span', { className: 'dropdown-text', id: 'owner-dropdown-text', textContent: '全部' }),
                     el('span', { className: 'dropdown-arrow', textContent: '▼' }),
                 ]),
-                el('div', { className: 'custom-dropdown-menu', id: 'owner-dropdown-menu' }),
+                el('div', { className: 'custom-dropdown-menu', id: 'owner-dropdown-menu' }, [
+                    el('div', { className: 'dropdown-search-wrap' }, [
+                        el('input', {
+                            id: 'owner-search-input',
+                            className: 'dropdown-search-input',
+                            type: 'text',
+                            placeholder: '搜索用户...',
+                            value: state.filters.ownerSearchKeyword || '',
+                            onClick: (e) => e.stopPropagation(),
+                            onInput: (e) => handleOwnerSearchInput(e.target.value),
+                        }),
+                    ]),
+                    el('div', { id: 'owner-dropdown-items' }),
+                ]),
             ]),
         ]) : null,
     ].filter(Boolean));
@@ -347,7 +361,7 @@ function renderVideoGrid() {
     countSlot.appendChild(el('div', {
         className: 'admin-video-count',
         id: 'video-count',
-        textContent: `共 ${state.pagination.total} 个媒体，当前第 ${state.pagination.page} 页`,
+        textContent: `共 ${state.pagination.total} 个媒体，当前第 ${state.pagination.page} 页，每页 ${state.pagination.perPage} 条`,
     }));
 
     const grid = el('div', { className: 'video-grid', id: 'video-grid' });
@@ -685,20 +699,38 @@ function updateTimeDropdownOptions() {
 }
 
 function updateOwnerDropdownOptions() {
-    const menu = $('#owner-dropdown-menu');
-    if (!menu) return;
+    const itemsContainer = $('#owner-dropdown-items');
+    if (!itemsContainer) return;
 
-    menu.innerHTML = '';
-    menu.appendChild(_createDropdownItem('all', '全部', 'owner'));
-    menu.appendChild(_createDropdownItem('legacy', '未归属', 'owner'));
+    itemsContainer.innerHTML = '';
+    itemsContainer.appendChild(_createDropdownItem('all', '全部', 'owner'));
+    itemsContainer.appendChild(_createDropdownItem('legacy', '未归属', 'owner'));
 
-    state.users.forEach(user => {
-        menu.appendChild(_createDropdownItem(`user:${user.id}`, user.username, 'owner'));
+    const keyword = (state.filters.ownerSearchKeyword || '').trim().toLowerCase();
+    const filteredUsers = state.users.filter(user => {
+        if (!keyword) return true;
+        return String(user.username || '').toLowerCase().includes(keyword);
     });
+
+    filteredUsers.slice(0, 100).forEach(user => {
+        itemsContainer.appendChild(_createDropdownItem(`user:${user.id}`, user.username, 'owner'));
+    });
+
+    if (filteredUsers.length === 0) {
+        itemsContainer.appendChild(el('div', {
+            className: 'custom-dropdown-empty',
+            textContent: '没有匹配的用户',
+        }));
+    } else if (filteredUsers.length > 100) {
+        itemsContainer.appendChild(el('div', {
+            className: 'custom-dropdown-empty',
+            textContent: `仅显示前 100 个匹配项，共 ${filteredUsers.length} 个`,
+        }));
+    }
 
     const currentValue = state.filters.owner || 'all';
     let currentText = '全部';
-    menu.querySelectorAll('.custom-dropdown-item').forEach(item => {
+    itemsContainer.querySelectorAll('.custom-dropdown-item').forEach(item => {
         const selected = item.getAttribute('data-value') === currentValue;
         item.classList.toggle('selected', selected);
         if (selected) currentText = item.textContent;
