@@ -205,6 +205,7 @@ def sync_admins_from_env(session: Session, admins_config: list[dict[str, str]]) 
                 # 用户存在但不是 admin，提升为 admin
                 logger.info("[admin同步] 提升用户 %s 为管理员", username)
                 existing_user.role = "admin"
+                existing_user.is_active = True
                 
                 # 同步密码
                 try:
@@ -238,6 +239,7 @@ def sync_admins_from_env(session: Session, admins_config: list[dict[str, str]]) 
         else:
             # 同步密码（如果变了）
             db_admin = db_admin_map[username]
+            db_admin.is_active = True
             try:
                 password_match = bcrypt.checkpw(
                     password.encode('utf-8'),

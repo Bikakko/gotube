@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from server.auth import require_admin, verify_token
-from server.db import AuthToken, Base, User
+from server.db import AuthToken, Base, User, sync_admins_from_env
 from server.models import CreateUserRequest, UpdateUserRequest
 
 
@@ -62,6 +62,46 @@ class AuthRoleTests(unittest.TestCase):
 
         with self.assertRaises(ValidationError):
             UpdateUserRequest(role="readonly")
+
+    def test_sync_admins_from_env_reactivates_existing_disabled_admin(self):
+        with self.Session() as session:
+            user = User(
+                username="admin",
+                password_hash="x",
+                role="admin",
+                is_active=False,
+            )
+            session.add(user)
+            session.commit()
+
+            sync_admins_from_env(
+                session,
+                [{"username": "admin", "password": "secret"}],
+            )
+
+            refreshed = session.query(User).filter(User.username == "admin").one()
+            self.assertEqual(refreshed.role, "admin")
+            self.assertTrue(refreshed.is_active)
+
+    def test_sync_admins_from_env_promotes_and_reactivates_existing_user(self):
+        with self.Session() as session:
+            user = User(
+                username="admin",
+                password_hash="x",
+                role="user",
+                is_active=False,
+            )
+            session.add(user)
+            session.commit()
+
+            sync_admins_from_env(
+                session,
+                [{"username": "admin", "password": "secret"}],
+            )
+
+            refreshed = session.query(User).filter(User.username == "admin").one()
+            self.assertEqual(refreshed.role, "admin")
+            self.assertTrue(refreshed.is_active)
 
 
 if __name__ == "__main__":
