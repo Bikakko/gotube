@@ -546,3 +546,4 @@ window.loadCookiesStatus = loadCookiesStatus;
 window.uploadCookiesFile = uploadCookiesFile;
 window.uploadCookiesText = uploadCookiesText;
 window.deleteCookies = deleteCookies;
+window.renderCookiesStatus = renderCookiesStatus;

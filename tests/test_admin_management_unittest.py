@@ -293,6 +293,8 @@ class AdminManagementTests(unittest.TestCase):
         self.assertIn("showAllOwners", modals_js)
         self.assertIn("user-search-input", users_js)
         self.assertIn("filterUsers", users_js)
+        self.assertIn("selectionStart", users_js)
+        self.assertIn("focus()", users_js)
 
     def test_invite_view_scripts_use_top_nav_state(self):
         invites_js = (ROOT / "www/admin/js/invites.js").read_text(encoding="utf-8")
@@ -300,6 +302,20 @@ class AdminManagementTests(unittest.TestCase):
         self.assertIn("state.nav.current === 'invites'", invites_js)
         self.assertIn("switchAdminView('invites')", invites_js)
         self.assertIn("loadInvites(true)", invites_js)
+
+    def test_system_view_scripts_expose_runtime_health_and_cookie_status(self):
+        system_js = (ROOT / "www/admin/js/system.js").read_text(encoding="utf-8")
+        data_js = (ROOT / "www/admin/js/data.js").read_text(encoding="utf-8")
+        render_js = (ROOT / "www/admin/js/render.js").read_text(encoding="utf-8")
+        admin_html = (ROOT / "www/admin/admin.html").read_text(encoding="utf-8")
+
+        self.assertIn("loadSystemPage", system_js)
+        self.assertIn("renderRuntimeHealth", system_js)
+        self.assertIn("/runtime/health", data_js)
+        self.assertIn("/cookies/status", data_js)
+        self.assertIn("system-runtime-slot", render_js)
+        self.assertIn("system-cookie-slot", render_js)
+        self.assertIn("/static/admin/js/system.js", admin_html)
 
 
 if __name__ == "__main__":

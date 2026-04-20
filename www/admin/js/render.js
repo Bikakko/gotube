@@ -145,14 +145,16 @@ function renderSystemSection() {
                 el('h2', { textContent: '系统' }),
                 el('p', {
                     className: 'info-text',
-                    textContent: '先收口系统入口。Cookie 管理、巡检和诊断在后续页面继续并入。',
+                    textContent: '系统页集中展示运行巡检和 Cookie 状态，具体修改继续走现有管理动作。',
                 }),
             ]),
-        ]),
-        el('div', { className: 'system-panel-grid' }, [
-            el('div', { className: 'system-panel-card' }, [
-                el('div', { className: 'overview-card-label', textContent: 'Cookie 管理' }),
-                el('p', { className: 'overview-card-desc', textContent: '继续使用现有 Cookie 管理弹窗。' }),
+            el('div', { className: 'admin-actions' }, [
+                el('button', {
+                    type: 'button',
+                    className: 'btn btn-secondary',
+                    textContent: '刷新系统状态',
+                    onClick: () => window.loadSystemPage(true),
+                }),
                 el('button', {
                     type: 'button',
                     className: 'btn btn-secondary',
@@ -160,15 +162,19 @@ function renderSystemSection() {
                     onClick: () => window.showCookiesManagement(),
                 }),
             ]),
-            el('div', { className: 'system-panel-card' }, [
-                el('div', { className: 'overview-card-label', textContent: '统计面板' }),
-                el('p', { className: 'overview-card-desc', textContent: '媒体页保留旧统计组件，系统页只保留入口。' }),
-                el('button', {
-                    type: 'button',
-                    className: 'btn btn-secondary',
-                    textContent: '进入全局媒体',
-                    onClick: () => window.showVideoManagement(),
-                }),
+        ]),
+        el('div', { className: 'system-section-stack' }, [
+            el('div', { className: 'system-block' }, [
+                el('h3', { textContent: '运行巡检' }),
+                el('div', { id: 'system-runtime-slot' }, [
+                    el('div', { className: 'loading', textContent: '加载运行巡检中' }),
+                ]),
+            ]),
+            el('div', { className: 'system-block' }, [
+                el('h3', { textContent: 'Cookie 状态' }),
+                el('div', { id: 'system-cookie-slot' }, [
+                    el('div', { className: 'loading', textContent: '加载 Cookie 状态中' }),
+                ]),
             ]),
         ]),
     ]));

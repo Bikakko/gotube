@@ -135,6 +135,14 @@ async function loadUserLibrary(userId) {
     return apiFetch(`/users/${userId}/library`);
 }
 
+async function loadRuntimeHealth() {
+    return apiFetch('/runtime/health');
+}
+
+async function loadCookiesStatusData() {
+    return apiFetch('/cookies/status');
+}
+
 /**
  * 删除单个视频（入口函数）
  */
@@ -346,6 +354,8 @@ async function handleBatchDelete() {
 window.loadVideos = loadVideos;
 window.loadStats = loadStats;
 window.loadUserLibrary = loadUserLibrary;
+window.loadRuntimeHealth = loadRuntimeHealth;
+window.loadCookiesStatusData = loadCookiesStatusData;
 window.handleDeleteVideo = handleDeleteVideo;
 window.showDeleteConfirmModal = showDeleteConfirmModal;
 window.handleBatchDelete = handleBatchDelete;

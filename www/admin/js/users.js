@@ -111,6 +111,29 @@ function filterUsers(users) {
     });
 }
 
+function rerenderUsersTablePreservingSearch() {
+    const active = document.activeElement;
+    const hadFocus = active && active.id === 'user-search-input';
+    const selectionStart = hadFocus && typeof active.selectionStart === 'number' ? active.selectionStart : null;
+    const selectionEnd = hadFocus && typeof active.selectionEnd === 'number' ? active.selectionEnd : null;
+
+    renderUsersTable(filterUsers(state.users));
+
+    if (!hadFocus) {
+        return;
+    }
+
+    const nextInput = $('#user-search-input');
+    if (!nextInput) {
+        return;
+    }
+
+    nextInput.focus();
+    if (selectionStart !== null && selectionEnd !== null) {
+        nextInput.setSelectionRange(selectionStart, selectionEnd);
+    }
+}
+
 function renderUsersTable(users) {
     const slot = $('#users-table-slot');
     if (!slot) return;
@@ -149,7 +172,7 @@ function renderUsersTable(users) {
     if (searchInput) {
         searchInput.addEventListener('input', (event) => {
             state.userSearchKeyword = event.target.value;
-            renderUsersTable(filterUsers(state.users));
+            rerenderUsersTablePreservingSearch();
         });
     }
 

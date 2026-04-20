@@ -1,6 +1,5 @@
 /**
  * GoTube Admin - 事件处理模块
- * 顶部导航、筛选、选择等交互
  */
 
 function handleKeywordChange(keyword) {
@@ -115,7 +114,7 @@ function hideAllDropdowns() {
     });
 }
 
-function handleAdminNav(view) {
+async function handleAdminNav(view) {
     switch (view) {
     case 'overview':
         document.title = 'GoTube Admin - 概览';
@@ -123,18 +122,21 @@ function handleAdminNav(view) {
         window.renderOverviewSection();
         break;
     case 'media':
-        window.showVideoManagement();
+        await window.showVideoManagement();
         break;
     case 'users':
-        window.showUserManagement();
+        await window.showUserManagement();
         break;
     case 'invites':
-        window.showInviteManagement();
+        await window.showInviteManagement();
         break;
     case 'system':
         document.title = 'GoTube Admin - 系统';
         window.switchAdminView('system');
         window.renderSystemSection();
+        if (typeof window.loadSystemPage === 'function') {
+            await window.loadSystemPage();
+        }
         break;
     default:
         break;
@@ -152,8 +154,8 @@ function bindAdminShellEvents() {
     }
 
     document.querySelectorAll('[data-admin-nav]').forEach(button => {
-        button.addEventListener('click', () => {
-            handleAdminNav(button.dataset.adminNav);
+        button.addEventListener('click', async () => {
+            await handleAdminNav(button.dataset.adminNav);
         });
     });
 

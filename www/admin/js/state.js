@@ -45,6 +45,9 @@ let state = {
     },
     system: {
         ready: false,
+        loading: false,
+        cookieStatus: null,
+        runtimeHealth: null,
     },
 
     isTransitioning: false,
