@@ -12,6 +12,8 @@ from server.admin_api import get_videos, list_users, update_user
 from server.db import Base, MediaAsset, User, UserVideoItem
 from server.models import UpdateUserRequest
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 class AdminManagementTests(unittest.TestCase):
     def setUp(self):
@@ -201,6 +203,35 @@ class AdminManagementTests(unittest.TestCase):
 
             self.assertEqual([row["media_asset_id"] for row in earlier_result["videos"]], [old_asset.id])
             self.assertEqual([row["media_asset_id"] for row in today_result["videos"]], [today_asset.id])
+
+    def test_admin_html_contains_top_navigation_slots(self):
+        html = (ROOT / "www/admin/admin.html").read_text(encoding="utf-8")
+
+        for nav_key in ["overview", "media", "users", "invites", "system"]:
+            self.assertIn(f'data-admin-nav="{nav_key}"', html)
+
+        for view_id in [
+            "overview-view-container",
+            "video-view-container",
+            "user-view-container",
+            "invite-view-container",
+            "system-view-container",
+        ]:
+            self.assertIn(f'id="{view_id}"', html)
+
+    def test_admin_state_defaults_to_overview_navigation(self):
+        source = (ROOT / "www/admin/js/state.js").read_text(encoding="utf-8")
+
+        self.assertIn("nav:", source)
+        self.assertIn("current: 'overview'", source)
+
+    def test_admin_shell_scripts_use_overview_entry(self):
+        admin_js = (ROOT / "www/admin/js/admin.js").read_text(encoding="utf-8")
+        events_js = (ROOT / "www/admin/js/events.js").read_text(encoding="utf-8")
+
+        self.assertIn("bindAdminShellEvents", admin_js)
+        self.assertIn("switchAdminView('overview')", admin_js)
+        self.assertIn("[data-admin-nav]", events_js)
 
 
 if __name__ == "__main__":

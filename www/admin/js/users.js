@@ -3,120 +3,74 @@
  * 用户列表加载、创建、编辑、删除、状态切换
  */
 
-/**
- * 刷新导航标签状态
- */
 function refreshNavTabs() {
-    document.querySelectorAll('.nav-tab').forEach(btn => {
-        const label = btn.textContent.trim();
-        btn.classList.toggle('active',
-            (state.currentView === 'videos' && label === '视频管理') ||
-            (state.currentView === 'users' && label === '用户管理') ||
-            (state.currentView === 'invites' && label === '邀请码')
-        );
+    document.querySelectorAll('[data-admin-nav]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.adminNav === state.nav.current);
     });
 }
 
-/**
- * 显示指定后台视图
- */
 function switchAdminView(view) {
     const containers = {
-        videos: $('#video-view-container'),
+        overview: $('#overview-view-container'),
+        media: $('#video-view-container'),
         users: $('#user-view-container'),
         invites: $('#invite-view-container'),
+        system: $('#system-view-container'),
     };
 
     Object.entries(containers).forEach(([name, container]) => {
         if (!container) return;
-        container.style.display = name === view ? 'block' : 'none';
-        container.style.opacity = name === view ? '1' : '0';
+        const active = name === view;
+        container.hidden = !active;
+        container.style.display = active ? 'block' : 'none';
+        container.style.opacity = active ? '1' : '0';
         container.style.transition = 'opacity 0.15s ease';
     });
 
+    state.nav.current = view;
     state.currentView = view;
     state.isTransitioning = false;
+    window.renderNavbar();
     refreshNavTabs();
-    if (view === 'videos') {
+
+    if (view === 'media') {
         window.updateBatchBar();
     } else {
         const bar = $('#batch-bar');
-        const deleteBtnNav = $('#batch-delete-btn');
         if (bar) bar.classList.remove('active');
-        if (deleteBtnNav) deleteBtnNav.disabled = true;
     }
 }
 
-/**
- * 切换到用户管理视图（CSS 显示/隐藏，无布局抖动）
- */
 async function showUserManagement() {
-    // 如果已经在用户管理视图，刷新用户列表
-    if (state.currentView === 'users') {
-        loadUsers(true);
-        return;
-    }
-
     if (state.currentUser && state.currentUser.role !== 'admin') {
         showToast('权限不足', 'error');
         return;
     }
 
-    document.title = 'GoTube Admin - 用户管理';
+    document.title = 'GoTube Admin - 用户';
     switchAdminView('users');
-    loadUsers();
+    await loadUsers(state.usersLoaded);
 }
 
-/**
- * 返回视频管理视图（CSS 显示/隐藏，无布局抖动）
- */
-function showVideoManagement() {
-    // 如果已经在视频管理视图，直接返回
-    if (state.currentView === 'videos') return;
-
-    document.title = 'GoTube Admin - 视频管理';
-    switchAdminView('videos');
+async function showVideoManagement() {
+    document.title = 'GoTube Admin - 全局媒体';
+    switchAdminView('media');
+    await window.loadStats();
+    await window.loadVideos();
 }
 
-/**
- * 初始化点击外部区域返回视频管理的事件监听
- */
 window._clickOutsideListenerInitialized = false;
 
 function initClickOutsideListener() {
     return;
-    // 避免重复绑定
-    if (window._clickOutsideListenerInitialized) return;
-
-    document.addEventListener('click', (e) => {
-        // 只在用户管理视图时生效
-        if (state.currentView !== 'users') return;
-        // 如果正在过渡中，阻止立即返回
-        if (state.isTransitioning) return;
-        // 如果有模态框打开，不触发返回
-        if (document.querySelector('.modal.active')) return;
-
-        const userContainer = $('#user-view-container');
-        // 如果点击的不在用户管理区域内，就返回视频管理
-        if (userContainer && !userContainer.contains(e.target)) {
-            showVideoManagement();
-        }
-    });
-
-    window._clickOutsideListenerInitialized = true;
 }
 
-/**
- * 加载用户列表（支持缓存）
- */
 async function loadUsers(forceReload = false) {
-    // 如果有缓存且不强制重新加载，直接使用缓存
     if (state.usersLoaded && !forceReload && state.users.length > 0) {
         renderUsersTable(state.users);
         return;
     }
 
-    // 显示加载状态
     const slot = $('#users-table-slot');
     if (slot) {
         slot.innerHTML = '<div class="loading">加载中</div>';
@@ -135,9 +89,6 @@ async function loadUsers(forceReload = false) {
     }
 }
 
-/**
- * 渲染用户表格
- */
 function renderUsersTable(users) {
     const slot = $('#users-table-slot');
     if (!slot) return;
@@ -147,17 +98,19 @@ function renderUsersTable(users) {
         return;
     }
 
-    // 创建容器，包含新增按钮和表格
     const container = el('div', { className: 'user-table-wrapper' });
 
-    // 新增用户按钮
-    const addButton = el('button', {
-        className: 'btn btn-primary',
-        textContent: '➕ 新增用户',
-        onClick: () => showUserEditModal(),
-        style: 'margin-bottom: 16px;'
-    });
-    container.appendChild(addButton);
+    container.appendChild(el('div', { className: 'admin-section-header' }, [
+        el('div', {}, [
+            el('h2', { textContent: '用户' }),
+            el('p', { className: 'info-text', textContent: '这里管理账号状态、容量和密码。' }),
+        ]),
+        el('button', {
+            className: 'btn btn-primary',
+            textContent: '新增用户',
+            onClick: () => showUserEditModal(),
+        }),
+    ]));
 
     const table = el('table', { className: 'users-table' }, [
         el('thead', {}, [
@@ -170,7 +123,7 @@ function renderUsersTable(users) {
                 el('th', { textContent: '容量' }),
                 el('th', { textContent: '最后登录' }),
                 el('th', { textContent: '操作' }),
-            ])
+            ]),
         ]),
         el('tbody', {}, users.map(user => {
             const isSelf = state.currentUser && state.currentUser.id === user.id;
@@ -183,8 +136,8 @@ function renderUsersTable(users) {
                 el('td', {}, [
                     el('span', {
                         className: `status-badge ${user.is_active ? 'active' : 'inactive'}`,
-                        textContent: user.is_active ? '启用' : '禁用'
-                    })
+                        textContent: user.is_active ? '启用' : '禁用',
+                    }),
                 ]),
                 el('td', { textContent: String(user.video_count || 0) }),
                 el('td', {
@@ -196,7 +149,7 @@ function renderUsersTable(users) {
                 el('td', { className: 'user-actions' }, [
                     isSystemAccount ? null : el('button', {
                         className: 'action-btn-sm',
-                        textContent: '📝 编辑',
+                        textContent: '编辑',
                         onClick: (e) => {
                             e.stopPropagation();
                             showUserEditModal(user);
@@ -204,7 +157,7 @@ function renderUsersTable(users) {
                     }),
                     isSystemAccount ? null : el('button', {
                         className: 'action-btn-sm',
-                        textContent: '🔑 密码',
+                        textContent: '密码',
                         onClick: (e) => {
                             e.stopPropagation();
                             showChangePasswordModal(user);
@@ -212,7 +165,7 @@ function renderUsersTable(users) {
                     }),
                     !isSelf && !isSystemAccount ? el('button', {
                         className: `action-btn-sm ${user.is_active ? 'danger' : 'success'}`,
-                        textContent: user.is_active ? '🚫 禁用' : '✅ 启用',
+                        textContent: user.is_active ? '禁用' : '启用',
                         onClick: (e) => {
                             e.stopPropagation();
                             toggleUserActive(user);
@@ -220,15 +173,15 @@ function renderUsersTable(users) {
                     }) : null,
                     !isSelf && !isSystemAccount ? el('button', {
                         className: 'action-btn-sm danger',
-                        textContent: '🗑️ 删除',
+                        textContent: '删除',
                         onClick: (e) => {
                             e.stopPropagation();
                             handleDeleteUser(user);
                         },
                     }) : null,
-                ])
+                ].filter(Boolean)),
             ]);
-        }))
+        })),
     ]);
 
     slot.innerHTML = '';
@@ -236,13 +189,10 @@ function renderUsersTable(users) {
     slot.appendChild(container);
 }
 
-/**
- * 格式化角色名
- */
 function formatRole(role) {
     const map = {
-        'admin': '管理员',
-        'user': '普通用户'
+        admin: '管理员',
+        user: '普通用户',
     };
     return map[role] || role;
 }
@@ -253,17 +203,13 @@ function formatUserQuota(quotaMb) {
     return `${quotaMb} MB`;
 }
 
-/**
- * 切换用户启用/禁用状态
- */
 async function toggleUserActive(user) {
     try {
         await apiFetch(`/users/${user.id}`, {
             method: 'PUT',
-            body: JSON.stringify({ is_active: !user.is_active })
+            body: JSON.stringify({ is_active: !user.is_active }),
         });
         showToast(`用户已${user.is_active ? '禁用' : '启用'}`, 'success');
-        // 使缓存失效并重新加载
         invalidateUserCache();
         await loadUsers(true);
     } catch (err) {
@@ -271,16 +217,12 @@ async function toggleUserActive(user) {
     }
 }
 
-/**
- * 删除用户
- */
 async function handleDeleteUser(user) {
     if (!confirm(`确定要删除用户 "${user.username}" 吗？此操作不可恢复。`)) return;
 
     try {
         await apiFetch(`/users/${user.id}`, { method: 'DELETE' });
         showToast('用户已删除', 'success');
-        // 使缓存失效并重新加载
         invalidateUserCache();
         await loadUsers(true);
     } catch (err) {
@@ -288,9 +230,6 @@ async function handleDeleteUser(user) {
     }
 }
 
-/**
- * 显示用户编辑/创建模态框
- */
 function showUserEditModal(user = null) {
     const isEdit = !!user;
     const title = isEdit ? '编辑用户' : '新增用户';
@@ -321,7 +260,7 @@ function showUserEditModal(user = null) {
                     el('input', {
                         type: 'password',
                         id: 'edit-password',
-                        placeholder: '请输入密码'
+                        placeholder: '请输入密码',
                     }),
                 ]) : null,
                 el('div', { className: 'form-group' }, [
@@ -359,9 +298,6 @@ function showUserEditModal(user = null) {
     document.body.appendChild(overlay);
 }
 
-/**
- * 保存用户（创建或更新）
- */
 async function handleSaveUser(user) {
     const isEdit = !!user;
     const username = $('#edit-username').value.trim();
@@ -389,7 +325,7 @@ async function handleSaveUser(user) {
             }
             await apiFetch(`/users/${user.id}`, {
                 method: 'PUT',
-                body: JSON.stringify(payload)
+                body: JSON.stringify(payload),
             });
             showToast('更新成功', 'success');
             closeModal('user-edit-modal');
@@ -401,27 +337,21 @@ async function handleSaveUser(user) {
             }
             await apiFetch('/users', {
                 method: 'POST',
-                body: JSON.stringify({ username, password, role })
+                body: JSON.stringify({ username, password, role }),
             });
             showToast('创建成功', 'success');
             closeModal('user-edit-modal');
         }
-        // 使缓存失效并重新加载
         invalidateUserCache();
         await loadUsers(true);
     } catch (err) {
-        // 错误时不关闭模态框，显示详细错误信息
-        const errorMsg = err.message || '操作失败';
-        showToast(errorMsg, 'error');
+        showToast(err.message || '操作失败', 'error');
     }
 }
 
-/**
- * 显示修改密码模态框
- */
 function showChangePasswordModal(user) {
     const isSelf = state.currentUser && state.currentUser.id === user.id;
-    
+
     const overlay = el('div', { className: 'modal active', id: 'password-modal' }, [
         el('div', { className: 'modal-content modal-sm' }, [
             el('div', { className: 'modal-header' }, [
@@ -436,7 +366,7 @@ function showChangePasswordModal(user) {
                 isSelf ? el('div', { className: 'form-group' }, [
                     el('label', { textContent: '旧密码' }),
                     el('input', { type: 'password', id: 'old-password', placeholder: '请输入旧密码' }),
-                ]) : el('p', { className: 'info-text', textContent: '管理员正在重置此用户的密码' }),
+                ]) : el('p', { className: 'info-text', textContent: '管理员正在重置此用户的密码。' }),
                 el('div', { className: 'form-group' }, [
                     el('label', { textContent: '新密码' }),
                     el('input', { type: 'password', id: 'new-password', placeholder: '请输入新密码' }),
@@ -464,9 +394,6 @@ function showChangePasswordModal(user) {
     document.body.appendChild(overlay);
 }
 
-/**
- * 执行修改密码
- */
 async function handleChangePassword(user) {
     const isSelf = state.currentUser && state.currentUser.id === user.id;
     const old_password = isSelf ? $('#old-password').value : null;
@@ -489,11 +416,11 @@ async function handleChangePassword(user) {
     try {
         await apiFetch(`/users/${user.id}/password`, {
             method: 'PUT',
-            body: JSON.stringify({ old_password, new_password })
+            body: JSON.stringify({ old_password, new_password }),
         });
-        showToast('密码修改成功' + (isSelf ? '，请重新登录' : ''), 'success');
+        showToast(`密码修改成功${isSelf ? '，请重新登录' : ''}`, 'success');
         closeModal('password-modal');
-        
+
         if (isSelf) {
             setTimeout(() => {
                 window.GoTubeSession.clearAuthState();
@@ -505,7 +432,6 @@ async function handleChangePassword(user) {
     }
 }
 
-// 导出
 window.showUserManagement = showUserManagement;
 window.showVideoManagement = showVideoManagement;
 window.switchAdminView = switchAdminView;

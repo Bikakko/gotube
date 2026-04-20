@@ -11,6 +11,44 @@
     </script>
 </head>
 <body>
+    <div id="admin-shell" class="admin-shell">
+        <header class="admin-topbar">
+            <div class="admin-topbar-inner">
+                <a href="#" id="admin-home-link" class="admin-brand" title="返回下载页">GoTube Admin</a>
+                <div id="admin-user-brief" class="admin-user-brief"></div>
+            </div>
+            <nav class="admin-topnav" aria-label="后台导航">
+                <button type="button" class="admin-topnav-btn" data-admin-nav="overview">概览</button>
+                <button type="button" class="admin-topnav-btn" data-admin-nav="media">全局媒体</button>
+                <button type="button" class="admin-topnav-btn" data-admin-nav="users">用户</button>
+                <button type="button" class="admin-topnav-btn" data-admin-nav="invites">邀请码</button>
+                <button type="button" class="admin-topnav-btn" data-admin-nav="system">系统</button>
+            </nav>
+        </header>
+
+        <main id="admin-main" class="admin-main">
+            <section id="overview-view-container" class="admin-view" data-admin-view="overview"></section>
+
+            <section id="video-view-container" class="admin-view" data-admin-view="media" hidden>
+                <div id="stats-slot"></div>
+                <div id="filters-slot"></div>
+                <div id="count-slot" class="count-container"></div>
+                <div id="grid-slot"></div>
+                <div id="pagination-slot"></div>
+            </section>
+
+            <section id="user-view-container" class="admin-view" data-admin-view="users" hidden>
+                <div id="users-table-slot"></div>
+            </section>
+
+            <section id="invite-view-container" class="admin-view" data-admin-view="invites" hidden>
+                <div id="invites-table-slot"></div>
+            </section>
+
+            <section id="system-view-container" class="admin-view" data-admin-view="system" hidden></section>
+        </main>
+    </div>
+
     <!-- 基础工具函数 -->
     <script src="/static/common.js?v=2.5.0"></script>
     <!-- 全局状态 -->
