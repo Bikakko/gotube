@@ -5,8 +5,6 @@ set -e
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR"
-VENV_DIR="${GOTUBE_VENV_DIR:-$PROJECT_DIR/venv}"
-PIDFILE="$PROJECT_DIR/.server.pid"
 
 # 颜色输出
 GREEN='\033[0;32m'
@@ -14,9 +12,15 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# shellcheck disable=SC1091
+source "$PROJECT_DIR/scripts/gotube_runtime.sh"
+runtime_load_common_config
+
 usage() {
     echo -e "${YELLOW}用法:${NC}"
     echo "  $0          启动开发服务器（热重载）"
+    echo "  $0 init     初始化虚拟环境并安装依赖"
+    echo "  $0 doctor   检查当前启动环境"
     echo "  $0 stop     停止服务器"
     echo "  $0 restart  重启服务器"
     echo "  $0 status   查看服务器状态"
@@ -24,43 +28,16 @@ usage() {
 }
 
 is_running() {
-    if [ -f "$PIDFILE" ]; then
-        local pid=$(cat "$PIDFILE")
+    if [ -f "$GOTUBE_PID_FILE" ]; then
+        local pid=$(cat "$GOTUBE_PID_FILE")
         if kill -0 "$pid" 2>/dev/null; then
             return 0
         else
-            rm -f "$PIDFILE"
+            rm -f "$GOTUBE_PID_FILE"
             return 1
         fi
     fi
     return 1
-}
-
-# 获取端口
-get_port() {
-    if [ -n "${GOTUBE_PORT:-}" ]; then
-        echo "$GOTUBE_PORT"
-        return 0
-    fi
-
-    if [ -f "$PROJECT_DIR/.env" ]; then
-        local port
-        port=$(awk -F= '
-            /^[[:space:]]*GOTUBE_PORT[[:space:]]*=/ {
-                value=$2
-                gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-                gsub(/^["'\'']|["'\'']$/, "", value)
-                print value
-                exit
-            }
-        ' "$PROJECT_DIR/.env")
-        if [ -n "$port" ]; then
-            echo "$port"
-            return 0
-        fi
-    fi
-
-    echo "8000"
 }
 
 # 检查端口是否被占用
@@ -136,8 +113,8 @@ force_kill_port() {
 }
 
 start() {
-    local PORT
-    PORT=$(get_port)
+    runtime_load_common_config
+    local PORT="$GOTUBE_PORT"
 
     # 端口预检
     if check_port "$PORT"; then
@@ -155,29 +132,26 @@ start() {
     fi
 
     # 清理可能的残留 PID 文件
-    if [ -f "$PIDFILE" ]; then
-        rm -f "$PIDFILE"
+    if [ -f "$GOTUBE_PID_FILE" ]; then
+        rm -f "$GOTUBE_PID_FILE"
     fi
 
     echo -e "${GREEN}正在启动 GoTube 开发服务器...${NC}"
+    runtime_print_summary
 
     # 激活虚拟环境并启动
-    if [ ! -f "$VENV_DIR/bin/activate" ]; then
-        echo -e "${RED}✗ 未找到虚拟环境: $VENV_DIR${NC}"
-        echo -e "${YELLOW}请先在项目目录执行: python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt${NC}"
-        exit 1
-    fi
-
-    source "$VENV_DIR/bin/activate"
+    runtime_ensure_venv || exit 1
+    runtime_ensure_python_deps common || exit 1
+    runtime_activate_venv || exit 1
     cd "$PROJECT_DIR"
 
     # 后台启动 uvicorn
-    python -m uvicorn server.main:app --host 0.0.0.0 --port "$PORT" --reload &
+    python -m uvicorn server.main:app --host "$GOTUBE_HOST" --port "$PORT" --reload &
     local pid=$!
-    echo "$pid" > "$PIDFILE"
+    echo "$pid" > "$GOTUBE_PID_FILE"
 
     # 注册信号陷阱，确保 Ctrl+C 时优雅退出
-    trap 'echo -e "\n${YELLOW}收到退出信号，正在关闭服务器...${NC}"; kill -TERM "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; rm -f "$PIDFILE"; echo -e "${GREEN}✓ 服务器已停止${NC}"; exit 0' SIGINT SIGTERM EXIT
+    trap 'echo -e "\n${YELLOW}收到退出信号，正在关闭服务器...${NC}"; kill -TERM "$pid" 2>/dev/null; wait "$pid" 2>/dev/null; rm -f "$GOTUBE_PID_FILE"; echo -e "${GREEN}✓ 服务器已停止${NC}"; exit 0' SIGINT SIGTERM EXIT
 
     # 等待服务启动
     sleep 2
@@ -185,26 +159,26 @@ start() {
     if kill -0 "$pid" 2>/dev/null; then
         echo -e "${GREEN}✓ 服务器已启动!${NC}"
         echo -e "  PID:      ${YELLOW}$pid${NC}"
-        echo -e "  访问地址: ${GREEN}http://localhost:$PORT${NC}"
-        echo -e "  API文档:  ${GREEN}http://localhost:$PORT/docs${NC}"
+        echo -e "  访问地址: ${GREEN}http://$GOTUBE_HOST:$PORT${NC}"
+        echo -e "  API文档:  ${GREEN}http://$GOTUBE_HOST:$PORT/docs${NC}"
         echo -e "${YELLOW}按 Ctrl+C 停止服务器${NC}"
         wait "$pid"
     else
         echo -e "${RED}✗ 服务器启动失败，请检查日志${NC}"
-        rm -f "$PIDFILE"
+        rm -f "$GOTUBE_PID_FILE"
         exit 1
     fi
 }
 
 stop() {
     # 首先检查端口占用情况
-    local PORT
-    PORT=$(get_port)
+    runtime_load_common_config
+    local PORT="$GOTUBE_PORT"
 
     # 如果有 PID 文件，先尝试正常关闭
     if is_running; then
         local pid
-        pid=$(cat "$PIDFILE")
+        pid=$(cat "$GOTUBE_PID_FILE")
         echo -e "${YELLOW}正在停止服务器 (PID: $pid)...${NC}"
 
         # 发送 SIGTERM，给进程优雅退出的机会
@@ -225,7 +199,7 @@ stop() {
             sleep 1
         fi
 
-        rm -f "$PIDFILE"
+        rm -f "$GOTUBE_PID_FILE"
     fi
 
     # 如果端口仍被占用，强制清理所有残留子进程（包括 reloader 和 worker）
@@ -235,20 +209,20 @@ stop() {
     fi
 
     # 清理 PID 文件
-    rm -f "$PIDFILE"
+    rm -f "$GOTUBE_PID_FILE"
     echo -e "${GREEN}✓ 服务器已停止${NC}"
 }
 
 status() {
-    local PORT
-    PORT=$(get_port)
+    runtime_load_common_config
+    local PORT="$GOTUBE_PORT"
 
     if is_running; then
-        local pid=$(cat "$PIDFILE")
+        local pid=$(cat "$GOTUBE_PID_FILE")
         echo -e "${GREEN}● 服务器运行中${NC}"
         echo -e "  PID:      $pid"
-        echo -e "  访问地址: http://localhost:$PORT"
-        echo -e "  API文档:  http://localhost:$PORT/docs"
+        echo -e "  访问地址: http://$GOTUBE_HOST:$PORT"
+        echo -e "  API文档:  http://$GOTUBE_HOST:$PORT/docs"
     elif check_port "$PORT"; then
         # PID 文件不存在但端口被占用
         local pids
@@ -263,6 +237,12 @@ status() {
 
 # 主逻辑
 case "${1:-start}" in
+    init)
+        runtime_init common
+        ;;
+    doctor)
+        runtime_doctor common
+        ;;
     start)
         start
         ;;

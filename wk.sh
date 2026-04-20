@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
-# GoTube 生产环境启动脚本 (v3.0.1)
+# GoTube 生产环境启动脚本 (v4.0.1)
 # 使用 gunicorn + uvicorn workers 模式
 
 set -e
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR"
-VENV_DIR="${GOTUBE_VENV_DIR:-$PROJECT_DIR/venv}"
-PIDFILE="$PROJECT_DIR/.server.pid"
-LOGFILE="$PROJECT_DIR/server.log"
 
 # 颜色输出
 GREEN='\033[0;32m'
@@ -16,9 +13,15 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+# shellcheck disable=SC1091
+source "$PROJECT_DIR/scripts/gotube_runtime.sh"
+runtime_load_common_config
+
 usage() {
     echo -e "${YELLOW}用法:${NC}"
     echo "  $0          启动生产服务器"
+    echo "  $0 init     初始化虚拟环境、依赖和前端构建"
+    echo "  $0 doctor   检查当前启动环境"
     echo "  $0 stop     停止服务器"
     echo "  $0 restart  重启服务器"
     echo "  $0 status   查看服务器状态"
@@ -27,43 +30,16 @@ usage() {
 }
 
 is_running() {
-    if [ -f "$PIDFILE" ]; then
-        local pid=$(cat "$PIDFILE")
+    if [ -f "$GOTUBE_PID_FILE" ]; then
+        local pid=$(cat "$GOTUBE_PID_FILE")
         if kill -0 "$pid" 2>/dev/null; then
             return 0
         else
-            rm -f "$PIDFILE"
+            rm -f "$GOTUBE_PID_FILE"
             return 1
         fi
     fi
     return 1
-}
-
-# 获取端口
-get_port() {
-    if [ -n "${GOTUBE_PORT:-}" ]; then
-        echo "$GOTUBE_PORT"
-        return 0
-    fi
-
-    if [ -f "$PROJECT_DIR/.env" ]; then
-        local port
-        port=$(awk -F= '
-            /^[[:space:]]*GOTUBE_PORT[[:space:]]*=/ {
-                value=$2
-                gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
-                gsub(/^["'\'']|["'\'']$/, "", value)
-                print value
-                exit
-            }
-        ' "$PROJECT_DIR/.env")
-        if [ -n "$port" ]; then
-            echo "$port"
-            return 0
-        fi
-    fi
-
-    echo "8000"
 }
 
 # 检查端口是否被占用
@@ -119,33 +95,10 @@ force_kill_port() {
     return 1
 }
 
-# 获取 worker 数量
-# 注意：由于下载队列和 WebSocket 进度推送依赖进程内存状态，
-# 多 Worker 会导致状态隔离（任务丢失、进度无法推送）。
-# 因此固定为 1 个 Worker，使用 asyncio 并发处理请求已足够。
-get_workers() {
-    echo "1"
-}
-
-build_frontend() {
-    echo -e "${GREEN}正在混淆前端代码 (www -> www_dist)...${NC}"
-    if [ ! -d "$PROJECT_DIR/node_modules" ]; then
-        echo -e "${YELLOW}首次运行，正在安装混淆工具依赖...${NC}"
-        (cd "$PROJECT_DIR" && npm install --silent)
-    fi
-    (cd "$PROJECT_DIR" && node build.js)
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}✗ 前端混淆失败，请检查构建日志${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}✓ 混淆完成，离线 Map 已存至 www_maps${NC}"
-}
-
 start() {
-    local PORT
-    PORT=$(get_port)
-    local WORKERS
-    WORKERS=$(get_workers)
+    runtime_load_common_config
+    local PORT="$GOTUBE_PORT"
+    local WORKERS="$GOTUBE_WORKERS"
 
     # 端口预检
     if check_port "$PORT"; then
@@ -160,35 +113,24 @@ start() {
     fi
 
     # 清理可能的残留 PID 文件
-    if [ -f "$PIDFILE" ]; then
-        rm -f "$PIDFILE"
+    if [ -f "$GOTUBE_PID_FILE" ]; then
+        rm -f "$GOTUBE_PID_FILE"
     fi
 
-    # 执行前端混淆
-    build_frontend
+    runtime_ensure_venv || exit 1
+    runtime_ensure_python_deps prod || exit 1
+    runtime_build_frontend || exit 1
 
-    echo -e "${GREEN}正在启动 GoTube 生产服务器 (v2.3.1)...${NC}"
+    echo -e "${GREEN}正在启动 GoTube 生产服务器 (v4.0.1)...${NC}"
+    runtime_print_summary
     echo -e "  端口:    ${YELLOW}$PORT${NC}"
     echo -e "  Workers: ${YELLOW}$WORKERS${NC}"
 
-    # 激活虚拟环境并启动，若不存在则自动创建
-    if [ ! -f "$VENV_DIR/bin/activate" ]; then
-        echo -e "${YELLOW}首次启动或环境丢失，正在自动创建虚拟环境...${NC}"
-        python3 -m venv "$VENV_DIR"
-        source "$VENV_DIR/bin/activate"
-        echo -e "${YELLOW}正在自动安装项目依赖 (requirements.txt)...${NC}"
-        pip install --upgrade pip >/dev/null 2>&1
-        pip install -r "$PROJECT_DIR/requirements.txt"
-        # 由于 wk.sh 依赖 gunicorn，如果 requirements.txt 没写，也强制安装一下
-        pip install gunicorn >/dev/null 2>&1
-        echo -e "${GREEN}✓ 环境配置完成${NC}"
-    else
-        source "$VENV_DIR/bin/activate"
-    fi
+    runtime_activate_venv || exit 1
     cd "$PROJECT_DIR"
 
     # 如果配置了 GOTUBE_AUTO_UPDATE_YTDLP=1，则启动时自动更新 yt-dlp
-    if grep -q "GOTUBE_AUTO_UPDATE_YTDLP=1" "$PROJECT_DIR/.env" 2>/dev/null; then
+    if [ "$GOTUBE_AUTO_UPDATE_YTDLP" = "1" ]; then
         update_ytdlp
         echo ""
     fi
@@ -202,35 +144,35 @@ start() {
     gunicorn server.main:app \
         --workers "$WORKERS" \
         --worker-class uvicorn.workers.UvicornWorker \
-        --bind "0.0.0.0:$PORT" \
-        --pid "$PIDFILE" \
-        --access-logfile "$LOGFILE" \
-        --error-logfile "$LOGFILE" \
+        --bind "$GOTUBE_HOST:$PORT" \
+        --pid "$GOTUBE_PID_FILE" \
+        --access-logfile "$GOTUBE_LOG_FILE" \
+        --error-logfile "$GOTUBE_LOG_FILE" \
         --daemon
 
     # 等待服务启动
     sleep 2
 
-    if [ -f "$PIDFILE" ]; then
-        local pid=$(cat "$PIDFILE")
+    if [ -f "$GOTUBE_PID_FILE" ]; then
+        local pid=$(cat "$GOTUBE_PID_FILE")
         echo -e "${GREEN}✓ 服务器已启动!${NC}"
         echo -e "  PID:      ${YELLOW}$pid${NC}"
-        echo -e "  访问地址: ${GREEN}http://localhost:$PORT${NC}"
-        echo -e "  日志文件: ${YELLOW}$LOGFILE${NC}"
+        echo -e "  访问地址: ${GREEN}http://$GOTUBE_HOST:$PORT${NC}"
+        echo -e "  日志文件: ${YELLOW}$GOTUBE_LOG_FILE${NC}"
     else
-        echo -e "${RED}✗ 服务器启动失败，请检查日志: $LOGFILE${NC}"
+        echo -e "${RED}✗ 服务器启动失败，请检查日志: $GOTUBE_LOG_FILE${NC}"
         exit 1
     fi
 }
 
 stop() {
-    local PORT
-    PORT=$(get_port)
+    runtime_load_common_config
+    local PORT="$GOTUBE_PORT"
 
     # 如果有 PID 文件，先尝试正常关闭
     if is_running; then
         local pid
-        pid=$(cat "$PIDFILE")
+        pid=$(cat "$GOTUBE_PID_FILE")
         echo -e "${YELLOW}正在停止服务器 (PID: $pid)...${NC}"
 
         # 发送 SIGTERM，给进程优雅退出的机会
@@ -251,7 +193,7 @@ stop() {
             sleep 1
         fi
 
-        rm -f "$PIDFILE"
+        rm -f "$GOTUBE_PID_FILE"
     fi
 
     # 如果端口仍被占用，强制清理残留子进程
@@ -260,19 +202,19 @@ stop() {
         force_kill_port "$PORT" || true
     fi
 
-    rm -f "$PIDFILE"
+    rm -f "$GOTUBE_PID_FILE"
     echo -e "${GREEN}✓ 服务器已停止${NC}"
 }
 
 status() {
-    local PORT
-    PORT=$(get_port)
+    runtime_load_common_config
+    local PORT="$GOTUBE_PORT"
 
     if is_running; then
-        local pid=$(cat "$PIDFILE")
-        echo -e "${GREEN}● 服务器运行中 (v2.3.1)${NC}"
+        local pid=$(cat "$GOTUBE_PID_FILE")
+        echo -e "${GREEN}● 服务器运行中 (v4.0.1)${NC}"
         echo -e "  PID:      $pid"
-        echo -e "  访问地址: http://localhost:$PORT"
+        echo -e "  访问地址: http://$GOTUBE_HOST:$PORT"
     elif check_port "$PORT"; then
         local pids
         pids=$(get_port_pids "$PORT")
@@ -285,12 +227,8 @@ status() {
 }
 
 update_ytdlp() {
-    if [ ! -f "$VENV_DIR/bin/activate" ]; then
-        echo -e "${RED}✗ 未找到虚拟环境: $VENV_DIR${NC}"
-        exit 1
-    fi
-
-    source "$VENV_DIR/bin/activate"
+    runtime_load_common_config
+    runtime_activate_venv || exit 1
     echo -e "${YELLOW}正在更新 yt-dlp...${NC}"
 
     # 记录当前版本
@@ -314,6 +252,12 @@ update_ytdlp() {
 
 # 主逻辑
 case "${1:-start}" in
+    init)
+        runtime_init prod
+        ;;
+    doctor)
+        runtime_doctor prod
+        ;;
     start)
         start
         ;;
