@@ -2,6 +2,8 @@ README-Windows.md
 st.bat
 操作说明.md
 docs/*
+!docs/ops/
+!docs/ops/**
 !docs/superpowers/
 !docs/superpowers/**
 
@@ -27,6 +29,11 @@ tests/
 
 # 虚拟环境 - 生产独立创建
 venv/
+.venv/
+server/.venv/
+
+# 本地验收原始记录 - 不入库
+docs/superpowers/任务 10 手工验收反馈.md
 
 # 运行时数据 - 生产独立存储
 downloads/
