@@ -7,13 +7,15 @@ async function showInviteManagement() {
         showToast('权限不足', 'error');
         return;
     }
-    if (state.currentView === 'invites') {
-        loadInvites(true);
+
+    if (state.nav.current === 'invites') {
+        await loadInvites(true);
         return;
     }
+
     document.title = 'GoTube Admin - 邀请码';
     window.switchAdminView('invites');
-    loadInvites();
+    await loadInvites();
 }
 
 async function loadInvites(forceReload = false) {
@@ -23,7 +25,9 @@ async function loadInvites(forceReload = false) {
     }
 
     const slot = $('#invites-table-slot');
-    if (slot) slot.innerHTML = '<div class="loading">加载中</div>';
+    if (slot) {
+        slot.innerHTML = '<div class="loading">加载中</div>';
+    }
 
     try {
         const invites = await apiFetch('/invites');
@@ -32,7 +36,9 @@ async function loadInvites(forceReload = false) {
         renderInvitesTable(invites);
     } catch (err) {
         console.error('加载邀请码失败:', err);
-        if (slot) slot.innerHTML = `<div class="error">加载失败: ${err.message}</div>`;
+        if (slot) {
+            slot.innerHTML = `<div class="error">加载失败: ${err.message}</div>`;
+        }
     }
 }
 
@@ -44,7 +50,10 @@ function renderInvitesTable(invites) {
         el('div', { className: 'admin-section-header' }, [
             el('div', {}, [
                 el('h2', { textContent: '邀请码' }),
-                el('p', { className: 'info-text', textContent: '邀请码明文只在创建时显示，请当场复制。' }),
+                el('p', {
+                    className: 'info-text',
+                    textContent: '邀请码明文只在创建时显示一次，请当场复制。',
+                }),
             ]),
             el('button', {
                 className: 'btn btn-primary',
@@ -77,8 +86,12 @@ function renderInvitesTable(invites) {
                     }),
                 ]),
                 el('td', { textContent: `${invite.used_count || 0} / ${invite.max_uses}` }),
-                el('td', { textContent: invite.expires_at ? new Date(invite.expires_at).toLocaleString() : '永不过期' }),
-                el('td', { textContent: invite.created_at ? new Date(invite.created_at).toLocaleString() : '-' }),
+                el('td', {
+                    textContent: invite.expires_at ? new Date(invite.expires_at).toLocaleString('zh-CN') : '永不过期',
+                }),
+                el('td', {
+                    textContent: invite.created_at ? new Date(invite.created_at).toLocaleString('zh-CN') : '-',
+                }),
                 el('td', { className: 'user-actions' }, [
                     invite.is_active ? el('button', {
                         className: 'action-btn-sm danger',
@@ -110,7 +123,11 @@ function showCreateInviteModal() {
         el('div', { className: 'modal-content modal-sm' }, [
             el('div', { className: 'modal-header' }, [
                 el('div', { className: 'modal-title', textContent: '新增邀请码' }),
-                el('button', { className: 'modal-close', textContent: '×', onClick: () => closeModal('invite-create-modal') }),
+                el('button', {
+                    className: 'modal-close',
+                    textContent: '×',
+                    onClick: () => closeModal('invite-create-modal'),
+                }),
             ]),
             el('div', { className: 'modal-body' }, [
                 el('div', { className: 'form-group' }, [
@@ -119,15 +136,29 @@ function showCreateInviteModal() {
                 ]),
                 el('div', { className: 'form-group' }, [
                     el('label', { textContent: '有效期小时' }),
-                    el('input', { type: 'number', id: 'invite-expires-hours', min: '1', placeholder: '留空表示永不过期' }),
+                    el('input', {
+                        type: 'number',
+                        id: 'invite-expires-hours',
+                        min: '1',
+                        placeholder: '留空表示永不过期',
+                    }),
                 ]),
             ]),
             el('div', { className: 'modal-footer' }, [
-                el('button', { className: 'btn btn-secondary', textContent: '取消', onClick: () => closeModal('invite-create-modal') }),
-                el('button', { className: 'btn btn-primary', textContent: '创建', onClick: () => handleCreateInvite() }),
+                el('button', {
+                    className: 'btn btn-secondary',
+                    textContent: '取消',
+                    onClick: () => closeModal('invite-create-modal'),
+                }),
+                el('button', {
+                    className: 'btn btn-primary',
+                    textContent: '创建',
+                    onClick: () => handleCreateInvite(),
+                }),
             ]),
         ]),
     ]);
+
     document.body.appendChild(overlay);
 }
 
@@ -135,10 +166,12 @@ async function handleCreateInvite() {
     const maxUses = Number.parseInt($('#invite-max-uses').value, 10);
     const expiresRaw = $('#invite-expires-hours').value.trim();
     const expiresHours = expiresRaw === '' ? null : Number.parseInt(expiresRaw, 10);
+
     if (!Number.isInteger(maxUses) || maxUses < 1) {
         showToast('最大使用次数必须为正整数', 'warning');
         return;
     }
+
     if (expiresRaw !== '' && (!Number.isInteger(expiresHours) || expiresHours < 1)) {
         showToast('有效期小时必须为空或正整数', 'warning');
         return;
@@ -163,18 +196,31 @@ function showInviteCodeModal(code) {
         el('div', { className: 'modal-content modal-sm' }, [
             el('div', { className: 'modal-header' }, [
                 el('div', { className: 'modal-title', textContent: '邀请码已创建' }),
-                el('button', { className: 'modal-close', textContent: '×', onClick: () => closeModal('invite-code-modal') }),
+                el('button', {
+                    className: 'modal-close',
+                    textContent: '×',
+                    onClick: () => closeModal('invite-code-modal'),
+                }),
             ]),
             el('div', { className: 'modal-body' }, [
                 el('p', { className: 'info-text', textContent: '邀请码明文只显示这一次。' }),
-                el('input', { type: 'text', id: 'new-invite-code', value: code || '', readonly: true }),
+                el('input', { type: 'text', id: 'new-invite-code', value: code || '', readOnly: true }),
             ]),
             el('div', { className: 'modal-footer' }, [
-                el('button', { className: 'btn btn-secondary', textContent: '关闭', onClick: () => closeModal('invite-code-modal') }),
-                el('button', { className: 'btn btn-primary', textContent: '复制', onClick: () => copyInviteCode(code) }),
+                el('button', {
+                    className: 'btn btn-secondary',
+                    textContent: '关闭',
+                    onClick: () => closeModal('invite-code-modal'),
+                }),
+                el('button', {
+                    className: 'btn btn-primary',
+                    textContent: '复制',
+                    onClick: () => copyInviteCode(code),
+                }),
             ]),
         ]),
     ]);
+
     document.body.appendChild(overlay);
 }
 
@@ -189,6 +235,7 @@ async function copyInviteCode(code) {
 
 async function handleRevokeInvite(invite) {
     if (!confirm(`确定作废邀请码 #${invite.id} 吗？`)) return;
+
     try {
         await apiFetch(`/invites/${invite.id}`, { method: 'DELETE' });
         invalidateInviteCache();

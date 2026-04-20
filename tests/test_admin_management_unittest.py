@@ -291,6 +291,15 @@ class AdminManagementTests(unittest.TestCase):
         self.assertIn("owner-search-input", render_js)
         self.assertIn("page-size-select", render_js)
         self.assertIn("showAllOwners", modals_js)
+        self.assertIn("user-search-input", users_js)
+        self.assertIn("filterUsers", users_js)
+
+    def test_invite_view_scripts_use_top_nav_state(self):
+        invites_js = (ROOT / "www/admin/js/invites.js").read_text(encoding="utf-8")
+
+        self.assertIn("state.nav.current === 'invites'", invites_js)
+        self.assertIn("switchAdminView('invites')", invites_js)
+        self.assertIn("loadInvites(true)", invites_js)
 
 
 if __name__ == "__main__":

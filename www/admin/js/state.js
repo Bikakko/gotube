@@ -31,6 +31,7 @@ let state = {
 
     users: [],
     usersLoaded: false,
+    userSearchKeyword: '',
     invites: [],
     invitesLoaded: false,
 

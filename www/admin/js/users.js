@@ -67,7 +67,7 @@ function initClickOutsideListener() {
 
 async function loadUsers(forceReload = false) {
     if (state.usersLoaded && !forceReload && state.users.length > 0) {
-        renderUsersTable(state.users);
+        renderUsersTable(filterUsers(state.users));
         return;
     }
 
@@ -80,7 +80,7 @@ async function loadUsers(forceReload = false) {
         const users = await apiFetch('/users');
         state.users = users;
         state.usersLoaded = true;
-        renderUsersTable(users);
+        renderUsersTable(filterUsers(users));
     } catch (err) {
         console.error('加载用户列表失败:', err);
         if (slot) {
@@ -89,14 +89,31 @@ async function loadUsers(forceReload = false) {
     }
 }
 
+function getUserSearchKeyword() {
+    return String(state.userSearchKeyword || '').trim().toLowerCase();
+}
+
+function filterUsers(users) {
+    const keyword = getUserSearchKeyword();
+    if (!keyword) {
+        return users;
+    }
+
+    return users.filter(user => {
+        const haystacks = [
+            String(user.id || ''),
+            String(user.username || ''),
+            formatRole(user.role),
+            user.is_active ? '启用' : '禁用',
+            user.is_system_account ? '系统账号' : '',
+        ];
+        return haystacks.some(value => value.toLowerCase().includes(keyword));
+    });
+}
+
 function renderUsersTable(users) {
     const slot = $('#users-table-slot');
     if (!slot) return;
-
-    if (users.length === 0) {
-        slot.innerHTML = '<div class="empty-state">暂无用户</div>';
-        return;
-    }
 
     const container = el('div', { className: 'user-table-wrapper' });
     container.appendChild(el('div', { className: 'admin-section-header' }, [
@@ -113,6 +130,35 @@ function renderUsersTable(users) {
             onClick: () => showUserEditModal(),
         }),
     ]));
+
+    container.appendChild(el('div', { className: 'user-toolbar' }, [
+        el('input', {
+            id: 'user-search-input',
+            className: 'search-input user-search-input',
+            type: 'search',
+            placeholder: '搜索用户名 / ID / 角色 / 状态',
+            value: state.userSearchKeyword || '',
+        }),
+        el('div', {
+            className: 'user-search-summary',
+            textContent: `显示 ${users.length} / ${state.users.length} 个用户`,
+        }),
+    ]));
+
+    const searchInput = container.querySelector('#user-search-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', (event) => {
+            state.userSearchKeyword = event.target.value;
+            renderUsersTable(filterUsers(state.users));
+        });
+    }
+
+    if (users.length === 0) {
+        slot.innerHTML = '';
+        container.appendChild(el('div', { className: 'empty-state', textContent: '没有匹配的用户' }));
+        slot.appendChild(container);
+        return;
+    }
 
     const table = el('table', { className: 'users-table' }, [
         el('thead', {}, [
