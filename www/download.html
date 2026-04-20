@@ -280,10 +280,19 @@
                 <button id="logout-btn" type="button" class="task-btn danger">退出登录</button>
             </div>
         </div>
-        <div class="input-row">
-            <input type="text" id="url-input" placeholder="粘贴视频链接，回车下载">
-            <button id="dl-btn">下载</button>
-        </div>
+        <form id="download-form" class="input-row" autocomplete="off" onsubmit="return false;">
+            <input
+                type="text"
+                id="url-input"
+                name="download_url"
+                placeholder="粘贴视频链接，回车下载"
+                autocomplete="off"
+                autocapitalize="off"
+                autocorrect="off"
+                spellcheck="false"
+                inputmode="url">
+            <button id="dl-btn" type="button">下载</button>
+        </form>
         <div id="status"></div>
         <div id="task-list"></div>
         <section id="library-section" class="library-section" style="display:none;">
@@ -324,29 +333,29 @@
                     <button id="show-login-btn" class="auth-tab active" type="button">登录</button>
                     <button id="show-register-btn" class="auth-tab" type="button">注册</button>
                 </div>
-                <div id="login-panel">
+                <form id="login-panel" autocomplete="on" onsubmit="return false;">
                     <div class="auth-field">
-                        <input class="auth-input" type="text" id="login-username" placeholder="用户名" autocomplete="username">
+                        <input class="auth-input" type="text" id="login-username" name="username" placeholder="用户名" autocomplete="username">
                     </div>
                     <div class="auth-field">
-                        <input class="auth-input" type="password" id="login-password" placeholder="密码" autocomplete="current-password">
+                        <input class="auth-input" type="password" id="login-password" name="password" placeholder="密码" autocomplete="current-password">
                     </div>
                     <div id="login-error" class="auth-error"></div>
-                    <button id="login-submit-btn" class="auth-submit login">登录</button>
-                </div>
-                <div id="register-panel" style="display: none;">
+                    <button id="login-submit-btn" type="button" class="auth-submit login">登录</button>
+                </form>
+                <form id="register-panel" style="display: none;" autocomplete="off" onsubmit="return false;">
                     <div class="auth-field">
-                        <input class="auth-input" type="text" id="register-username" placeholder="用户名，3-32 位字母/数字/_/-" autocomplete="username">
+                        <input class="auth-input" type="text" id="register-username" name="register_username" placeholder="用户名，3-32 位字母/数字/_/-" autocomplete="username">
                     </div>
                     <div class="auth-field">
-                        <input class="auth-input" type="password" id="register-password" placeholder="密码，至少 6 位" autocomplete="new-password">
+                        <input class="auth-input" type="password" id="register-password" name="new_password" placeholder="密码，至少 6 位" autocomplete="new-password">
                     </div>
                     <div class="auth-field">
-                        <input class="auth-input" type="text" id="register-invite" placeholder="邀请码" autocomplete="off">
+                        <input class="auth-input" type="text" id="register-invite" name="invite_code" placeholder="邀请码" autocomplete="off">
                     </div>
                     <div id="register-error" class="auth-error"></div>
-                    <button id="register-submit-btn" class="auth-submit register">注册</button>
-                </div>
+                    <button id="register-submit-btn" type="button" class="auth-submit register">注册</button>
+                </form>
             </div>
         </div>
     </div>

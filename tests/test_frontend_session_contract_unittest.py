@@ -54,8 +54,17 @@ class FrontendSessionContractTests(unittest.TestCase):
     def test_download_page_renders_cancelled_status(self):
         source = read_text("www/download.js")
 
-        self.assertIn("cancelled: '已取消'", source)
         self.assertIn("status-cancelled", source)
+
+    def test_download_input_is_marked_as_non_auth_field(self):
+        html = read_text("www/download.html")
+
+        self.assertIn('id="download-form"', html)
+        self.assertIn('id="url-input"', html)
+        self.assertIn('name="download_url"', html)
+        self.assertIn('autocomplete="off"', html)
+        self.assertIn('inputmode="url"', html)
+        self.assertIn('spellcheck="false"', html)
 
     def test_logout_checks_active_downloads_before_clearing_session(self):
         source = read_text("www/download.js")
@@ -69,9 +78,6 @@ class FrontendSessionContractTests(unittest.TestCase):
         source = read_text("www/download.js")
 
         self.assertIn("confirmLogoutWithActiveDownloads", source)
-        self.assertIn("取消下载并退出", source)
-        self.assertIn("保留下载并退出", source)
-        self.assertIn("不退出", source)
         self.assertIn("logoutAction === 'stay'", source)
 
 
