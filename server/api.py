@@ -301,7 +301,7 @@ async def add_task(
             logger.info("游客复用已有视频: task=%s, asset=%s", task.task_id, existing_asset.id)
             return _task_to_response(task)
 
-    library_user = current_user if current_user is not None and current_user.role == "user" else None
+    library_user = current_user if current_user is not None else None
     owner_user_id = library_user.id if library_user is not None else None
     if library_user is not None:
         quota = get_effective_quota_bytes(library_user)

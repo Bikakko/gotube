@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 
 from server.api import (
     _register_transferred_guest_files,
+    add_task,
     download_my_video,
     download_shared_video,
     get_guest_download_count,
@@ -18,6 +19,7 @@ from server.api import (
     update_my_video_share,
 )
 from server.db import Base, User, UserVideoItem
+from server.models import AddTaskRequest, TaskResponse
 from server.downloader import DownloadTask
 from server.models import UpdateShareRequest
 from server.queue_manager import QueueManager
@@ -72,6 +74,90 @@ class UserLibraryTests(unittest.TestCase):
             % (title, url, video_file.stem),
             encoding="utf-8",
         )
+
+    def test_admin_download_task_is_owned_by_admin_library(self):
+        class FakeQueue:
+            def __init__(self):
+                self.calls = []
+
+            async def add_task(self, url, client_id, session_id=None, owner_user_id=None, source_url=None):
+                self.calls.append(
+                    {
+                        "url": url,
+                        "client_id": client_id,
+                        "session_id": session_id,
+                        "owner_user_id": owner_user_id,
+                        "source_url": source_url,
+                    }
+                )
+                task = DownloadTask("task-1", url, client_id)
+                task.owner_user_id = owner_user_id
+                task.source_url = source_url
+                return task
+
+        with self.Session() as session:
+            admin = self._user(session, "admin", role="admin")
+            qm = FakeQueue()
+
+            response = asyncio.run(
+                add_task(
+                    AddTaskRequest(url="https://example.test/new-video"),
+                    client_id="client-1",
+                    qm=qm,
+                    current_user=admin,
+                    db=session,
+                )
+            )
+
+            self.assertIsInstance(response, TaskResponse)
+            self.assertEqual(qm.calls[0]["owner_user_id"], admin.id)
+            self.assertEqual(response.task_id, "task-1")
+
+    def test_admin_reuses_existing_source_into_admin_library(self):
+        with self.Session() as session:
+            alice = self._user(session, "alice")
+            admin = self._user(session, "admin", role="admin")
+            video_file = self._video_file("Alpha_aaaaaaaa", "aaaaaaaa.mp4")
+            register_completed_file(
+                session,
+                owner_user_id=alice.id,
+                filepath=video_file,
+                download_dir=self.download_dir,
+                source_url="https://example.test/a",
+                title="Alpha",
+                file_hash="aaaaaaaa",
+            )
+            session.commit()
+
+            class FakeQueue:
+                async def add_task(self, **kwargs):
+                    raise AssertionError("should reuse existing source instead of starting a new download")
+
+                def add_completed_library_task(self, url, client_id, item, asset):
+                    task = DownloadTask("task-2", url, client_id)
+                    task.status = "completed"
+                    task.owner_user_id = item.owner_user_id
+                    task.user_video_item_id = item.id
+                    task.media_asset_id = asset.id
+                    task.file_hash = asset.file_hash
+                    task.share_token = item.share_token
+                    task.filename = asset.filename
+                    return task
+
+            response = asyncio.run(
+                add_task(
+                    AddTaskRequest(url="https://example.test/a"),
+                    client_id="client-1",
+                    qm=FakeQueue(),
+                    current_user=admin,
+                    db=session,
+                )
+            )
+
+            admin_items = session.query(UserVideoItem).filter(UserVideoItem.owner_user_id == admin.id).all()
+            self.assertEqual(len(admin_items), 1)
+            self.assertEqual(response.user_video_item_id, admin_items[0].id)
+            self.assertEqual(response.media_asset_id, admin_items[0].media_asset_id)
 
     def test_user_can_toggle_own_share_and_token_resolution_follows_state(self):
         with self.Session() as session:
