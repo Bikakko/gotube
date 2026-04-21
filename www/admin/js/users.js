@@ -28,7 +28,6 @@ function switchAdminView(view) {
     });
 
     state.nav.current = view;
-    state.currentView = view;
     state.isTransitioning = false;
     window.renderNavbar();
     refreshNavTabs();

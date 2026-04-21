@@ -30,7 +30,6 @@ function ensureViewContainerVisible(view) {
 
 async function renderPage() {
     state.nav.current = 'overview';
-    state.currentView = 'overview';
 
     window.renderNavbar();
     window.renderMainLayout();
@@ -231,7 +230,7 @@ function toggleStatsPanel() {
 
 function renderFilters() {
     const slot = $('#filters-slot');
-    if (!slot || state.currentView !== 'media') return;
+    if (!slot || state.nav.current !== 'media') return;
 
     slot.innerHTML = '';
 
@@ -347,7 +346,7 @@ function renderFilters() {
 function renderVideoGrid() {
     const gridSlot = $('#grid-slot');
     const countSlot = $('#count-slot');
-    if (!gridSlot || !countSlot || state.currentView !== 'media') return;
+    if (!gridSlot || !countSlot || state.nav.current !== 'media') return;
 
     gridSlot.innerHTML = '';
     countSlot.innerHTML = '';
@@ -481,7 +480,7 @@ function renderVideoCard(video) {
 
 function renderPagination() {
     const slot = $('#pagination-slot');
-    if (!slot || state.currentView !== 'media') return;
+    if (!slot || state.nav.current !== 'media') return;
 
     slot.innerHTML = '';
     const { page, totalPages } = state.pagination;
@@ -578,7 +577,7 @@ function updateBatchBar() {
 
     if (!bar || !count) return;
 
-    if (state.currentView !== 'media') {
+    if (state.nav.current !== 'media') {
         bar.classList.remove('active');
         return;
     }

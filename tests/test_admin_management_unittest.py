@@ -244,14 +244,19 @@ class AdminManagementTests(unittest.TestCase):
 
         self.assertIn("nav:", source)
         self.assertIn("current: 'overview'", source)
+        self.assertNotIn("currentView:", source)
 
     def test_admin_shell_scripts_use_overview_entry(self):
         admin_js = (ROOT / "www/admin/js/admin.js").read_text(encoding="utf-8")
         events_js = (ROOT / "www/admin/js/events.js").read_text(encoding="utf-8")
+        render_js = (ROOT / "www/admin/js/render.js").read_text(encoding="utf-8")
+        users_js = (ROOT / "www/admin/js/users.js").read_text(encoding="utf-8")
 
         self.assertIn("bindAdminShellEvents", admin_js)
         self.assertIn("switchAdminView('overview')", admin_js)
         self.assertIn("[data-admin-nav]", events_js)
+        self.assertNotIn("state.currentView", render_js)
+        self.assertNotIn("state.currentView", users_js)
 
     def test_media_view_scripts_expose_asset_details_entry(self):
         render_js = (ROOT / "www/admin/js/render.js").read_text(encoding="utf-8")

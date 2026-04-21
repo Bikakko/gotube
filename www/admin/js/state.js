@@ -7,7 +7,6 @@ let state = {
     nav: {
         current: 'overview',
     },
-    currentView: 'overview',
 
     videos: [],
     filteredVideos: [],
