@@ -7,7 +7,7 @@
 - `journalctl` 日志查看；
 - 异常退出后自动拉起。
 
-如果你还没有完成基础部署，先看 [GoTube Debian 服务器最小部署步骤](D:\工作区\gotube.dev\gotube\docs\ops\debian-minimal-deployment.md)。
+如果你还没有完成基础部署，先看 [GoTube Debian 服务器最小部署步骤](./debian-minimal-deployment.md)。
 
 ## 1. 设计原则
 
@@ -41,7 +41,7 @@ cp .env.example .env
 
 仓库内模板位置：
 
-- [gotube.service.example](D:\工作区\gotube.dev\gotube\deploy\gotube.service.example)
+- [gotube.service.example](../../deploy/gotube.service.example)
 
 复制到系统目录：
 

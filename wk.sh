@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# GoTube 生产环境启动脚本 (v4.0.1)
+# GoTube 生产环境启动脚本 (v4.1.1)
 # 使用 gunicorn + uvicorn workers 模式
 
 set -e
@@ -121,7 +121,7 @@ start() {
     runtime_ensure_python_deps prod || exit 1
     runtime_build_frontend || exit 1
 
-    echo -e "${GREEN}正在启动 GoTube 生产服务器 (v4.0.1)...${NC}"
+    echo -e "${GREEN}正在启动 GoTube 生产服务器 (v4.1.1)...${NC}"
     runtime_print_summary
     echo -e "  端口:    ${YELLOW}$PORT${NC}"
     echo -e "  Workers: ${YELLOW}$WORKERS${NC}"
@@ -212,7 +212,7 @@ status() {
 
     if is_running; then
         local pid=$(cat "$GOTUBE_PID_FILE")
-        echo -e "${GREEN}● 服务器运行中 (v4.0.1)${NC}"
+        echo -e "${GREEN}● 服务器运行中 (v4.1.1)${NC}"
         echo -e "  PID:      $pid"
         echo -e "  访问地址: http://$GOTUBE_HOST:$PORT"
     elif check_port "$PORT"; then

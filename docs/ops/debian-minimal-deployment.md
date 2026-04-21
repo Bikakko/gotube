@@ -118,7 +118,7 @@ http://服务器IP:8000/health
 
 如果返回 JSON 状态，说明服务已正常启动。
 
-如果你后续要接入开机自启和进程守护，再看 [GoTube `systemd` 部署说明](D:\工作区\gotube.dev\gotube\docs\ops\systemd-service.md)。
+如果你后续要接入开机自启和进程守护，再看 [GoTube `systemd` 部署说明](./systemd-service.md)。
 
 ## 3. 日常更新
 
