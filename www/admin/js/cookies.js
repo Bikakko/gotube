@@ -395,7 +395,18 @@ function readFileAsText(file) {
  */
 function showMergeConfirmDialog(checkData) {
     return new Promise((resolve) => {
-        const { will_replace, will_add, replace_count, add_count, unchanged_domains } = checkData;
+        const {
+            will_replace,
+            will_add,
+            replace_count,
+            add_count,
+            unchanged_domains,
+            will_replace_cookie_count = 0,
+            will_add_cookie_count = 0,
+            will_preserve_cookie_count = 0,
+            replace_cookie_samples = [],
+            add_cookie_samples = [],
+        } = checkData;
 
         let message = '📋 上传确认\n\n';
         
@@ -403,10 +414,30 @@ function showMergeConfirmDialog(checkData) {
             message += `🔄 将替换 ${replace_count} 个域名：\n`;
             message += will_replace.join(', ') + '\n\n';
         }
+
+        if (will_replace_cookie_count > 0) {
+            message += `🔁 将覆盖 ${will_replace_cookie_count} 条 Cookie 记录`;
+            if (replace_cookie_samples.length > 0) {
+                message += `（例如：${replace_cookie_samples.join('；')}）`;
+            }
+            message += '\n\n';
+        }
         
         if (add_count > 0) {
             message += `➕ 将新增 ${add_count} 个域名：\n`;
             message += will_add.join(', ') + '\n\n';
+        }
+
+        if (will_add_cookie_count > 0) {
+            message += `🆕 将新增 ${will_add_cookie_count} 条 Cookie 记录`;
+            if (add_cookie_samples.length > 0) {
+                message += `（例如：${add_cookie_samples.join('；')}）`;
+            }
+            message += '\n\n';
+        }
+
+        if (will_preserve_cookie_count > 0) {
+            message += `✅ 将保留 ${will_preserve_cookie_count} 条现有 Cookie 记录\n\n`;
         }
         
         if (unchanged_domains.length > 0) {

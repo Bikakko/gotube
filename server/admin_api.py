@@ -1299,16 +1299,105 @@ def _parse_domains_from_content(content: str) -> list[str]:
     return sorted(domains)
 
 
+def _parse_cookie_entries_from_content(content: str) -> tuple[list[str], list[dict[str, str]]]:
+    """
+    解析 Netscape cookies 内容，提取头部注释和 cookie 记录。
+
+    Cookie 的唯一键使用 (domain, path, name)，避免“按域整体替换”误删同域下其他记录。
+    """
+    header_lines: list[str] = []
+    entries: list[dict[str, str]] = []
+
+    for raw_line in content.splitlines():
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            header_lines.append(stripped)
+            continue
+
+        parts = stripped.split("\t")
+        if len(parts) < 7:
+            continue
+
+        domain = parts[0].strip()
+        path = parts[2].strip()
+        name = parts[5].strip()
+        if not domain or not name:
+            continue
+
+        entries.append({
+            "domain": domain,
+            "path": path,
+            "name": name,
+            "line": stripped,
+        })
+
+    return header_lines, entries
+
+
+def _cookie_entry_key(entry: dict[str, str]) -> tuple[str, str, str]:
+    return (entry["domain"], entry["path"], entry["name"])
+
+
+def _format_cookie_entry(entry: dict[str, str]) -> str:
+    path = entry.get("path") or "/"
+    return f'{entry["domain"]} | {entry["name"]} | {path}'
+
+
+def _analyze_cookie_merge(existing_content: str | None, new_content: str) -> dict[str, Any]:
+    """
+    生成 cookies 合并预览。
+
+    返回域名级和 cookie 记录级的影响范围，供确认弹窗与接口日志使用。
+    """
+    _, new_entries = _parse_cookie_entries_from_content(new_content)
+    _, existing_entries = _parse_cookie_entries_from_content(existing_content or "")
+
+    new_domains = sorted({entry["domain"] for entry in new_entries})
+    existing_domains = sorted({entry["domain"] for entry in existing_entries})
+
+    new_domain_set = set(new_domains)
+    existing_domain_set = set(existing_domains)
+
+    existing_by_key = {_cookie_entry_key(entry): entry for entry in existing_entries}
+    new_by_key = {_cookie_entry_key(entry): entry for entry in new_entries}
+
+    replace_keys = sorted(set(existing_by_key) & set(new_by_key))
+    add_keys = sorted(set(new_by_key) - set(existing_by_key))
+    preserved_keys = sorted(set(existing_by_key) - set(new_by_key))
+
+    def _sample(keys: list[tuple[str, str, str]], source: dict[tuple[str, str, str], dict[str, str]]) -> list[str]:
+        return [_format_cookie_entry(source[key]) for key in keys[:10]]
+
+    return {
+        "new_domains": new_domains,
+        "existing_domains": existing_domains,
+        "will_replace": sorted(new_domain_set & existing_domain_set),
+        "will_add": sorted(new_domain_set - existing_domain_set),
+        "replace_count": len(new_domain_set & existing_domain_set),
+        "add_count": len(new_domain_set - existing_domain_set),
+        "will_affect_other_domains": len(existing_domain_set - new_domain_set) > 0,
+        "unchanged_domains": sorted(existing_domain_set - new_domain_set),
+        "will_replace_cookie_count": len(replace_keys),
+        "will_add_cookie_count": len(add_keys),
+        "will_preserve_cookie_count": len(preserved_keys),
+        "replace_cookie_samples": _sample(replace_keys, new_by_key),
+        "add_cookie_samples": _sample(add_keys, new_by_key),
+        "preserve_cookie_samples": _sample(preserved_keys, existing_by_key),
+    }
+
+
 def _merge_cookies_content(existing_content: str, new_content: str) -> str:
     """
     智能合并两个 cookies 内容。
 
     逻辑：
-    1. 解析现有内容的域名和行
-    2. 解析新内容的域名和行
-    3. 如果新内容包含某个域名，替换该域名的所有行
-    4. 其他域名的行保持不变
-    5. 如果新内容有新域名，追加到末尾
+    1. 解析现有内容和新内容的 cookie 记录
+    2. 以 (domain, path, name) 作为唯一键
+    3. 新内容仅覆盖同键记录
+    4. 其他旧记录保持不变
+    5. 新键追加到结果中
 
     Args:
         existing_content: 现有的 cookies 内容。
@@ -1317,47 +1406,18 @@ def _merge_cookies_content(existing_content: str, new_content: str) -> str:
     Returns:
         合并后的内容。
     """
-    # 解析现有内容（按域名分组）
-    existing_lines_by_domain: dict[str, list[str]] = {}
-    existing_header_lines: list[str] = []
+    existing_header_lines, existing_entries = _parse_cookie_entries_from_content(existing_content)
+    new_header_lines, new_entries = _parse_cookie_entries_from_content(new_content)
 
-    for line in existing_content.strip().split("\n"):
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            existing_header_lines.append(line)
-            continue
+    merged_entries: dict[tuple[str, str, str], dict[str, str]] = {
+        _cookie_entry_key(entry): entry for entry in existing_entries
+    }
+    for entry in new_entries:
+        merged_entries[_cookie_entry_key(entry)] = entry
 
-        parts = stripped.split("\t")
-        if len(parts) >= 1:
-            domain = parts[0]
-            if domain not in existing_lines_by_domain:
-                existing_lines_by_domain[domain] = []
-            existing_lines_by_domain[domain].append(stripped)
-
-    # 解析新内容（按域名分组）
-    new_lines_by_domain: dict[str, list[str]] = {}
-
-    for line in new_content.strip().split("\n"):
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-
-        parts = stripped.split("\t")
-        if len(parts) >= 1:
-            domain = parts[0]
-            if domain not in new_lines_by_domain:
-                new_lines_by_domain[domain] = []
-            new_lines_by_domain[domain].append(stripped)
-
-    # 合并：新内容的域名替换，其他保持不变
-    for domain, lines in new_lines_by_domain.items():
-        existing_lines_by_domain[domain] = lines
-
-    # 重新生成内容
-    result_lines = existing_header_lines if existing_header_lines else ["# Netscape HTTP Cookie File"]
-
-    for domain in sorted(existing_lines_by_domain.keys()):
-        result_lines.extend(existing_lines_by_domain[domain])
+    result_lines = existing_header_lines or new_header_lines or ["# Netscape HTTP Cookie File"]
+    for entry in merged_entries.values():
+        result_lines.append(entry["line"])
 
     return "\n".join(result_lines) + "\n"
 
@@ -1554,31 +1614,10 @@ async def check_cookies_merge(
         if not is_valid:
             raise HTTPException(status_code=400, detail=f"cookies 格式无效: {error_msg}")
 
-        # 解析新内容的域名
-        new_domains = _parse_domains_from_content(content)
-
-        # 获取现有内容的域名
         existing_content = _get_active_cookies_content()
-        existing_domains = _parse_domains_from_content(existing_content) if existing_content else []
+        summary = _analyze_cookie_merge(existing_content, content)
 
-        # 对比
-        new_domains_set = set(new_domains)
-        existing_domains_set = set(existing_domains)
-
-        will_replace = sorted(new_domains_set & existing_domains_set)  # 将替换的域名
-        will_add = sorted(new_domains_set - existing_domains_set)  # 将新增的域名
-
-        return {
-            "status": "ok",
-            "new_domains": new_domains,
-            "existing_domains": existing_domains,
-            "will_replace": will_replace,
-            "will_add": will_add,
-            "replace_count": len(will_replace),
-            "add_count": len(will_add),
-            "will_affect_other_domains": len(existing_domains_set - new_domains_set) > 0,
-            "unchanged_domains": sorted(existing_domains_set - new_domains_set),
-        }
+        return {"status": "ok", **summary}
     except HTTPException:
         raise
     except Exception as e:
@@ -1664,9 +1703,14 @@ async def upload_cookies(
             # 智能合并模式
             existing_content = _get_active_cookies_content()
             if existing_content:
+                summary = _analyze_cookie_merge(existing_content, content)
                 final_content = _merge_cookies_content(existing_content, content)
-                new_domains = _parse_domains_from_content(content)
-                mode_message = f"智能合并模式（更新了 {len(new_domains)} 个域名）"
+                mode_message = (
+                    "智能合并模式"
+                    f"（覆盖 {summary['will_replace_cookie_count']} 条 Cookie，"
+                    f"新增 {summary['will_add_cookie_count']} 条，"
+                    f"保留 {summary['will_preserve_cookie_count']} 条）"
+                )
             else:
                 # 没有现有文件，直接保存
                 mode_message = "智能合并模式（新文件）"
