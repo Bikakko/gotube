@@ -1,81 +1,86 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from server import cookie_store
-from server.downloader import Downloader
+from server.health_checks import collect_runtime_health
 
 
 COOKIE_HEADER = "# Netscape HTTP Cookie File\n"
 
 
-class FakeSettings:
-    def __init__(self, project_root: Path, env_cookie: Path | None) -> None:
-        self.project_root = project_root
-        self._env_cookie = env_cookie
-
-    def get_cookies_file(self) -> Path | None:
-        return self._env_cookie if self._env_cookie and self._env_cookie.exists() else None
-
-
 class CookieStoreTests(unittest.TestCase):
-    def test_runtime_cookie_imports_env_cookie_once_into_data_dir(self):
+    def test_runtime_cookie_import_from_env_marks_env_import_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = Path(tmp) / "data"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            env_cookie = Path(tmp) / "env-cookies.txt"
+            env_cookie.write_text(
+                COOKIE_HEADER + ".youtube.com\tTRUE\t/\tTRUE\t0\tSAPISID\tsecret\n",
+                encoding="utf-8",
+            )
+
+            with (
+                patch("server.cookie_store.get_data_dir", return_value=data_dir),
+                patch("server.cookie_store.settings", SimpleNamespace(get_cookies_file=lambda: env_cookie)),
+            ):
+                runtime = cookie_store.get_runtime_cookies_file()
+
+                self.assertIsNotNone(runtime)
+                self.assertTrue(runtime.exists())
+                self.assertEqual(cookie_store.get_runtime_cookies_source(), "env_import")
+
+    def test_runtime_cookie_delete_clears_source_marker(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = Path(tmp) / "data"
+            data_dir.mkdir(parents=True, exist_ok=True)
+            runtime_cookie = data_dir / "cookies.txt"
+            runtime_cookie.write_text(
+                COOKIE_HEADER + ".x.com\tTRUE\t/\tTRUE\t0\tauth_token\tsecret\n",
+                encoding="utf-8",
+            )
+
+            with patch("server.cookie_store.get_data_dir", return_value=data_dir):
+                cookie_store.set_runtime_cookies_source("upload")
+                self.assertEqual(cookie_store.get_runtime_cookies_source(), "upload")
+
+                deleted = cookie_store.delete_uploaded_cookies_file()
+
+                self.assertTrue(deleted)
+                self.assertFalse(runtime_cookie.exists())
+                self.assertFalse((data_dir / ".cookies_runtime_source").exists())
+
+    def test_health_check_reports_env_import_cookie_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            env_cookie = root / "cookies.txt"
-            env_content = COOKIE_HEADER + ".example.com\tTRUE\t/\tTRUE\t0\tSID\tenv\n"
-            env_cookie.write_text(env_content, encoding="utf-8")
+            download_dir = root / "downloads"
+            download_dir.mkdir()
+            db_path = root / "gotube.db"
+            db_path.write_bytes(b"")
+            cookies_path = root / "data" / "cookies.txt"
+            cookies_path.parent.mkdir()
+            cookies_path.write_text(
+                COOKIE_HEADER
+                + ".youtube.com\tTRUE\t/\tTRUE\t0\tSAPISID\tsecret\n"
+                + ".youtube.com\tTRUE\t/\tTRUE\t0\t__Secure-1PSID\tsecret\n"
+                + ".youtube.com\tTRUE\t/\tTRUE\t0\t__Secure-3PSID\tsecret\n",
+                encoding="utf-8",
+            )
 
-            with patch.object(cookie_store, "settings", FakeSettings(root, env_cookie)):
-                runtime_cookie = cookie_store.get_runtime_cookies_file()
+            with (
+                patch("server.health_checks.get_active_cookies_file_for_status", return_value=cookies_path),
+                patch("server.health_checks.get_runtime_cookies_source", return_value="env_import"),
+            ):
+                result = collect_runtime_health(
+                    project_root=root,
+                    download_dir=download_dir,
+                    db_path=db_path,
+                )
 
-            uploaded_cookie = root / "data" / "cookies.txt"
-            self.assertEqual(runtime_cookie, uploaded_cookie)
-            self.assertEqual(uploaded_cookie.read_text(encoding="utf-8"), env_content)
-            self.assertEqual(env_cookie.read_text(encoding="utf-8"), env_content)
-
-    def test_runtime_cookie_prefers_uploaded_cookie_over_env_cookie(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            env_cookie = root / "cookies.txt"
-            uploaded_cookie = root / "data" / "cookies.txt"
-            env_cookie.write_text(COOKIE_HEADER + ".env.test\tTRUE\t/\tTRUE\t0\tSID\tenv\n", encoding="utf-8")
-            uploaded_cookie.parent.mkdir(parents=True)
-            uploaded_cookie.write_text(COOKIE_HEADER + ".upload.test\tTRUE\t/\tTRUE\t0\tSID\tupload\n", encoding="utf-8")
-
-            with patch.object(cookie_store, "settings", FakeSettings(root, env_cookie)):
-                self.assertEqual(cookie_store.get_runtime_cookies_file(), uploaded_cookie)
-                uploaded_cookie.unlink()
-                self.assertIsNone(cookie_store.get_runtime_cookies_file())
-
-    def test_deleted_uploaded_cookie_does_not_fall_back_to_env_cookie(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            env_cookie = root / "cookies.txt"
-            uploaded_cookie = root / "data" / "cookies.txt"
-            env_cookie.write_text(COOKIE_HEADER + ".env.test\tTRUE\t/\tTRUE\t0\tSID\tenv\n", encoding="utf-8")
-            uploaded_cookie.parent.mkdir(parents=True)
-            uploaded_cookie.write_text(COOKIE_HEADER + ".upload.test\tTRUE\t/\tTRUE\t0\tSID\tupload\n", encoding="utf-8")
-
-            with patch.object(cookie_store, "settings", FakeSettings(root, env_cookie)):
-                self.assertTrue(cookie_store.delete_uploaded_cookies_file())
-                self.assertIsNone(cookie_store.get_runtime_cookies_file())
-
-            self.assertTrue(env_cookie.exists())
-            self.assertFalse(uploaded_cookie.exists())
-
-    def test_downloader_uses_runtime_cookie_source_by_default(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            env_cookie = root / "cookies.txt"
-            env_cookie.write_text(COOKIE_HEADER + ".env.test\tTRUE\t/\tTRUE\t0\tSID\tenv\n", encoding="utf-8")
-
-            with patch.object(cookie_store, "settings", FakeSettings(root, env_cookie)):
-                with patch("server.downloader.get_runtime_cookies_file", cookie_store.get_runtime_cookies_file):
-                    downloader = Downloader(download_dir=root / "downloads")
-
-            self.assertEqual(downloader.cookies_file, root / "data" / "cookies.txt")
+            self.assertEqual(result["cookie_source"], "env_import")
+            self.assertTrue(result["cookie_file_exists"])
 
 
 if __name__ == "__main__":

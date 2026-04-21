@@ -29,7 +29,9 @@ from .cookie_store import (
     diagnose_cookie_content,
     get_active_cookies_file_for_status,
     get_data_dir,
+    get_runtime_cookies_source,
     get_uploaded_cookies_path,
+    set_runtime_cookies_source,
 )
 from .db import AuthToken, MediaAsset, User, UserVideoItem
 from .health_checks import collect_runtime_health
@@ -1537,7 +1539,7 @@ async def get_cookies_status(
             return {
                 "has_cookies": False,
                 "source": "none",
-                "message": "未上传 cookies 文件",
+                "message": "未配置运行时 cookies 文件",
                 "diagnostics": diagnose_cookie_content(""),
             }
 
@@ -1557,7 +1559,7 @@ async def get_cookies_status(
             "modified_time": modified_time,
             "domains": domains,
             "domain_count": len(domains),
-            "source": "upload",
+            "source": get_runtime_cookies_source(),
             "file_path": str(active_cookies.relative_to(settings.project_root)),
             "diagnostics": diagnose_cookie_content(content),
         }
@@ -1722,6 +1724,7 @@ async def upload_cookies(
         try:
             with open(cookies_path, "w", encoding="utf-8") as f:
                 f.write(final_content)
+            set_runtime_cookies_source("upload")
             logger.info("cookies 文件已更新: %s (%d bytes, %s)", cookies_path, len(final_content), mode_message)
         except Exception as e:
             logger.error("保存 cookies 失败: %s", e)

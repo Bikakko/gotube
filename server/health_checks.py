@@ -11,7 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from .config import settings
-from .cookie_store import diagnose_cookie_content, get_active_cookies_file_for_status
+from .cookie_store import (
+    diagnose_cookie_content,
+    get_active_cookies_file_for_status,
+    get_runtime_cookies_source,
+)
 
 _DEFAULT = object()
 
@@ -29,12 +33,15 @@ def collect_runtime_health(
     resolved_db_path = Path(db_path or settings.db_file).resolve()
     if cookies_path is _DEFAULT:
         active_cookies = get_active_cookies_file_for_status()
+        cookie_source = get_runtime_cookies_source() if active_cookies else "none"
     elif cookies_path is None:
         active_cookies = None
+        cookie_source = "none"
     else:
         active_cookies = Path(cookies_path).resolve()
+        cookie_source = "upload"
 
-    cookie_info = _cookie_health(active_cookies)
+    cookie_info = _cookie_health(active_cookies, source=cookie_source)
     download_writable = _path_writable(resolved_download_dir, create_dir=True)
     database_writable = _sqlite_database_writable(resolved_db_path)
     ffmpeg_info = _command_version("ffmpeg", ["ffmpeg", "-version"])
@@ -68,7 +75,7 @@ def collect_runtime_health(
     }
 
 
-def _cookie_health(cookies_path: Path | None) -> dict[str, Any]:
+def _cookie_health(cookies_path: Path | None, *, source: str = "upload") -> dict[str, Any]:
     if not cookies_path or not cookies_path.exists():
         return {
             "source": "none",
@@ -82,7 +89,7 @@ def _cookie_health(cookies_path: Path | None) -> dict[str, Any]:
     except OSError:
         content = ""
     return {
-        "source": "upload",
+        "source": source,
         "exists": True,
         "path": str(cookies_path),
         "diagnostics": diagnose_cookie_content(content),

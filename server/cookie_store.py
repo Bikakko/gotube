@@ -13,6 +13,7 @@ from .config import settings
 
 COOKIE_FILENAME = "cookies.txt"
 IMPORT_MARKER_FILENAME = ".cookies_env_imported"
+SOURCE_MARKER_FILENAME = ".cookies_runtime_source"
 
 PLATFORM_COOKIE_REQUIREMENTS = {
     "bilibili": {"SESSDATA", "bili_jct", "DedeUserID"},
@@ -41,10 +42,38 @@ def _get_import_marker_path() -> Path:
     return get_data_dir() / IMPORT_MARKER_FILENAME
 
 
+def _get_source_marker_path() -> Path:
+    return get_data_dir() / SOURCE_MARKER_FILENAME
+
+
 def _mark_env_import_checked() -> None:
     marker = _get_import_marker_path()
     if not marker.exists():
         marker.write_text("1\n", encoding="utf-8")
+
+
+def set_runtime_cookies_source(source: str) -> None:
+    marker = _get_source_marker_path()
+    marker.write_text(f"{source}\n", encoding="utf-8")
+
+
+def clear_runtime_cookies_source() -> None:
+    marker = _get_source_marker_path()
+    if marker.exists():
+        marker.unlink()
+
+
+def get_runtime_cookies_source() -> str:
+    marker = _get_source_marker_path()
+    if not marker.exists():
+        return "upload"
+    try:
+        source = marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "upload"
+    if source in {"upload", "env_import"}:
+        return source
+    return "upload"
 
 
 def get_runtime_cookies_file() -> Path | None:
@@ -65,6 +94,7 @@ def get_runtime_cookies_file() -> Path | None:
 
     shutil.copy2(env_cookies, uploaded_cookies)
     _mark_env_import_checked()
+    set_runtime_cookies_source("env_import")
     return uploaded_cookies
 
 
@@ -82,9 +112,11 @@ def delete_uploaded_cookies_file() -> bool:
     uploaded_cookies = get_uploaded_cookies_path()
     if not uploaded_cookies.exists():
         _mark_env_import_checked()
+        clear_runtime_cookies_source()
         return False
     uploaded_cookies.unlink()
     _mark_env_import_checked()
+    clear_runtime_cookies_source()
     return True
 
 

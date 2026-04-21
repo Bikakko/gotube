@@ -150,14 +150,19 @@ function renderCookiesStatus(container, data) {
                 <div style="font-size: 48px; margin-bottom: 10px;">🍪</div>
                 <div style="font-size: 16px; font-weight: bold; margin-bottom: 8px;">未配置 Cookies</div>
                 <div style="font-size: 14px; color: var(--text-sec);">
-                    请上传 cookies.txt 文件以支持需要登录的视频网站下载
+                    请上传 cookies.txt 文件，或通过 .env 首次导入运行时 Cookies
                 </div>
             </div>
         `;
         return;
     }
 
-    const sourceText = data.source === 'upload' ? '网页上传' : '.env 配置';
+    const sourceTextMap = {
+        upload: '网页上传',
+        env_import: '.env 首次导入',
+        none: '未配置',
+    };
+    const sourceText = sourceTextMap[data.source] || '未知来源';
     const domainsHtml = data.domains && data.domains.length > 0
         ? `
             <div style="margin-top: 15px;">
@@ -179,9 +184,9 @@ function renderCookiesStatus(container, data) {
         <div style="padding: 20px; background: var(--surface); border-radius: 8px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                 <div style="font-size: 16px; font-weight: bold; color: var(--success);">✅ 已配置 Cookies</div>
-                ${data.source === 'upload' ? `
+                ${(data.source === 'upload' || data.source === 'env_import') ? `
                     <button class="btn btn-danger" style="padding: 6px 12px; font-size: 13px;" onclick="deleteCookies()">
-                        🗑️ 删除上传的 cookies
+                        🗑️ 删除当前运行时 cookies
                     </button>
                 ` : ''}
             </div>
