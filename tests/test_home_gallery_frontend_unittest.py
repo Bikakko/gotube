@@ -14,6 +14,7 @@ class HomeGalleryFrontendTests(unittest.TestCase):
         html = read_text("www/index.html")
 
         self.assertIn('id="gallery-app"', html)
+        self.assertIn('id="page-sky"', html)
         self.assertIn('id="albums-grid"', html)
         self.assertIn('id="gallery-modal"', html)
         self.assertNotIn("Share the tiny bright moments", html)
@@ -39,11 +40,13 @@ class HomeGalleryFrontendTests(unittest.TestCase):
     def test_index_styles_use_soft_rounded_album_cards(self):
         css = read_text("www/index.css")
 
-        self.assertIn("minmax(150px, 220px)", css)
-        self.assertIn("border-radius: 42px", css)
+        self.assertIn("repeat(4, minmax(0, 220px))", css)
+        self.assertIn(".page-sky", css)
+        self.assertIn("border-radius: 40px", css)
         self.assertIn("aspect-ratio: 6 / 4", css)
-        self.assertIn("backdrop-filter: blur(14px)", css)
-        self.assertIn("inset: -22px", css)
+        self.assertIn("backdrop-filter: blur(16px)", css)
+        self.assertIn("inset: -18px", css)
+        self.assertIn("clamp(268px, 37vh, 392px)", css)
 
     def test_modal_shell_hides_visible_title_copy_and_count(self):
         html = read_text("www/index.html")
@@ -54,19 +57,7 @@ class HomeGalleryFrontendTests(unittest.TestCase):
         self.assertNotIn("gallery-modal-count", html)
         self.assertIn(".gallery-modal-panel::before", css)
         self.assertIn("border-radius: 42px", css)
-        self.assertIn("backdrop-filter: blur(16px)", css)
-
-    def test_home_page_uses_dense_star_layer_soft_flows_and_clouds(self):
-        html = read_text("www/index.html")
-        css = read_text("www/index.css")
-
-        self.assertGreaterEqual(html.count("<span></span>"), 28)
-        self.assertIn("page-flow page-flow-d", html)
-        self.assertIn('class="page-clouds"', html)
-        self.assertIn("@keyframes cloud-a", css)
-        self.assertIn("@keyframes cloud-d", css)
-        self.assertIn("@keyframes flow-d", css)
-        self.assertNotIn("page-shimmer", html)
+        self.assertIn("backdrop-filter: blur(18px)", css)
 
     def test_index_script_drives_gallery_and_modal_navigation(self):
         source = read_text("www/index.js")
@@ -83,6 +74,10 @@ class HomeGalleryFrontendTests(unittest.TestCase):
             "showPrevImage",
             "keydown",
             "Escape",
+            "startMoonSky",
+            'moonImage.src = "/static/moon.png"',
+            "drawMoon",
+            "drawCloud",
         ]:
             self.assertIn(marker, source)
 

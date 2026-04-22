@@ -1,111 +1,74 @@
 (function () {
-    const state = {
-        albums: [],
-        currentAlbum: null,
-        currentImageIndex: 0,
-    };
+    const grid = document.getElementById("lab-grid");
+    const modal = document.getElementById("lab-modal");
+    const modalImage = document.getElementById("lab-modal-image");
+    const closeButton = document.getElementById("lab-close");
+    const fallback = "/static/favicon.jpg";
+    const skyCanvas = document.getElementById("lab-sky");
+    const isMoonTheme = document.body.dataset.visualTheme === "b";
+    let stopSky = null;
 
-    const albumsGrid = document.getElementById("albums-grid");
-    const albumsMeta = document.getElementById("albums-meta");
-    const albumsEmpty = document.getElementById("albums-empty");
-    const modal = document.getElementById("gallery-modal");
-    const modalImage = document.getElementById("gallery-modal-image");
-    const secretEntryImage = document.getElementById("secret-entry-image");
-    const skyCanvas = document.getElementById("page-sky");
-
-    secretEntryImage.addEventListener("error", () => {
-        const fallback = secretEntryImage.dataset.fallbackSrc;
-        if (fallback && secretEntryImage.src !== fallback) {
-            secretEntryImage.src = fallback;
+    async function loadSamples() {
+        try {
+            const response = await fetch("/api/gallery/albums");
+            if (!response.ok) {
+                throw new Error("albums unavailable");
+            }
+            const data = await response.json();
+            const albums = (data.albums || []).slice(0, 6);
+            if (albums.length > 0) {
+                renderCards(albums.map((album) => ({ cover_url: album.cover_url || fallback })));
+                return;
+            }
+        } catch (_error) {
+            // ignore and use fallback cards
         }
-    });
 
-    const stopSky = skyCanvas ? startMoonSky(skyCanvas) : null;
-    window.addEventListener("beforeunload", () => {
-        if (stopSky) {
-            stopSky();
-        }
-    }, { once: true });
-
-    async function loadAlbums() {
-        const response = await fetch("/api/gallery/albums");
-        if (!response.ok) {
-            throw new Error("Albums unavailable");
-        }
-        const data = await response.json();
-        state.albums = data.albums || [];
-        renderAlbumCards();
+        renderCards(Array.from({ length: 6 }, () => ({ cover_url: fallback })));
     }
 
-    function renderAlbumCards() {
-        albumsGrid.innerHTML = "";
-        albumsMeta.textContent = `${state.albums.length} albums`;
-        albumsEmpty.hidden = state.albums.length > 0;
-
-        state.albums.forEach((album) => {
+    function renderCards(cards) {
+        grid.innerHTML = "";
+        cards.forEach((card) => {
             const button = document.createElement("button");
             button.type = "button";
-            button.className = "album-card";
-            button.innerHTML = `<img class="album-cover" src="${album.cover_url}" alt="">`;
-            button.addEventListener("click", () => openAlbum(album.slug));
-            albumsGrid.appendChild(button);
+            button.className = "lab-card";
+            button.innerHTML = `<img src="${card.cover_url}" alt="">`;
+            button.addEventListener("click", () => openModal(card.cover_url));
+            grid.appendChild(button);
         });
     }
 
-    async function openAlbum(slug) {
-        const response = await fetch(`/api/gallery/albums/${encodeURIComponent(slug)}`);
-        if (!response.ok) {
-            throw new Error("Album unavailable");
-        }
-        state.currentAlbum = await response.json();
-        state.currentImageIndex = 0;
-        renderModalImage();
+    function openModal(src) {
+        modalImage.src = src;
         modal.hidden = false;
         document.body.style.overflow = "hidden";
     }
 
-    function renderModalImage() {
-        if (!state.currentAlbum || !state.currentAlbum.images.length) {
-            return;
-        }
-        const currentImage = state.currentAlbum.images[state.currentImageIndex];
-        modalImage.src = currentImage.url;
-        modalImage.alt = "";
-    }
-
-    function showNextImage() {
-        if (!state.currentAlbum) return;
-        state.currentImageIndex = (state.currentImageIndex + 1) % state.currentAlbum.images.length;
-        renderModalImage();
-    }
-
-    function showPrevImage() {
-        if (!state.currentAlbum) return;
-        state.currentImageIndex =
-            (state.currentImageIndex - 1 + state.currentAlbum.images.length) % state.currentAlbum.images.length;
-        renderModalImage();
-    }
-
     function closeModal() {
         modal.hidden = true;
+        modalImage.src = "";
         document.body.style.overflow = "";
     }
 
-    document.getElementById("gallery-prev").addEventListener("click", showPrevImage);
-    document.getElementById("gallery-next").addEventListener("click", showNextImage);
-    document.getElementById("gallery-modal-close").addEventListener("click", closeModal);
-    document.querySelector("[data-modal-close]").addEventListener("click", closeModal);
+    closeButton.addEventListener("click", closeModal);
+    document.querySelector("[data-close]").addEventListener("click", closeModal);
     document.addEventListener("keydown", (event) => {
-        if (modal.hidden) return;
-        if (event.key === "Escape") closeModal();
-        if (event.key === "ArrowRight") showNextImage();
-        if (event.key === "ArrowLeft") showPrevImage();
+        if (!modal.hidden && event.key === "Escape") {
+            closeModal();
+        }
     });
 
-    loadAlbums().catch(() => {
-        albumsMeta.textContent = "Albums unavailable";
-        albumsEmpty.hidden = false;
-    });
+    if (isMoonTheme && skyCanvas) {
+        stopSky = startMoonSky(skyCanvas);
+        window.addEventListener("beforeunload", () => {
+            if (stopSky) {
+                stopSky();
+            }
+        }, { once: true });
+    }
+
+    loadSamples();
 
     function startMoonSky(canvas) {
         const context = canvas.getContext("2d");
@@ -119,7 +82,9 @@
 
         let width = 0;
         let height = 0;
+        let frame = 0;
         let animationId = 0;
+        let start = performance.now();
 
         const stars = Array.from({ length: 36 }, () => createStar());
         const clouds = [
@@ -225,10 +190,13 @@
         }
 
         function render(time) {
+            frame += 1;
             context.clearRect(0, 0, width, height);
+
             drawStars(time);
             clouds.forEach((cloud) => drawCloud(cloud, time));
             drawMoon();
+
             animationId = window.requestAnimationFrame(render);
         }
 
