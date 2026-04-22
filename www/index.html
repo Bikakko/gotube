@@ -3,78 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GoTube</title>
+    <title>拾光相册</title>
     <link rel="icon" href="/static/favicon.jpg" type="image/jpeg">
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            min-height: 100vh;
-            background: #0d1117;
-            color: #e6edf3;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 32px 16px;
-        }
-        .home {
-            width: 100%;
-            max-width: 640px;
-            text-align: center;
-        }
-        .logo {
-            font-size: 34px;
-            font-weight: 700;
-            margin-bottom: 16px;
-        }
-        .intro {
-            color: #8b949e;
-            font-size: 15px;
-            line-height: 1.7;
-            margin-bottom: 24px;
-        }
-        .actions {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        .action {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 132px;
-            padding: 11px 18px;
-            border-radius: 8px;
-            border: 1px solid #30363d;
-            background: #161b22;
-            color: #e6edf3;
-            text-decoration: none;
-            font-size: 14px;
-            cursor: pointer;
-        }
-        .action.primary {
-            border-color: #e62117;
-            background: #e62117;
-            color: #fff;
-            font-weight: 600;
-        }
-        .action:hover { border-color: #58a6ff; }
-        .action.primary:hover { background: #ff3325; border-color: #ff3325; }
-    </style>
+    <link rel="stylesheet" href="/static/index.css?v=4.2.0">
 </head>
 <body>
-    <main class="home">
-        <div class="logo">GoTube</div>
-        <p class="intro">这里会放置公开内容。下载和个人视频库入口暂时保留在独立页面。</p>
-        <div class="actions">
-            <a id="download-link" class="action primary" href="#">进入下载页</a>
-        </div>
+    <main id="gallery-app" class="gallery-app">
+        <header class="hero">
+            <div class="hero-copy">
+                <p class="eyebrow">Share the tiny bright moments</p>
+                <h1>拾光相册</h1>
+                <p class="intro">
+                    随手存一点开心的图，偶尔回来翻一翻。
+                </p>
+            </div>
+            <a id="secret-entry" class="secret-entry" href="#" aria-label="进入隐藏入口">
+                <img
+                    id="secret-entry-image"
+                    src="/static/secret-entry-placeholder.gif"
+                    data-fallback-src="/static/favicon.jpg"
+                    alt=""
+                >
+            </a>
+        </header>
+
+        <section class="albums-section" aria-labelledby="albums-title">
+            <div class="section-head">
+                <h2 id="albums-title">相册</h2>
+                <p id="albums-meta" class="albums-meta">正在整理中...</p>
+            </div>
+            <div id="albums-grid" class="albums-grid"></div>
+            <div id="albums-empty" class="albums-empty" hidden>暂时还没有公开图片。</div>
+        </section>
     </main>
+
+    <div id="gallery-modal" class="gallery-modal" hidden>
+        <div class="gallery-modal-backdrop" data-modal-close></div>
+        <div class="gallery-modal-panel" role="dialog" aria-modal="true" aria-labelledby="gallery-modal-title">
+            <button type="button" class="modal-close" id="gallery-modal-close" aria-label="关闭">×</button>
+            <div class="modal-top">
+                <div>
+                    <p class="modal-kicker">Album View</p>
+                    <h3 id="gallery-modal-title">相册</h3>
+                </div>
+                <div id="gallery-modal-count" class="gallery-modal-count">0 / 0</div>
+            </div>
+            <div class="modal-stage">
+                <button type="button" class="modal-nav prev" id="gallery-prev" aria-label="上一张">‹</button>
+                <div class="modal-image-shell">
+                    <img id="gallery-modal-image" class="modal-image" alt="">
+                </div>
+                <button type="button" class="modal-nav next" id="gallery-next" aria-label="下一张">›</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         window.GOTUBE_HIDDEN_PATH = "{{HIDDEN_PATH}}";
-        const hiddenPath = window.GOTUBE_HIDDEN_PATH || "7777";
-        document.getElementById("download-link").href = `/${hiddenPath}`;
     </script>
+    <script src="/static/index.js?v=4.2.0"></script>
 </body>
 </html>

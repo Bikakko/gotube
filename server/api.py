@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from .auth import get_current_user, get_db, get_optional_current_user
 from .db import MediaAsset, User
+from . import gallery
 from .downloader import _read_meta_from_dir
 from .invites import register_user_with_invite
 from .models import AddTaskRequest, RegisterRequest, TaskResponse, UpdateShareRequest
@@ -38,6 +39,44 @@ from .video_library import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+@router.get("/gallery/albums")
+async def list_gallery_albums() -> dict:
+    albums = gallery.list_albums(gallery.GALLERY_DIR)
+    return {
+        "albums": [
+            {
+                "slug": album["slug"],
+                "title": album["title"],
+                "cover_url": f"/api/gallery/image/{album['slug']}/{album['cover_name']}",
+                "image_count": album["image_count"],
+            }
+            for album in albums
+        ]
+    }
+
+
+@router.get("/gallery/albums/{slug}")
+async def get_gallery_album(slug: str) -> dict:
+    album = gallery.get_album(gallery.GALLERY_DIR, slug)
+    return {
+        "slug": album["slug"],
+        "title": album["title"],
+        "images": [
+            {
+                "name": image["name"],
+                "url": f"/api/gallery/image/{album['slug']}/{image['name']}",
+            }
+            for image in album["images"]
+        ],
+    }
+
+
+@router.get("/gallery/image/{slug}/{name}")
+async def get_gallery_image(slug: str, name: str) -> FileResponse:
+    image_path = gallery.resolve_image_path(gallery.GALLERY_DIR, slug, name)
+    return FileResponse(image_path)
 
 
 @router.post("/auth/register")
