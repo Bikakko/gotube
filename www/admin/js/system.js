@@ -81,22 +81,36 @@ function renderSystemCookieStatus() {
     const data = state.system.cookieStatus;
     if (state.system.loading && !data) {
         slot.innerHTML = '<div class="loading">加载 Cookie 状态中</div>';
+        syncSystemCookieActions();
         return;
     }
     if (!data) {
         slot.innerHTML = '<div class="empty-state">暂无 Cookie 状态</div>';
+        syncSystemCookieActions();
         return;
     }
     if (data.error) {
         slot.innerHTML = `<div class="error">加载失败: ${data.error}</div>`;
+        syncSystemCookieActions(data);
         return;
     }
 
     if (typeof window.renderCookiesStatus === 'function') {
-        window.renderCookiesStatus(slot, data);
+        window.renderCookiesStatus(slot, data, { context: 'system' });
     } else {
         slot.innerHTML = `<div class="empty-state">${data.has_cookies ? '已检测到 Cookie' : '未配置 Cookie'}</div>`;
     }
+    syncSystemCookieActions(data);
+}
+
+function syncSystemCookieActions(data = null) {
+    const uploadBtn = $('#system-cookie-upload-btn');
+    const deleteBtn = $('#system-cookie-delete-btn');
+    if (!uploadBtn || !deleteBtn) return;
+
+    const hasCookies = Boolean(data && data.has_cookies);
+    uploadBtn.textContent = hasCookies ? '更新 Cookie' : '上传 Cookie';
+    deleteBtn.disabled = !hasCookies;
 }
 
 window.loadSystemPage = loadSystemPage;

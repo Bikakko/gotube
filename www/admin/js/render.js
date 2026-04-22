@@ -90,8 +90,6 @@ function renderOverviewSection() {
     if (!container) return;
 
     const stats = state.stats || {};
-    const user = state.currentUser || {};
-    const isAdmin = user.role === 'admin';
     const videoCount = typeof stats.total === 'number' ? String(stats.total) : '--';
     const totalSize = typeof stats.total_size === 'number' ? formatBytes(stats.total_size) : '--';
     const todayCount = stats.times && typeof stats.times.today === 'number' ? String(stats.times.today) : '--';
@@ -102,46 +100,14 @@ function renderOverviewSection() {
         el('div', { className: 'admin-section-header' }, [
             el('div', {}, [
                 el('h2', { textContent: '概览' }),
-                el('p', {
-                    className: 'info-text',
-                    textContent: isAdmin
-                        ? '先从全局状态进入，再按媒体、用户、邀请码、系统逐页处理。'
-                        : '当前账号只展示可访问的后台功能入口。',
-                }),
             ]),
         ]),
         el('div', { className: 'overview-grid' }, [
             createOverviewCard('媒体总数', videoCount, '全局媒体按资产聚合后的结果。'),
             createOverviewCard('总占用', totalSize, '当前聚合媒体的物理文件占用。'),
-            createOverviewCard('今日新增', todayCount, '基于媒体创建时间的当天统计。'),
+            createOverviewCard('今日新增', todayCount, '基于媒体创建时间的当日统计。'),
             createOverviewCard('来源数', sourceCount, '已识别的平台来源数量。'),
         ]),
-        el('div', { className: 'overview-actions' }, [
-            el('button', {
-                type: 'button',
-                className: 'btn btn-primary',
-                textContent: '进入全局媒体',
-                onClick: () => window.showVideoManagement(),
-            }),
-            isAdmin ? el('button', {
-                type: 'button',
-                className: 'btn btn-secondary',
-                textContent: '进入用户管理',
-                onClick: () => window.showUserManagement(),
-            }) : null,
-            isAdmin ? el('button', {
-                type: 'button',
-                className: 'btn btn-secondary',
-                textContent: '进入邀请码',
-                onClick: () => window.showInviteManagement(),
-            }) : null,
-            el('button', {
-                type: 'button',
-                className: 'btn btn-secondary',
-                textContent: '进入系统',
-                onClick: () => window.switchAdminView('system'),
-            }),
-        ].filter(Boolean)),
     ]));
 }
 
@@ -154,10 +120,6 @@ function renderSystemSection() {
         el('div', { className: 'admin-section-header' }, [
             el('div', {}, [
                 el('h2', { textContent: '系统' }),
-                el('p', {
-                    className: 'info-text',
-                    textContent: '系统页集中展示运行巡检和 Cookie 状态，具体修改继续走现有管理动作。',
-                }),
             ]),
             el('div', { className: 'admin-actions' }, [
                 el('button', {
@@ -165,12 +127,6 @@ function renderSystemSection() {
                     className: 'btn btn-secondary',
                     textContent: '刷新系统状态',
                     onClick: () => window.loadSystemPage(true),
-                }),
-                el('button', {
-                    type: 'button',
-                    className: 'btn btn-secondary',
-                    textContent: '打开 Cookie 管理',
-                    onClick: () => window.showCookiesManagement(),
                 }),
             ]),
         ]),
@@ -181,8 +137,29 @@ function renderSystemSection() {
                     el('div', { className: 'loading', textContent: '加载运行巡检中' }),
                 ]),
             ]),
-            el('div', { className: 'system-block' }, [
-                el('h3', { textContent: 'Cookie 状态' }),
+            el('div', { className: 'system-block system-cookie-block' }, [
+                el('div', { className: 'system-block-header' }, [
+                    el('div', {}, [
+                        el('h3', { textContent: 'Cookie 管理' }),
+                    ]),
+                    el('div', { className: 'system-block-actions' }, [
+                        el('button', {
+                            type: 'button',
+                            id: 'system-cookie-upload-btn',
+                            className: 'btn btn-primary',
+                            textContent: '上传 Cookie',
+                            onClick: () => window.showCookiesManagement(),
+                        }),
+                        el('button', {
+                            type: 'button',
+                            id: 'system-cookie-delete-btn',
+                            className: 'btn btn-danger',
+                            textContent: '删除当前 Cookie',
+                            onClick: () => window.deleteCookies(),
+                            disabled: true,
+                        }),
+                    ]),
+                ]),
                 el('div', { id: 'system-cookie-slot' }, [
                     el('div', { className: 'loading', textContent: '加载 Cookie 状态中' }),
                 ]),
@@ -246,97 +223,101 @@ function renderFilters() {
 
     slot.innerHTML = '';
 
-    const filtersBar = el('div', { className: 'filters', id: 'filters-bar' }, [
-        el('div', { className: 'filter-group' }, [
-            el('input', {
-                type: 'checkbox',
-                id: 'select-all-checkbox',
-                title: '全选 / 取消全选',
-                checked: false,
-                onChange: (e) => toggleSelectAll(e.target.checked),
-            }),
-            el('label', {
-                for: 'select-all-checkbox',
-                textContent: '全选',
-                style: 'cursor: pointer; font-size: 13px; color: var(--text-sec);',
-            }),
-        ]),
-        el('div', { className: 'filter-group' }, [
-            el('span', { className: 'filter-label', textContent: '搜索' }),
-            el('input', {
-                className: 'search-input',
-                id: 'search-input',
-                type: 'text',
-                placeholder: '按标题搜索...',
-                value: state.filters.keyword,
-                onInput: (e) => handleKeywordChange(e.target.value),
-            }),
-        ]),
-        el('div', { className: 'filter-group' }, [
-            el('span', { className: 'filter-label', textContent: '来源' }),
-            el('div', { className: 'custom-dropdown', id: 'source-dropdown' }, [
-                el('button', {
-                    className: 'custom-dropdown-btn',
-                    onClick: (e) => { e.stopPropagation(); window.toggleCustomDropdown('source-dropdown'); },
-                }, [
-                    el('span', { className: 'dropdown-text', id: 'source-dropdown-text', textContent: '全部' }),
-                    el('span', { className: 'dropdown-arrow', textContent: '▼' }),
-                ]),
-                el('div', { className: 'custom-dropdown-menu', id: 'source-dropdown-menu' }),
+    const filtersBar = el('div', { className: 'filters filters-toolbar', id: 'filters-bar' }, [
+        el('div', { className: 'filter-cluster filter-cluster-primary' }, [
+            el('div', { className: 'filter-group filter-group-compact' }, [
+                el('input', {
+                    type: 'checkbox',
+                    id: 'select-all-checkbox',
+                    title: '全选 / 取消全选',
+                    checked: false,
+                    onChange: (e) => toggleSelectAll(e.target.checked),
+                }),
+                el('label', {
+                    for: 'select-all-checkbox',
+                    textContent: '全选',
+                    style: 'cursor: pointer; font-size: 13px; color: var(--text-sec);',
+                }),
+            ]),
+            el('div', { className: 'filter-group filter-group-search' }, [
+                el('span', { className: 'filter-label', textContent: '搜索' }),
+                el('input', {
+                    className: 'search-input',
+                    id: 'search-input',
+                    type: 'text',
+                    placeholder: '按标题搜索...',
+                    value: state.filters.keyword,
+                    onInput: (e) => handleKeywordChange(e.target.value),
+                }),
             ]),
         ]),
-        el('div', { className: 'filter-group' }, [
-            el('span', { className: 'filter-label', textContent: '时间' }),
-            el('div', { className: 'custom-dropdown', id: 'time-dropdown' }, [
-                el('button', {
-                    className: 'custom-dropdown-btn',
-                    onClick: (e) => { e.stopPropagation(); window.toggleCustomDropdown('time-dropdown'); },
-                }, [
-                    el('span', { className: 'dropdown-text', id: 'time-dropdown-text', textContent: '全部' }),
-                    el('span', { className: 'dropdown-arrow', textContent: '▼' }),
-                ]),
-                el('div', { className: 'custom-dropdown-menu', id: 'time-dropdown-menu' }),
-            ]),
-        ]),
-        el('div', { className: 'filter-group' }, [
-            el('span', { className: 'filter-label', textContent: '每页' }),
-            el('select', {
-                id: 'page-size-select',
-                className: 'filter-select',
-                value: String(state.pagination.perPage),
-                onChange: (e) => handlePerPageChange(e.target.value),
-            }, [
-                el('option', { value: '20', textContent: '20' }),
-                el('option', { value: '50', textContent: '50' }),
-                el('option', { value: '100', textContent: '100' }),
-            ]),
-        ]),
-        state.currentUser && state.currentUser.role === 'admin' ? el('div', { className: 'filter-group' }, [
-            el('span', { className: 'filter-label', textContent: '归属' }),
-            el('div', { className: 'custom-dropdown', id: 'owner-dropdown' }, [
-                el('button', {
-                    className: 'custom-dropdown-btn',
-                    onClick: (e) => { e.stopPropagation(); window.toggleCustomDropdown('owner-dropdown'); },
-                }, [
-                    el('span', { className: 'dropdown-text', id: 'owner-dropdown-text', textContent: '全部' }),
-                    el('span', { className: 'dropdown-arrow', textContent: '▼' }),
-                ]),
-                el('div', { className: 'custom-dropdown-menu', id: 'owner-dropdown-menu' }, [
-                    el('div', { className: 'dropdown-search-wrap' }, [
-                        el('input', {
-                            id: 'owner-search-input',
-                            className: 'dropdown-search-input',
-                            type: 'text',
-                            placeholder: '搜索用户...',
-                            value: state.filters.ownerSearchKeyword || '',
-                            onClick: (e) => e.stopPropagation(),
-                            onInput: (e) => handleOwnerSearchInput(e.target.value),
-                        }),
+        el('div', { className: 'filter-cluster filter-cluster-secondary' }, [
+            el('div', { className: 'filter-group' }, [
+                el('span', { className: 'filter-label', textContent: '来源' }),
+                el('div', { className: 'custom-dropdown', id: 'source-dropdown' }, [
+                    el('button', {
+                        className: 'custom-dropdown-btn',
+                        onClick: (e) => { e.stopPropagation(); window.toggleCustomDropdown('source-dropdown'); },
+                    }, [
+                        el('span', { className: 'dropdown-text', id: 'source-dropdown-text', textContent: '全部来源' }),
+                        el('span', { className: 'dropdown-arrow', textContent: '▾' }),
                     ]),
-                    el('div', { id: 'owner-dropdown-items' }),
+                    el('div', { className: 'custom-dropdown-menu', id: 'source-dropdown-menu' }),
                 ]),
             ]),
-        ]) : null,
+            el('div', { className: 'filter-group' }, [
+                el('span', { className: 'filter-label', textContent: '时间' }),
+                el('div', { className: 'custom-dropdown', id: 'time-dropdown' }, [
+                    el('button', {
+                        className: 'custom-dropdown-btn',
+                        onClick: (e) => { e.stopPropagation(); window.toggleCustomDropdown('time-dropdown'); },
+                    }, [
+                        el('span', { className: 'dropdown-text', id: 'time-dropdown-text', textContent: '全部时间' }),
+                        el('span', { className: 'dropdown-arrow', textContent: '▾' }),
+                    ]),
+                    el('div', { className: 'custom-dropdown-menu', id: 'time-dropdown-menu' }),
+                ]),
+            ]),
+            el('div', { className: 'filter-group' }, [
+                el('span', { className: 'filter-label', textContent: '每页' }),
+                el('select', {
+                    id: 'page-size-select',
+                    className: 'filter-select',
+                    value: String(state.pagination.perPage),
+                    onChange: (e) => handlePerPageChange(e.target.value),
+                }, [
+                    el('option', { value: '20', textContent: '20' }),
+                    el('option', { value: '50', textContent: '50' }),
+                    el('option', { value: '100', textContent: '100' }),
+                ]),
+            ]),
+            state.currentUser && state.currentUser.role === 'admin' ? el('div', { className: 'filter-group' }, [
+                el('span', { className: 'filter-label', textContent: '归属' }),
+                el('div', { className: 'custom-dropdown', id: 'owner-dropdown' }, [
+                    el('button', {
+                        className: 'custom-dropdown-btn',
+                        onClick: (e) => { e.stopPropagation(); window.toggleCustomDropdown('owner-dropdown'); },
+                    }, [
+                        el('span', { className: 'dropdown-text', id: 'owner-dropdown-text', textContent: '全部归属' }),
+                        el('span', { className: 'dropdown-arrow', textContent: '▾' }),
+                    ]),
+                    el('div', { className: 'custom-dropdown-menu', id: 'owner-dropdown-menu' }, [
+                        el('div', { className: 'dropdown-search-wrap' }, [
+                            el('input', {
+                                id: 'owner-search-input',
+                                className: 'dropdown-search-input',
+                                type: 'text',
+                                placeholder: '搜索用户...',
+                                value: state.filters.ownerSearchKeyword || '',
+                                onClick: (e) => e.stopPropagation(),
+                                onInput: (e) => handleOwnerSearchInput(e.target.value),
+                            }),
+                        ]),
+                        el('div', { id: 'owner-dropdown-items' }),
+                    ]),
+                ]),
+            ]) : null,
+        ]),
     ].filter(Boolean));
 
     slot.appendChild(filtersBar);
@@ -399,7 +380,7 @@ function renderVideoCard(video) {
     const thumb = el('div', { className: 'video-thumb' }, [
         hasThumbnail
             ? el('img', { src: video.thumbnail, alt: video.title, loading: 'lazy' })
-            : el('div', { className: 'empty-thumb', textContent: '🎬' }),
+            : el('div', { className: 'empty-thumb', textContent: '无图' }),
         el('div', {
             className: 'video-duration-badge',
             textContent: durationLabel,
@@ -409,44 +390,46 @@ function renderVideoCard(video) {
     const info = el('div', { className: 'video-info' }, [
         el('div', {
             className: 'video-title',
-            textContent: video.title || '未命名视频',
+            textContent: video.title || '未命名媒体',
             title: video.title,
         }),
-        el('div', { className: 'video-meta' }, [
-            el('span', { textContent: formatBytes(video.size) }),
-            el('span', { textContent: new Date(video.created_at).toLocaleDateString('zh-CN') }),
+        el('div', { className: 'video-summary-row' }, [
+            el('div', { className: 'video-meta video-meta-primary' }, [
+                el('span', { textContent: formatBytes(video.size) }),
+                el('span', { textContent: new Date(video.created_at).toLocaleDateString('zh-CN') }),
+            ]),
+            el('div', { className: 'video-summary-badge-row' }, [
+                el('span', { className: 'video-summary-badge', textContent: video.source || '未知来源' }),
+                el('span', {
+                    className: 'video-summary-badge',
+                    textContent: video.is_legacy ? 'Legacy' : (video.owner_username || '未归属'),
+                }),
+            ]),
         ]),
-        el('div', {
-            className: 'video-source',
-            textContent: video.source || 'Unknown',
-        }),
-        el('div', {
-            className: 'video-owner',
-            textContent: `${video.is_legacy ? '未归属' : (video.owner_username || '未知用户')} · 关联 ${video.reference_count || 0}`,
-        }),
-        el('div', { className: 'video-asset-stats' }, [
-            el('span', { textContent: `${video.owner_count || 0} 个拥有者` }),
-            el('span', { textContent: `${video.source_count || 0} 个来源` }),
-        ]),
+        (video.owner_count || 0) > 1 ? el('div', { className: 'video-asset-stats' }, [
+            el('span', { textContent: `${video.owner_count || 0} 位拥有者` }),
+        ]) : null,
     ]);
 
-    const checkbox = el('button', {
-        className: `action-btn select-btn ${isSelected ? 'selected' : ''}`,
-        textContent: isSelected ? '☑' : '☐',
-        title: isSelected ? '取消选择' : '选择此视频',
+    const selectToggle = el('button', {
+        className: `video-select-toggle ${isSelected ? 'selected' : ''}`,
+        textContent: isSelected ? '已选' : '选择',
+        title: isSelected ? '取消选择' : '选择媒体',
         onClick: (e) => {
             e.stopPropagation();
             const isCurrentlySelected = state.selectedVideos.has(video.filename);
             const newState = !isCurrentlySelected;
             toggleVideoSelection(video.filename, newState);
-            checkbox.textContent = newState ? '☑' : '☐';
-            checkbox.classList.toggle('selected', newState);
+            selectToggle.textContent = newState ? '已选' : '选择';
+            selectToggle.classList.toggle('selected', newState);
             window.updateSelectAllCheckbox();
         },
     });
 
+    thumb.appendChild(selectToggle);
+
     const actionsBar = el('div', { className: 'video-actions-bar' }, [
-        el('div', { className: 'action-group' }, [
+        el('div', { className: 'action-group video-secondary-actions' }, [
             el('button', {
                 className: 'action-btn',
                 textContent: '详情',
@@ -462,7 +445,7 @@ function renderVideoCard(video) {
                 onClick: (e) => {
                     e.stopPropagation();
                     if (!video.share_token) {
-                        showToast('未归属媒体没有用户分享链接', 'warning');
+                        showToast('当前媒体未开启分享', 'warning');
                         return;
                     }
                     window.showShareModal(video);
@@ -477,7 +460,6 @@ function renderVideoCard(video) {
                 },
             }),
         ]),
-        el('div', { className: 'action-group' }, [checkbox]),
     ]);
 
     const card = el('div', { className: 'video-card' }, [

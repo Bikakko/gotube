@@ -14,7 +14,7 @@ function showCookiesManagement() {
         el('div', { className: 'modal-content', style: 'max-width: 600px;' }, [
             // 头部
             el('div', { className: 'modal-header' }, [
-                el('div', { className: 'modal-title', textContent: '🍪 Cookie 管理' }),
+                el('div', { className: 'modal-title', textContent: '上传或更新 Cookie' }),
                 el('button', {
                     className: 'modal-close',
                     textContent: '×',
@@ -77,7 +77,7 @@ async function loadCookiesStatus() {
         }
 
         const data = await response.json();
-        renderCookiesStatus(container, data);
+        renderCookiesStatus(container, data, { context: 'modal' });
     } catch (error) {
         console.error('加载 cookies 状态失败:', error);
         container.innerHTML = `
@@ -143,14 +143,44 @@ function renderCookieDiagnostics(data) {
     `;
 }
 
-function renderCookiesStatus(container, data) {
+function renderCookiePlatformSummary(data) {
+    const diagnostics = data.diagnostics || {};
+    const platforms = Object.entries(COOKIE_PLATFORM_LABELS);
+
+    return `
+        <div class="cookie-platform-list">
+            ${platforms.map(([platform, label]) => {
+                const item = diagnostics[platform] || {};
+                const ready = Boolean(item.has_required);
+                return `
+                    <div class="cookie-platform-item ${ready ? 'ready' : 'missing'}">
+                        <span class="cookie-platform-name">${escapeCookieHtml(label)}</span>
+                        <span class="cookie-platform-state">${ready ? '可用' : '未配置'}</span>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
+}
+
+function renderCookiesStatus(container, data, options = {}) {
+    const context = options.context || 'modal';
     if (!data.has_cookies) {
         container.innerHTML = `
-            <div style="padding: 20px; background: var(--surface); border-radius: 8px; text-align: center;">
-                <div style="font-size: 48px; margin-bottom: 10px;">🍪</div>
-                <div style="font-size: 16px; font-weight: bold; margin-bottom: 8px;">未配置 Cookies</div>
-                <div style="font-size: 14px; color: var(--text-sec);">
-                    请上传 cookies.txt 文件，或通过 .env 首次导入运行时 Cookies
+            <div class="cookie-status-panel empty">
+                <div class="cookie-status-main">
+                    <div class="cookie-status-heading">未配置 Cookie</div>
+                    <p class="cookie-status-copy">上传 cookies.txt 文件后，系统会立即更新当前运行时 Cookie。</p>
+                </div>
+                <div class="cookie-status-metrics">
+                    <div class="cookie-metric-card">
+                        <div class="cookie-metric-label">来源</div>
+                        <div class="cookie-metric-value">未配置</div>
+                    </div>
+                    <div class="cookie-metric-card">
+                        <div class="cookie-metric-label">域名数量</div>
+                        <div class="cookie-metric-value">0</div>
+                    </div>
                 </div>
             </div>
         `;
@@ -165,47 +195,47 @@ function renderCookiesStatus(container, data) {
     const sourceText = sourceTextMap[data.source] || '未知来源';
     const domainsHtml = data.domains && data.domains.length > 0
         ? `
-            <div style="margin-top: 15px;">
-                <div style="font-size: 13px; color: var(--text-sec); margin-bottom: 8px;">
-                    包含域名 (${data.domain_count} 个):
-                </div>
-                <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-                    ${data.domains.slice(0, 20).map(d =>
-                        `<span style="padding: 4px 10px; background: rgba(33, 150, 243, 0.15); border-radius: 12px; font-size: 12px; color: var(--info);">${d}</span>`
+            <div class="cookie-domains-block">
+                <div class="cookie-block-label">已识别域名</div>
+                <div class="cookie-domain-list">
+                    ${data.domains.slice(0, 20).map((domain) =>
+                        `<span class="cookie-domain-chip">${escapeCookieHtml(domain)}</span>`
                     ).join('')}
-                    ${data.domains.length > 20 ? `<span style="padding: 4px 10px; color: var(--text-sec); font-size: 12px;">+${data.domains.length - 20} 更多</span>` : ''}
+                    ${data.domains.length > 20 ? `<span class="cookie-domain-more">+${data.domains.length - 20} 个</span>` : ''}
                 </div>
             </div>
         `
         : '';
-    const diagnosticsHtml = renderCookieDiagnostics(data);
+    const diagnosticsHtml = `
+        <details class="cookie-diagnostics" ${context === 'system' ? '' : 'open'}>
+            <summary>查看平台诊断</summary>
+            ${renderCookieDiagnostics(data)}
+        </details>
+    `;
 
     container.innerHTML = `
-        <div style="padding: 20px; background: var(--surface); border-radius: 8px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <div style="font-size: 16px; font-weight: bold; color: var(--success);">✅ 已配置 Cookies</div>
-                ${(data.source === 'upload' || data.source === 'env_import') ? `
-                    <button class="btn btn-danger" style="padding: 6px 12px; font-size: 13px;" onclick="deleteCookies()">
-                        🗑️ 删除当前运行时 cookies
-                    </button>
-                ` : ''}
+        <div class="cookie-status-panel">
+            <div class="cookie-status-main">
+                <div class="cookie-status-heading">当前运行时 Cookie 已生效</div>
+                <p class="cookie-status-copy">后续上传会按域名与 Cookie 键进行合并，未匹配的现有记录会保留。</p>
+                ${renderCookiePlatformSummary(data)}
             </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; margin-bottom: 15px;">
-                <div>
-                    <div style="font-size: 12px; color: var(--text-sec); margin-bottom: 4px;">文件大小</div>
-                    <div style="font-size: 18px; font-weight: bold;">${data.file_size_human}</div>
+            <div class="cookie-status-metrics">
+                <div class="cookie-metric-card">
+                    <div class="cookie-metric-label">来源</div>
+                    <div class="cookie-metric-value">${sourceText}</div>
                 </div>
-                <div>
-                    <div style="font-size: 12px; color: var(--text-sec); margin-bottom: 4px;">更新时间</div>
-                    <div style="font-size: 14px;">${formatDateTime(data.modified_time)}</div>
+                <div class="cookie-metric-card">
+                    <div class="cookie-metric-label">更新时间</div>
+                    <div class="cookie-metric-value cookie-metric-value-sm">${formatDateTime(data.modified_time)}</div>
                 </div>
-                <div>
-                    <div style="font-size: 12px; color: var(--text-sec); margin-bottom: 4px;">来源</div>
-                    <div style="font-size: 14px;">${sourceText}</div>
+                <div class="cookie-metric-card">
+                    <div class="cookie-metric-label">文件大小</div>
+                    <div class="cookie-metric-value">${data.file_size_human}</div>
                 </div>
-                <div>
-                    <div style="font-size: 12px; color: var(--text-sec); margin-bottom: 4px;">域名数量</div>
-                    <div style="font-size: 18px; font-weight: bold;">${data.domain_count}</div>
+                <div class="cookie-metric-card">
+                    <div class="cookie-metric-label">域名数量</div>
+                    <div class="cookie-metric-value">${data.domain_count}</div>
                 </div>
             </div>
             ${domainsHtml}
@@ -241,48 +271,43 @@ function renderUploadArea() {
     if (!container) return;
 
     container.innerHTML = `
-        <div style="padding: 20px; background: var(--surface); border-radius: 8px;">
-            <div style="font-size: 16px; font-weight: bold; margin-bottom: 15px;">📤 上传/更新 Cookies</div>
+        <div class="cookie-upload-panel">
+            <div class="cookie-upload-heading">上传或更新 Cookie</div>
             
-            <!-- 模式选择 -->
-            <div style="margin-bottom: 20px; padding: 15px; background: rgba(33, 150, 243, 0.1); border-radius: 6px; border-left: 3px solid var(--info);">
-                <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: var(--info);">💡 智能合并模式</div>
-                <div style="font-size: 13px; color: var(--text-sec); line-height: 1.6;">
-                    当前默认使用<strong>智能合并模式</strong>：上传新 cookies 时只会替换匹配的域名，不影响其他平台的配置。<br>
-                    例如：上传只包含 youtube.com 的 cookies，只会更新 youtube.com，bilibili.com 等其他平台不受影响。
+            <div class="cookie-upload-note">
+                <div class="cookie-upload-note-title">智能合并模式</div>
+                <div class="cookie-upload-note-copy">
+                    上传新 Cookie 时，只会覆盖匹配的 Cookie 记录，不会清空其他平台的现有配置。
                 </div>
             </div>
             
-            <!-- 文件上传 -->
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-sec);">
+            <div class="cookie-upload-section">
+                <label class="cookie-upload-label">
                     方式一：上传 cookies.txt 文件
                 </label>
-                <div style="display: flex; gap: 10px; align-items: center;">
-                    <input type="file" id="cookies-file-input" accept=".txt" style="flex: 1; padding: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 4px;">
+                <div class="cookie-upload-row">
+                    <input type="file" id="cookies-file-input" accept=".txt" class="cookie-upload-input">
                     <button class="btn btn-primary" onclick="uploadCookiesFile()" style="white-space: nowrap;">
                         上传文件
                     </button>
                 </div>
             </div>
 
-            <!-- 文本输入 -->
-            <div style="margin-bottom: 20px;">
-                <label style="display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-sec);">
+            <div class="cookie-upload-section">
+                <label class="cookie-upload-label">
                     方式二：粘贴 cookies 文本内容（Netscape 格式）
                 </label>
-                <textarea id="cookies-text-input" rows="8" style="width: 100%; padding: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); border-radius: 4px; font-family: monospace; font-size: 12px; resize: vertical;" placeholder="# Netscape HTTP Cookie File&#10;youtube.com	TRUE	/	FALSE	...	__Secure-1PSID	xxx&#10;..."></textarea>
-                <button class="btn btn-primary" onclick="uploadCookiesText()" style="margin-top: 10px; width: 100%;">
+                <textarea id="cookies-text-input" rows="8" class="cookie-upload-textarea" placeholder="# Netscape HTTP Cookie File&#10;youtube.com	TRUE	/	FALSE	...	__Secure-1PSID	xxx&#10;..."></textarea>
+                <button class="btn btn-primary cookie-upload-submit" onclick="uploadCookiesText()">
                     提交文本
                 </button>
             </div>
 
-            <!-- 说明 -->
-            <div style="padding: 15px; background: rgba(255, 152, 0, 0.1); border-radius: 6px; border-left: 3px solid var(--warning);">
-                <div style="font-size: 14px; font-weight: bold; margin-bottom: 8px; color: var(--warning);">⚠️ 注意事项</div>
-                <ul style="font-size: 13px; color: var(--text-sec); margin-left: 20px; line-height: 1.8;">
+            <div class="cookie-upload-tips">
+                <div class="cookie-upload-note-title">注意事项</div>
+                <ul class="cookie-upload-list">
                     <li>Cookies 文件应为 Netscape 格式（从浏览器插件导出）</li>
-                    <li>智能合并会按域名匹配替换，不影响其他平台</li>
+                    <li>智能合并会按 Cookie 键覆盖，不影响其他平台</li>
                     <li>上传前会显示确认对话框，列出将影响的域名</li>
                     <li>上传后会自动热重载，无需重启服务</li>
                     <li>旧 cookies 文件会自动备份到 data 目录</li>
@@ -377,6 +402,9 @@ async function uploadCookiesFile() {
         
         // 刷新状态
         await loadCookiesStatus();
+        if (typeof window.loadSystemPage === 'function') {
+            await window.loadSystemPage(true);
+        }
     } catch (error) {
         console.error('上传 cookies 失败:', error);
         showToast(`❌ 上传失败: ${error.message}`, 'error');
@@ -530,6 +558,9 @@ async function uploadCookiesText() {
         
         // 刷新状态
         await loadCookiesStatus();
+        if (typeof window.loadSystemPage === 'function') {
+            await window.loadSystemPage(true);
+        }
     } catch (error) {
         console.error('提交 cookies 失败:', error);
         showToast(`❌ 提交失败: ${error.message}`, 'error');
@@ -570,6 +601,9 @@ async function deleteCookies() {
         
         // 刷新状态
         await loadCookiesStatus();
+        if (typeof window.loadSystemPage === 'function') {
+            await window.loadSystemPage(true);
+        }
     } catch (error) {
         console.error('删除 cookies 失败:', error);
         showToast(`❌ 删除失败: ${error.message}`, 'error');

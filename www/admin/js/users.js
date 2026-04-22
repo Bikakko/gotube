@@ -1,10 +1,10 @@
 /**
  * GoTube Admin - 用户管理模块
- * 用户列表加载、创建、编辑、删除、状态切换、用户视频库查看
+ * 用户列表加载、编辑、状态切换与用户视频库查看。
  */
 
 function refreshNavTabs() {
-    document.querySelectorAll('[data-admin-nav]').forEach(btn => {
+    document.querySelectorAll('[data-admin-nav]').forEach((btn) => {
         btn.classList.toggle('active', btn.dataset.adminNav === state.nav.current);
     });
 }
@@ -23,8 +23,13 @@ function switchAdminView(view) {
         const active = name === view;
         container.hidden = !active;
         container.style.display = active ? 'block' : 'none';
-        container.style.opacity = active ? '1' : '0';
-        container.style.transition = 'opacity 0.15s ease';
+        container.classList.toggle('view-active', active);
+        if (active) {
+            container.classList.remove('view-active');
+            requestAnimationFrame(() => {
+                container.classList.add('view-active');
+            });
+        }
     });
 
     state.nav.current = view;
@@ -94,11 +99,9 @@ function getUserSearchKeyword() {
 
 function filterUsers(users) {
     const keyword = getUserSearchKeyword();
-    if (!keyword) {
-        return users;
-    }
+    if (!keyword) return users;
 
-    return users.filter(user => {
+    return users.filter((user) => {
         const haystacks = [
             String(user.id || ''),
             String(user.username || ''),
@@ -106,7 +109,7 @@ function filterUsers(users) {
             user.is_active ? '启用' : '禁用',
             user.is_system_account ? '系统账号' : '',
         ];
-        return haystacks.some(value => value.toLowerCase().includes(keyword));
+        return haystacks.some((value) => value.toLowerCase().includes(keyword));
     });
 }
 
@@ -118,14 +121,10 @@ function rerenderUsersTablePreservingSearch() {
 
     renderUsersTable(filterUsers(state.users));
 
-    if (!hadFocus) {
-        return;
-    }
+    if (!hadFocus) return;
 
     const nextInput = $('#user-search-input');
-    if (!nextInput) {
-        return;
-    }
+    if (!nextInput) return;
 
     nextInput.focus();
     if (selectionStart !== null && selectionEnd !== null) {
@@ -137,14 +136,10 @@ function renderUsersTable(users) {
     const slot = $('#users-table-slot');
     if (!slot) return;
 
-    const container = el('div', { className: 'user-table-wrapper' });
+    const container = el('div', { className: 'user-management-shell' });
     container.appendChild(el('div', { className: 'admin-section-header' }, [
         el('div', {}, [
             el('h2', { textContent: '用户' }),
-            el('p', {
-                className: 'info-text',
-                textContent: '用户页只处理账号状态、容量和用户个人视频库入口，不直接混入全局媒体卡片。',
-            }),
         ]),
         el('button', {
             className: 'btn btn-primary',
@@ -162,7 +157,7 @@ function renderUsersTable(users) {
             value: state.userSearchKeyword || '',
         }),
         el('div', {
-            className: 'user-search-summary',
+            className: 'user-search-summary user-summary-pill',
             textContent: `显示 ${users.length} / ${state.users.length} 个用户`,
         }),
     ]));
@@ -177,7 +172,7 @@ function renderUsersTable(users) {
 
     if (users.length === 0) {
         slot.innerHTML = '';
-        container.appendChild(el('div', { className: 'empty-state', textContent: '没有匹配的用户' }));
+        container.appendChild(el('div', { className: 'empty-state empty-state-card', textContent: '没有匹配的用户' }));
         slot.appendChild(container);
         return;
     }
@@ -195,18 +190,27 @@ function renderUsersTable(users) {
                 el('th', { textContent: '操作' }),
             ]),
         ]),
-        el('tbody', {}, users.map(user => {
+        el('tbody', {}, users.map((user) => {
             const isSelf = state.currentUser && state.currentUser.id === user.id;
             const isSystemAccount = user.is_system_account || user.role === 'admin';
+            const usernameNote = isSystemAccount
+                ? '系统账号'
+                : (isSelf ? '当前登录用户' : '普通账号');
 
             return el('tr', { className: user.is_active ? '' : 'inactive' }, [
                 el('td', { textContent: user.id }),
-                el('td', {
-                    textContent: isSystemAccount
-                        ? `管理员 ${user.username}`
-                        : `${user.username}${isSelf ? ' (我)' : ''}`,
-                }),
-                el('td', { textContent: formatRole(user.role) }),
+                el('td', {}, [
+                    el('div', { className: 'user-name-cell' }, [
+                        el('div', { className: 'user-name-main', textContent: user.username }),
+                        el('div', { className: 'user-name-sub', textContent: usernameNote }),
+                    ]),
+                ]),
+                el('td', {}, [
+                    el('span', {
+                        className: `role-badge ${user.role || 'user'}`,
+                        textContent: formatRole(user.role),
+                    }),
+                ]),
                 el('td', {}, [
                     el('span', {
                         className: `status-badge ${user.is_active ? 'active' : 'inactive'}`,
@@ -214,13 +218,20 @@ function renderUsersTable(users) {
                     }),
                 ]),
                 el('td', { textContent: String(user.video_count || 0) }),
+                el('td', { className: 'user-capacity-cell' }, [
+                    el('span', {
+                        className: 'user-capacity-value',
+                        textContent: user.role === 'admin'
+                            ? '不限'
+                            : `${formatBytes(user.storage_used_bytes || 0)} / ${formatUserQuota(user.storage_quota_mb)}`,
+                    }),
+                ]),
                 el('td', {
-                    textContent: user.role === 'admin'
-                        ? '不限'
-                        : `${formatBytes(user.storage_used_bytes || 0)} / ${formatUserQuota(user.storage_quota_mb)}`,
+                    textContent: user.last_login
+                        ? new Date(user.last_login).toLocaleString('zh-CN')
+                        : '从未登录',
                 }),
-                el('td', { textContent: user.last_login ? new Date(user.last_login).toLocaleString('zh-CN') : '从未登录' }),
-                el('td', { className: 'user-actions' }, [
+                el('td', { className: 'user-actions user-actions-compact' }, [
                     el('button', {
                         className: 'action-btn-sm',
                         textContent: '视频库',
@@ -267,7 +278,7 @@ function renderUsersTable(users) {
     ]);
 
     slot.innerHTML = '';
-    container.appendChild(table);
+    container.appendChild(el('div', { className: 'users-table-shell' }, [table]));
     slot.appendChild(container);
 }
 
@@ -329,12 +340,12 @@ function renderUserLibraryModal() {
     body.innerHTML = '';
 
     if (items.length === 0) {
-        body.appendChild(el('div', { className: 'empty-state', textContent: '该用户暂无视频' }));
+        body.appendChild(el('div', { className: 'empty-state empty-state-card', textContent: '该用户暂无视频' }));
         return;
     }
 
     const list = el('div', { className: 'user-library-list' });
-    items.forEach(item => {
+    items.forEach((item) => {
         list.appendChild(el('article', { className: 'user-library-item' }, [
             el('div', { className: 'user-library-thumb' }, [
                 item.thumbnail_url
@@ -345,8 +356,12 @@ function renderUserLibraryModal() {
                 el('div', { className: 'preview-title', textContent: item.title || '未命名视频' }),
                 el('div', { className: 'user-library-meta' }, [
                     el('span', { textContent: formatBytes(item.size || 0) }),
-                    el('span', { textContent: item.source || 'Unknown' }),
-                    el('span', { textContent: item.saved_at ? new Date(item.saved_at).toLocaleString('zh-CN') : '无保存时间' }),
+                    el('span', { textContent: item.source || '未知来源' }),
+                    el('span', {
+                        textContent: item.saved_at
+                            ? new Date(item.saved_at).toLocaleString('zh-CN')
+                            : '无保存时间',
+                    }),
                 ]),
                 el('div', { className: 'video-asset-stats' }, [
                     el('span', { textContent: item.share_enabled ? '分享已开启' : '分享未开启' }),
@@ -400,7 +415,7 @@ async function toggleUserActive(user) {
 }
 
 async function handleDeleteUser(user) {
-    if (!confirm(`确定要删除用户 "${user.username}" 吗？此操作不可恢复。`)) return;
+    if (!confirm(`确定要删除用户“${user.username}”吗？此操作不可恢复。`)) return;
 
     try {
         await apiFetch(`/users/${user.id}`, { method: 'DELETE' });
@@ -448,7 +463,11 @@ function showUserEditModal(user = null) {
                 el('div', { className: 'form-group' }, [
                     el('label', { textContent: '角色' }),
                     el('select', { id: 'edit-role' }, [
-                        el('option', { value: 'user', textContent: '普通用户', selected: user ? user.role === 'user' : true }),
+                        el('option', {
+                            value: 'user',
+                            textContent: '普通用户',
+                            selected: user ? user.role === 'user' : true,
+                        }),
                     ]),
                 ]),
                 el('div', { className: 'form-group' }, [
@@ -457,7 +476,9 @@ function showUserEditModal(user = null) {
                         type: 'number',
                         id: 'edit-storage-quota',
                         min: '0',
-                        value: user && user.storage_quota_mb !== null && user.storage_quota_mb !== undefined ? String(user.storage_quota_mb) : '',
+                        value: user && user.storage_quota_mb !== null && user.storage_quota_mb !== undefined
+                            ? String(user.storage_quota_mb)
+                            : '',
                         placeholder: '留空使用默认值，0 表示不限',
                     }),
                 ]),
@@ -505,6 +526,7 @@ async function handleSaveUser(user) {
                 }
                 payload.storage_quota_mb = quotaMb;
             }
+
             await apiFetch(`/users/${user.id}`, {
                 method: 'PUT',
                 body: JSON.stringify(payload),
@@ -524,6 +546,7 @@ async function handleSaveUser(user) {
             showToast('创建成功', 'success');
             closeModal('user-edit-modal');
         }
+
         invalidateUserCache();
         await loadUsers(true);
     } catch (err) {

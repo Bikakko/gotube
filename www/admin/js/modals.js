@@ -1,6 +1,6 @@
 /**
  * GoTube Admin - 模态框模块
- * 播放器、分享、媒体详情等弹窗
+ * 播放器、分享、媒体详情等弹窗。
  */
 
 function showPlayerModal(video) {
@@ -109,7 +109,9 @@ function showMediaDetailsModal(video) {
             }),
             el('span', {
                 className: 'detail-list-sub',
-                textContent: owner.saved_at ? new Date(owner.saved_at).toLocaleString('zh-CN') : '无保存时间',
+                textContent: owner.saved_at
+                    ? new Date(owner.saved_at).toLocaleString('zh-CN')
+                    : '无保存时间',
             }),
         ])
     );
@@ -122,7 +124,7 @@ function showMediaDetailsModal(video) {
 
     function createSectionList(items, renderItem, emptyText, expanded, expandLabel) {
         if (!items.length) {
-            return el('div', { className: 'empty-state', textContent: emptyText });
+            return el('div', { className: 'detail-empty-state', textContent: emptyText });
         }
 
         const visibleItems = expanded ? items : items.slice(0, 10);
@@ -181,13 +183,30 @@ function showMediaDetailsModal(video) {
         }
     }
 
+    const sourceLabel = video.source || '未知来源';
+    const statusLabel = video.is_legacy ? '未归属' : '已归属';
+    const ownerLabel = video.is_legacy ? 'Legacy' : (video.owner_username || '未归属');
+    const heroThumb = video.thumbnail && video.thumbnail !== ''
+        ? el('img', {
+            className: 'detail-hero-thumb',
+            src: video.thumbnail,
+            alt: video.title || '未命名媒体',
+        })
+        : el('div', {
+            className: 'detail-hero-thumb detail-hero-thumb-empty',
+            textContent: '无图',
+        });
+
     const overlay = el('div', { className: 'modal active', id: 'media-detail-modal' }, [
-        el('div', { className: 'modal-content' }, [
+        el('div', { className: 'modal-content detail-modal-content' }, [
             el('div', { className: 'modal-header' }, [
-                el('div', {
-                    className: 'modal-title',
-                    textContent: video.title || '媒体详情',
-                }),
+                el('div', { className: 'modal-title-wrap' }, [
+                    el('div', { className: 'detail-kicker', textContent: '媒体详情' }),
+                    el('div', {
+                        className: 'modal-title',
+                        textContent: video.title || '未命名媒体',
+                    }),
+                ]),
                 el('button', {
                     className: 'modal-close',
                     textContent: '×',
@@ -195,31 +214,73 @@ function showMediaDetailsModal(video) {
                 }),
             ]),
             el('div', { className: 'modal-body' }, [
+                el('section', { className: 'detail-hero' }, [
+                    heroThumb,
+                    el('div', { className: 'detail-hero-copy' }, [
+                        el('div', {
+                            className: 'detail-hero-title',
+                            textContent: video.title || '未命名媒体',
+                        }),
+                        el('div', { className: 'detail-pill-row' }, [
+                            el('span', { className: 'detail-pill', textContent: sourceLabel }),
+                            el('span', { className: 'detail-pill', textContent: ownerLabel }),
+                            el('span', { className: 'detail-pill', textContent: statusLabel }),
+                        ]),
+                        el('p', {
+                            className: 'detail-hero-note',
+                            textContent: '这里汇总当前媒体的基础信息、拥有者与来源链接，便于快速判断是否需要后续维护。',
+                        }),
+                    ]),
+                ]),
                 el('div', { className: 'detail-summary-grid' }, [
                     el('div', { className: 'system-panel-card' }, [
                         el('div', { className: 'overview-card-label', textContent: '文件大小' }),
-                        el('div', { className: 'overview-card-value detail-value-sm', textContent: formatBytes(video.size || 0) }),
+                        el('div', {
+                            className: 'overview-card-value detail-value-sm',
+                            textContent: formatBytes(video.size || 0),
+                        }),
                     ]),
                     el('div', { className: 'system-panel-card' }, [
                         el('div', { className: 'overview-card-label', textContent: '拥有者' }),
-                        el('div', { className: 'overview-card-value detail-value-sm', textContent: String(video.owner_count || 0) }),
+                        el('div', {
+                            className: 'overview-card-value detail-value-sm',
+                            textContent: String(video.owner_count || 0),
+                        }),
                     ]),
                     el('div', { className: 'system-panel-card' }, [
                         el('div', { className: 'overview-card-label', textContent: '来源数' }),
-                        el('div', { className: 'overview-card-value detail-value-sm', textContent: String(video.source_count || 0) }),
+                        el('div', {
+                            className: 'overview-card-value detail-value-sm',
+                            textContent: String(video.source_count || 0),
+                        }),
                     ]),
                     el('div', { className: 'system-panel-card' }, [
-                        el('div', { className: 'overview-card-label', textContent: '状态' }),
-                        el('div', { className: 'overview-card-value detail-value-sm', textContent: video.is_legacy ? '未归属' : '已归属' }),
+                        el('div', { className: 'overview-card-label', textContent: '引用次数' }),
+                        el('div', {
+                            className: 'overview-card-value detail-value-sm',
+                            textContent: String(video.reference_count || 0),
+                        }),
                     ]),
                 ]),
                 el('div', { className: 'detail-columns' }, [
                     el('section', { className: 'detail-section' }, [
-                        el('h3', { textContent: '拥有者' }),
+                        el('div', { className: 'detail-section-header' }, [
+                            el('h3', { textContent: '拥有者' }),
+                            el('p', {
+                                className: 'detail-section-help',
+                                textContent: '显示当前媒体归属于哪些用户，以及各自的保存时间。',
+                            }),
+                        ]),
                         el('div', { id: 'media-detail-owners' }),
                     ]),
                     el('section', { className: 'detail-section' }, [
-                        el('h3', { textContent: '来源链接' }),
+                        el('div', { className: 'detail-section-header' }, [
+                            el('h3', { textContent: '来源链接' }),
+                            el('p', {
+                                className: 'detail-section-help',
+                                textContent: '列出当前媒体已经记录的来源链接，方便排查复用与归档情况。',
+                            }),
+                        ]),
                         el('div', { id: 'media-detail-sources' }),
                     ]),
                 ]),

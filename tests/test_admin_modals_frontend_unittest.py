@@ -18,7 +18,7 @@ class AdminModalsFrontendTests(unittest.TestCase):
         self.assertIn("document.execCommand('copy')", source)
         self.assertIn("复制失败，请手动复制链接", source)
 
-    def test_player_modal_exposes_loop_toggle(self):
+    def test_player_modal_defaults_to_loop_without_extra_toggle(self):
         source = read_text("www/admin/js/modals.js")
         css = read_text("www/admin/css/admin.css")
 
@@ -27,6 +27,19 @@ class AdminModalsFrontendTests(unittest.TestCase):
         self.assertNotIn("player-loop-toggle", source)
         self.assertNotIn(".player-loop-toggle.active", css)
         self.assertNotIn(".player-modal-actions", css)
+
+    def test_media_details_modal_uses_summary_and_section_layout(self):
+        source = read_text("www/admin/js/modals.js")
+        css = read_text("www/admin/css/admin.css")
+
+        self.assertIn("className: 'modal-content detail-modal-content'", source)
+        self.assertIn("className: 'detail-hero'", source)
+        self.assertIn("className: 'detail-pill-row'", source)
+        self.assertIn("className: 'detail-section-header'", source)
+        self.assertIn(".detail-hero {", css)
+        self.assertIn(".detail-pill {", css)
+        self.assertIn(".detail-section-header {", css)
+        self.assertIn(".detail-empty-state {", css)
 
     def test_admin_video_cards_render_duration_badge(self):
         render_js = read_text("www/admin/js/render.js")

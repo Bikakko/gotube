@@ -267,10 +267,10 @@ class AdminManagementTests(unittest.TestCase):
         self.assertIn("source_count", render_js)
         self.assertIn("owner_count", render_js)
         self.assertIn("showMediaDetailsModal", modals_js)
-        self.assertIn("player-loop-toggle", modals_js)
+        self.assertIn("loop: true", modals_js)
         self.assertIn("video.share_token || video.file_hash", modals_js)
         self.assertIn("navigator.clipboard && typeof navigator.clipboard.writeText === 'function'", modals_js)
-        self.assertIn(".player-loop-toggle.active", admin_css)
+        self.assertIn(".detail-hero {", admin_css)
 
     def test_get_user_library_returns_user_scoped_items(self):
         with self.Session() as session:
