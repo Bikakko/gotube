@@ -19,13 +19,15 @@
 - `python3`
 - `python3-venv`
 - `ffmpeg`
+- `nodejs`
+- `npm`
 - `bash`
 
 Debian 可直接执行：
 
 ```bash
 sudo apt update
-sudo apt install -y git python3 python3-venv ffmpeg
+sudo apt install -y git python3 python3-venv ffmpeg nodejs npm
 ```
 
 ## 2. 首次部署
@@ -53,6 +55,8 @@ GOTUBE_VENV_DIR=./venv
 GOTUBE_PID_FILE=./.server.pid
 GOTUBE_LOG_FILE=./server.log
 GOTUBE_WORKERS=1
+GOTUBE_BUILD_FRONTEND=1
+GOTUBE_WWW_DIR=www_dist
 GOTUBE_DOWNLOAD_DIR=./downloads
 GOTUBE_HIDDEN_PATH=7777
 GOTUBE_ADMINS=admin:请改成你自己的密码
@@ -63,6 +67,7 @@ GOTUBE_ADMINS=admin:请改成你自己的密码
 - `GOTUBE_WORKERS` 建议保持 `1`。当前下载队列、WebSocket 状态和内存上下文不适合多 worker 并行。
 - `GOTUBE_HOST=0.0.0.0` 表示允许局域网或公网访问；只想本机访问可改为 `127.0.0.1`。
 - `GOTUBE_ADMINS` 必须改掉默认值。
+- `GOTUBE_BUILD_FRONTEND=1` 时，`./wk.sh init` 会自动安装前端依赖并构建 `www_dist`。
 
 ### 2.3 执行启动前检查
 

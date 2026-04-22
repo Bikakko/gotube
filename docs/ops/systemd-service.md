@@ -37,6 +37,8 @@ cp .env.example .env
 ./wk.sh init
 ```
 
+如果 `.env` 中保持 `GOTUBE_BUILD_FRONTEND=1`，则服务器还需要 `nodejs` 和 `npm`，`./wk.sh init` 会构建 `www_dist` 后再启动。
+
 ### 2.2 复制 service 模板
 
 仓库内模板位置：

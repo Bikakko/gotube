@@ -1,0 +1,14 @@
+{
+  "name": "gotube-frontend-build",
+  "private": true,
+  "version": "4.2.0",
+  "description": "GoTube static asset build pipeline",
+  "scripts": {
+    "build": "node build.js"
+  },
+  "devDependencies": {
+    "clean-css": "^5.3.3",
+    "html-minifier-terser": "^7.2.0",
+    "terser": "^5.39.2"
+  }
+}

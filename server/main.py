@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import logging.handlers
+import re
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -15,7 +16,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .api import get_queue_manager
@@ -29,6 +30,34 @@ from .security import validate_guest_session_id, validate_hash_id
 from .video_library import resolve_share_token
 
 logger = logging.getLogger(__name__)
+
+SENSITIVE_PROBE_PATTERNS = (
+    re.compile(r"(^|/)\.(git|env|svn|hg)(/|$)", re.IGNORECASE),
+    re.compile(r"(^|/)\.ds_store$", re.IGNORECASE),
+    re.compile(r"(^|/)(composer\.(json|lock)|package-lock\.json|yarn\.lock)$", re.IGNORECASE),
+    re.compile(r"(^|/)(wp-|wordpress)", re.IGNORECASE),
+    re.compile(r"(^|/)(backup|backups?|dump|dumps?)(/|\.|$)", re.IGNORECASE),
+    re.compile(r"(^|/)(config|settings)(\.(bak|old|php|json|ya?ml|ini|env)|/|$)", re.IGNORECASE),
+)
+
+SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "same-origin",
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'; "
+        "img-src 'self' data: blob:; "
+        "media-src 'self' blob:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "connect-src 'self' ws: wss:; "
+        "font-src 'self' data:; "
+        "object-src 'none'; "
+        "form-action 'self'"
+    ),
+}
 
 # 项目路径
 PROJECT_ROOT = settings.project_root
@@ -92,7 +121,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GoTube",
     description="自托管多平台视频下载工具",
-    version="4.1.1",
+    version="4.2.0",
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
@@ -107,6 +136,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def harden_requests(request: Request, call_next) -> Response:
+    path = request.url.path
+    if _is_sensitive_probe_path(path):
+        response = Response(status_code=404)
+    else:
+        response = await call_next(request)
+
+    for header, value in SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    return response
 
 # 挂载 API 路由器
 app.include_router(api_router, prefix="/api")
@@ -138,6 +180,10 @@ def _serve_html(filename: str) -> HTMLResponse:
 def _get_queue_manager() -> QueueManager:
     """从 app state 获取 queue_manager"""
     return app.state.queue_manager
+
+def _is_sensitive_probe_path(path: str) -> bool:
+    normalized = "/" + path.strip("/")
+    return any(pattern.search(normalized) for pattern in SENSITIVE_PROBE_PATTERNS)
 
 
 # ── 静态文件服务 ──
@@ -177,7 +223,7 @@ async def admin_page() -> FileResponse | HTMLResponse:
 @app.get("/watch.html", response_model=None)
 async def watch() -> FileResponse | HTMLResponse:
     """精简播放页（分享链接用，不暴露主站）"""
-    return _serve_html("watch.html")
+    raise HTTPException(status_code=404, detail="Not Found")
 
 
 @app.get("/watch", response_model=None)
@@ -258,7 +304,7 @@ async def catch_all(
     """
     # 保护敏感页面
     if filename in ("index.html", "admin.html", "admin/admin.html", "download.html"):
-        return _serve_html("watch.html")
+        raise HTTPException(status_code=404, detail="Not Found")
 
     # 从 www 目录提供静态文件
     ext = Path(filename).suffix.lower()
@@ -279,7 +325,7 @@ async def catch_all(
         if filepath.exists():
             return FileResponse(filepath)
 
-    return _serve_html("watch.html")
+    raise HTTPException(status_code=404, detail="Not Found")
 
 
 # ── WebSocket ──
