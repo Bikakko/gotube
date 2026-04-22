@@ -59,7 +59,7 @@
                 const sizes = ['B','KB','MB','GB'];
                 const sz = v.size ? (() => { const i = Math.floor(Math.log(v.size)/Math.log(1024)); return (v.size/Math.pow(1024,i)).toFixed(1)+' '+sizes[i]; })() : '';
                 app.innerHTML = `
-                    <div class="player-wrap"><video id="p" controls autoplay><source src="${url}" type="video/mp4"></video></div>
+                    <div class="player-wrap"><video id="p" controls autoplay loop><source src="${url}" type="video/mp4"></video></div>
                     <div class="info">
                         <h1>${esc(v.title||'未知标题')}</h1>
                         <div class="meta">${sz ? `<span>📦 ${sz}</span>` : ''}</div>

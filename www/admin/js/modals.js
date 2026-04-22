@@ -23,6 +23,7 @@ function showPlayerModal(video) {
                     id: 'player-video',
                     controls: true,
                     autoplay: true,
+                    loop: true,
                 }, [
                     el('source', {
                         src: videoSrc,
@@ -33,40 +34,65 @@ function showPlayerModal(video) {
         ]),
     ]);
 
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) {
             closeModal('player-modal');
         }
     });
 
     document.body.appendChild(overlay);
     const videoEl = overlay.querySelector('#player-video');
+
     if (videoEl) {
+        videoEl.loop = true;
         videoEl.focus();
     }
 }
 
 function showShareModal(video) {
-    const shareUrl = `${window.location.origin}/watch?v=${video.file_hash}`;
+    const shareId = video.share_token || video.file_hash;
+    const shareUrl = `${window.location.origin}/watch?v=${encodeURIComponent(shareId)}`;
 
-    navigator.clipboard.writeText(shareUrl).then(() => {
-        if (typeof showToast === 'function') {
-            showToast('链接已复制到剪贴板', 'success');
-        }
-    }).catch(() => {
+    const reportResult = (copied) => {
+        if (typeof showToast !== 'function') return;
+        showToast(
+            copied ? '链接已复制到剪贴板' : '复制失败，请手动复制链接',
+            copied ? 'success' : 'error'
+        );
+    };
+
+    const fallbackCopy = () => {
         const input = document.createElement('input');
         input.value = shareUrl;
         input.style.position = 'fixed';
         input.style.opacity = '0';
         document.body.appendChild(input);
+        input.focus();
         input.select();
-        document.execCommand('copy');
-        document.body.removeChild(input);
 
-        if (typeof showToast === 'function') {
-            showToast('链接已复制到剪贴板', 'success');
+        let copied = false;
+        try {
+            copied = document.execCommand('copy');
+        } catch (_error) {
+            copied = false;
         }
-    });
+
+        document.body.removeChild(input);
+        return copied;
+    };
+
+    try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            navigator.clipboard.writeText(shareUrl)
+                .then(() => reportResult(true))
+                .catch(() => reportResult(fallbackCopy()));
+            return;
+        }
+    } catch (_error) {
+        // fall through to legacy copy path
+    }
+
+    reportResult(fallbackCopy());
 }
 
 function showMediaDetailsModal(video) {
@@ -201,8 +227,8 @@ function showMediaDetailsModal(video) {
         ]),
     ]);
 
-    overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) {
             closeModal('media-detail-modal');
         }
     });

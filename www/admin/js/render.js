@@ -11,6 +11,18 @@ function getRoleLabel(role) {
     return map[role] || role || '未知角色';
 }
 
+function formatDurationLabel(duration) {
+    const totalSeconds = Math.max(0, Math.floor(Number(duration) || 0));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+        return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
+    }
+    return [minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
+}
+
 function ensureViewContainerVisible(view) {
     const containers = {
         overview: $('#overview-view-container'),
@@ -382,11 +394,16 @@ function renderVideoGrid() {
 function renderVideoCard(video) {
     const isSelected = state.selectedVideos.has(video.filename);
     const hasThumbnail = video.thumbnail && video.thumbnail !== '';
+    const durationLabel = formatDurationLabel(video.duration);
 
     const thumb = el('div', { className: 'video-thumb' }, [
         hasThumbnail
             ? el('img', { src: video.thumbnail, alt: video.title, loading: 'lazy' })
             : el('div', { className: 'empty-thumb', textContent: '🎬' }),
+        el('div', {
+            className: 'video-duration-badge',
+            textContent: durationLabel,
+        }),
     ]);
 
     const info = el('div', { className: 'video-info' }, [

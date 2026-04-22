@@ -261,11 +261,16 @@ class AdminManagementTests(unittest.TestCase):
     def test_media_view_scripts_expose_asset_details_entry(self):
         render_js = (ROOT / "www/admin/js/render.js").read_text(encoding="utf-8")
         modals_js = (ROOT / "www/admin/js/modals.js").read_text(encoding="utf-8")
+        admin_css = (ROOT / "www/admin/css/admin.css").read_text(encoding="utf-8")
 
         self.assertIn("showMediaDetailsModal", render_js)
         self.assertIn("source_count", render_js)
         self.assertIn("owner_count", render_js)
         self.assertIn("showMediaDetailsModal", modals_js)
+        self.assertIn("player-loop-toggle", modals_js)
+        self.assertIn("video.share_token || video.file_hash", modals_js)
+        self.assertIn("navigator.clipboard && typeof navigator.clipboard.writeText === 'function'", modals_js)
+        self.assertIn(".player-loop-toggle.active", admin_css)
 
     def test_get_user_library_returns_user_scoped_items(self):
         with self.Session() as session:
