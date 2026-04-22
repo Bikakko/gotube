@@ -16,6 +16,8 @@ class HomeGalleryFrontendTests(unittest.TestCase):
         self.assertIn('id="gallery-app"', html)
         self.assertIn('id="albums-grid"', html)
         self.assertIn('id="gallery-modal"', html)
+        self.assertNotIn("Share the tiny bright moments", html)
+        self.assertNotIn("拾光相册", html)
         self.assertNotIn("下载页", html)
         self.assertNotIn("管理后台", html)
         self.assertNotIn("视频库", html)
@@ -31,6 +33,12 @@ class HomeGalleryFrontendTests(unittest.TestCase):
 
         self.assertIn("/static/index.css", html)
         self.assertIn("/static/index.js", html)
+
+    def test_index_styles_use_compact_album_cards(self):
+        css = read_text("www/index.css")
+
+        self.assertIn("minmax(160px, 220px)", css)
+        self.assertNotIn("minmax(240px, 1fr)", css)
 
     def test_index_script_drives_gallery_and_modal_navigation(self):
         source = read_text("www/index.js")

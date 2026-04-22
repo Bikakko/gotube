@@ -3,20 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>拾光相册</title>
+    <title>Moments</title>
     <link rel="icon" href="/static/favicon.jpg" type="image/jpeg">
     <link rel="stylesheet" href="/static/index.css?v=4.2.0">
 </head>
 <body>
+    <div class="page-shimmer page-shimmer-a" aria-hidden="true"></div>
+    <div class="page-shimmer page-shimmer-b" aria-hidden="true"></div>
+    <div class="page-stars" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+    </div>
     <main id="gallery-app" class="gallery-app">
         <header class="hero">
-            <div class="hero-copy">
-                <p class="eyebrow">Share the tiny bright moments</p>
-                <h1>拾光相册</h1>
-                <p class="intro">
-                    随手存一点开心的图，偶尔回来翻一翻。
-                </p>
-            </div>
             <a id="secret-entry" class="secret-entry" href="#" aria-label="进入隐藏入口">
                 <img
                     id="secret-entry-image"
@@ -28,10 +26,8 @@
         </header>
 
         <section class="albums-section" aria-labelledby="albums-title">
-            <div class="section-head">
-                <h2 id="albums-title">相册</h2>
-                <p id="albums-meta" class="albums-meta">正在整理中...</p>
-            </div>
+            <h2 id="albums-title" class="sr-only">相册</h2>
+            <p id="albums-meta" class="sr-only">正在整理中...</p>
             <div id="albums-grid" class="albums-grid"></div>
             <div id="albums-empty" class="albums-empty" hidden>暂时还没有公开图片。</div>
         </section>
