@@ -40,6 +40,24 @@ class HomeGalleryFrontendTests(unittest.TestCase):
         self.assertIn("minmax(160px, 220px)", css)
         self.assertNotIn("minmax(240px, 1fr)", css)
 
+    def test_modal_shell_hides_visible_title_copy(self):
+        html = read_text("www/index.html")
+        css = read_text("www/index.css")
+
+        self.assertNotIn("Album View", html)
+        self.assertNotIn('id="gallery-modal-title"', html)
+        self.assertIn('id="gallery-modal-count"', html)
+        self.assertIn("font-size: 11px", css)
+        self.assertIn("color: rgba(191, 219, 254, 0.54)", css)
+
+    def test_home_page_uses_dense_star_layer(self):
+        html = read_text("www/index.html")
+        css = read_text("www/index.css")
+
+        self.assertGreaterEqual(html.count("<span></span>"), 18)
+        self.assertIn("@keyframes star-drift", css)
+        self.assertIn("nth-child(18)", css)
+
     def test_index_script_drives_gallery_and_modal_navigation(self):
         source = read_text("www/index.js")
 

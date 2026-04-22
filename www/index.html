@@ -12,10 +12,12 @@
     <div class="page-shimmer page-shimmer-b" aria-hidden="true"></div>
     <div class="page-stars" aria-hidden="true">
         <span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+        <span></span><span></span><span></span><span></span><span></span><span></span>
     </div>
     <main id="gallery-app" class="gallery-app">
         <header class="hero">
-            <a id="secret-entry" class="secret-entry" href="#" aria-label="进入隐藏入口">
+            <a id="secret-entry" class="secret-entry" href="#" aria-label="Open hidden entry">
                 <img
                     id="secret-entry-image"
                     src="/static/secret-entry-placeholder.gif"
@@ -26,30 +28,26 @@
         </header>
 
         <section class="albums-section" aria-labelledby="albums-title">
-            <h2 id="albums-title" class="sr-only">相册</h2>
-            <p id="albums-meta" class="sr-only">正在整理中...</p>
+            <h2 id="albums-title" class="sr-only">Gallery</h2>
+            <p id="albums-meta" class="sr-only">Loading albums...</p>
             <div id="albums-grid" class="albums-grid"></div>
-            <div id="albums-empty" class="albums-empty" hidden>暂时还没有公开图片。</div>
+            <div id="albums-empty" class="albums-empty" hidden>No public images yet.</div>
         </section>
     </main>
 
     <div id="gallery-modal" class="gallery-modal" hidden>
         <div class="gallery-modal-backdrop" data-modal-close></div>
-        <div class="gallery-modal-panel" role="dialog" aria-modal="true" aria-labelledby="gallery-modal-title">
-            <button type="button" class="modal-close" id="gallery-modal-close" aria-label="关闭">×</button>
+        <div class="gallery-modal-panel" role="dialog" aria-modal="true" aria-label="Image viewer">
+            <button type="button" class="modal-close" id="gallery-modal-close" aria-label="Close">×</button>
             <div class="modal-top">
-                <div>
-                    <p class="modal-kicker">Album View</p>
-                    <h3 id="gallery-modal-title">相册</h3>
-                </div>
                 <div id="gallery-modal-count" class="gallery-modal-count">0 / 0</div>
             </div>
             <div class="modal-stage">
-                <button type="button" class="modal-nav prev" id="gallery-prev" aria-label="上一张">‹</button>
+                <button type="button" class="modal-nav prev" id="gallery-prev" aria-label="Previous image">‹</button>
                 <div class="modal-image-shell">
                     <img id="gallery-modal-image" class="modal-image" alt="">
                 </div>
-                <button type="button" class="modal-nav next" id="gallery-next" aria-label="下一张">›</button>
+                <button type="button" class="modal-nav next" id="gallery-next" aria-label="Next image">›</button>
             </div>
         </div>
     </div>

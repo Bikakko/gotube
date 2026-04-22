@@ -10,7 +10,6 @@
     const albumsMeta = document.getElementById("albums-meta");
     const albumsEmpty = document.getElementById("albums-empty");
     const modal = document.getElementById("gallery-modal");
-    const modalTitle = document.getElementById("gallery-modal-title");
     const modalCount = document.getElementById("gallery-modal-count");
     const modalImage = document.getElementById("gallery-modal-image");
     const secretEntry = document.getElementById("secret-entry");
@@ -27,7 +26,7 @@
     async function loadAlbums() {
         const response = await fetch("/api/gallery/albums");
         if (!response.ok) {
-            throw new Error("相册读取失败");
+            throw new Error("Albums unavailable");
         }
         const data = await response.json();
         state.albums = data.albums || [];
@@ -36,7 +35,7 @@
 
     function renderAlbumCards() {
         albumsGrid.innerHTML = "";
-        albumsMeta.textContent = `${state.albums.length} 个相册`;
+        albumsMeta.textContent = `${state.albums.length} albums`;
         albumsEmpty.hidden = state.albums.length > 0;
 
         state.albums.forEach((album) => {
@@ -47,7 +46,7 @@
                 <img class="album-cover" src="${album.cover_url}" alt="${escapeHtml(album.title)}">
                 <div class="album-copy">
                     <p class="album-title">${escapeHtml(album.title)}</p>
-                    <p class="album-count">${album.image_count} 张图片</p>
+                    <p class="album-count">${album.image_count} pics</p>
                 </div>
             `;
             button.addEventListener("click", () => openAlbum(album.slug));
@@ -58,7 +57,7 @@
     async function openAlbum(slug) {
         const response = await fetch(`/api/gallery/albums/${encodeURIComponent(slug)}`);
         if (!response.ok) {
-            throw new Error("相册打开失败");
+            throw new Error("Album unavailable");
         }
         state.currentAlbum = await response.json();
         state.currentImageIndex = 0;
@@ -72,10 +71,9 @@
             return;
         }
         const currentImage = state.currentAlbum.images[state.currentImageIndex];
-        modalTitle.textContent = state.currentAlbum.title;
         modalCount.textContent = `${state.currentImageIndex + 1} / ${state.currentAlbum.images.length}`;
         modalImage.src = currentImage.url;
-        modalImage.alt = `${state.currentAlbum.title} ${state.currentImageIndex + 1}`;
+        modalImage.alt = currentImage.name || "";
     }
 
     function showNextImage() {
@@ -114,7 +112,7 @@
     });
 
     loadAlbums().catch(() => {
-        albumsMeta.textContent = "相册暂时不可用";
+        albumsMeta.textContent = "Albums unavailable";
         albumsEmpty.hidden = false;
     });
 })();
