@@ -46,7 +46,7 @@ class HomeGalleryFrontendTests(unittest.TestCase):
         self.assertIn("aspect-ratio: 6 / 4", css)
         self.assertIn("backdrop-filter: blur(16px)", css)
         self.assertIn("inset: -18px", css)
-        self.assertIn("clamp(268px, 37vh, 392px)", css)
+        self.assertIn("clamp(292px, 40vh, 420px)", css)
 
     def test_modal_shell_hides_visible_title_copy_and_count(self):
         html = read_text("www/index.html")

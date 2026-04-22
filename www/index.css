@@ -67,7 +67,7 @@ body::after {
 
 .hero {
     position: relative;
-    min-height: 0;
+    min-height: clamp(196px, 24vh, 288px);
     margin-bottom: 12px;
 }
 
@@ -93,7 +93,7 @@ body::after {
     gap: 18px;
     justify-content: start;
     width: min(100%, 934px);
-    margin: clamp(268px, 37vh, 392px) 0 0 clamp(44px, 5vw, 84px);
+    margin: clamp(292px, 40vh, 420px) 0 0 clamp(92px, 9vw, 152px);
 }
 
 .album-card {
@@ -308,7 +308,7 @@ body::after {
         grid-template-columns: repeat(2, minmax(0, 220px));
         justify-content: start;
         width: 100%;
-        margin: clamp(208px, 31vh, 292px) 0 0 clamp(20px, 4vw, 32px);
+        margin: clamp(228px, 34vh, 316px) 0 0 clamp(36px, 8vw, 56px);
     }
 
     .modal-stage {
