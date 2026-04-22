@@ -1,5 +1,5 @@
 /**
- * GoTube 下载页 (/7777) - 客户端脚本
+ * GoTube 下载页 - 客户端脚本
  */
 (function () {
     'use strict';
@@ -8,6 +8,11 @@
 
     const session = window.GoTubeSession;
     let clientId = session.getDownloadClientId();
+    const hiddenPath = (() => {
+        if (window.GOTUBE_HIDDEN_PATH) return window.GOTUBE_HIDDEN_PATH;
+        const parts = window.location.pathname.split('/').filter(Boolean);
+        return parts[0] || '';
+    })();
 
     // ── 匿名用户 Session 管理 ──
     // 使用 sessionStorage：刷新页面复用，关闭标签页后失效，避免旧路人 session 被新登录用户转存。
@@ -561,7 +566,6 @@
     $('#refresh-library-btn').onclick = () => loadMyLibrary();
     $('#logout-btn').onclick = logout;
     $('#admin-link-btn').onclick = () => {
-        const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';
         window.location.href = `/${hiddenPath}/admin`;
     };
 
@@ -923,7 +927,6 @@
         }
 
         try {
-            const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';
             const apiBase = `/${hiddenPath}/admin/api`;
             const response = await fetch(`${apiBase}/auth/check`, {
                 headers: { 'Authorization': `Bearer ${token}` },
@@ -978,7 +981,6 @@
         if (isRegularUser()) {
             $('#library-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } else if (isLoggedIn && currentUser && currentUser.role === 'admin') {
-            const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';
             window.location.href = `/${hiddenPath}/admin`;
         } else {
             showLoginModal();
@@ -1079,7 +1081,6 @@
 
         const token = localStorage.getItem('gotube_admin_token');
         if (token) {
-            const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';
             await fetch(`/${hiddenPath}/admin/api/auth/logout`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
@@ -1153,7 +1154,6 @@
         errorEl.textContent = '';
 
         try {
-            const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';
             const apiBase = `/${hiddenPath}/admin/api`;
             const response = await fetch(`${apiBase}/login`, {
                 method: 'POST',

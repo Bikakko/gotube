@@ -202,6 +202,12 @@ async def root_page() -> FileResponse | HTMLResponse:
     return _serve_html("index.html")
 
 
+@app.get("/go", response_model=None)
+async def hidden_entry_redirect() -> RedirectResponse:
+    """固定入口，由服务端重定向到隐藏下载页"""
+    return RedirectResponse(url=f"/{settings.hidden_path}", status_code=302)
+
+
 @app.get(f"/{settings.hidden_path}", response_model=None)
 async def download_page() -> FileResponse | HTMLResponse:
     """下载页（隐藏路径，只有知道地址的人才能访问）"""

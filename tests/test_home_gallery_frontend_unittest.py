@@ -27,6 +27,8 @@ class HomeGalleryFrontendTests(unittest.TestCase):
 
         self.assertIn('id="secret-entry"', html)
         self.assertIn('id="secret-entry-image"', html)
+        self.assertIn('href="/go"', html)
+        self.assertNotIn("GOTUBE_HIDDEN_PATH", html)
 
     def test_home_page_loads_gallery_assets(self):
         html = read_text("www/index.html")
@@ -34,32 +36,42 @@ class HomeGalleryFrontendTests(unittest.TestCase):
         self.assertIn("/static/index.css", html)
         self.assertIn("/static/index.js", html)
 
-    def test_index_styles_use_compact_album_cards(self):
+    def test_index_styles_use_soft_rounded_album_cards(self):
         css = read_text("www/index.css")
 
-        self.assertIn("minmax(160px, 220px)", css)
-        self.assertNotIn("minmax(240px, 1fr)", css)
+        self.assertIn("minmax(150px, 220px)", css)
+        self.assertIn("border-radius: 42px", css)
+        self.assertIn("aspect-ratio: 6 / 4", css)
+        self.assertIn("backdrop-filter: blur(14px)", css)
+        self.assertIn("inset: -22px", css)
 
-    def test_modal_shell_hides_visible_title_copy(self):
+    def test_modal_shell_hides_visible_title_copy_and_count(self):
         html = read_text("www/index.html")
         css = read_text("www/index.css")
 
         self.assertNotIn("Album View", html)
-        self.assertNotIn('id="gallery-modal-title"', html)
-        self.assertIn('id="gallery-modal-count"', html)
-        self.assertIn("font-size: 11px", css)
-        self.assertIn("color: rgba(191, 219, 254, 0.54)", css)
+        self.assertNotIn("gallery-modal-title", html)
+        self.assertNotIn("gallery-modal-count", html)
+        self.assertIn(".gallery-modal-panel::before", css)
+        self.assertIn("border-radius: 42px", css)
+        self.assertIn("backdrop-filter: blur(16px)", css)
 
-    def test_home_page_uses_dense_star_layer(self):
+    def test_home_page_uses_dense_star_layer_soft_flows_and_clouds(self):
         html = read_text("www/index.html")
         css = read_text("www/index.css")
 
-        self.assertGreaterEqual(html.count("<span></span>"), 18)
-        self.assertIn("@keyframes star-drift", css)
-        self.assertIn("nth-child(18)", css)
+        self.assertGreaterEqual(html.count("<span></span>"), 28)
+        self.assertIn("page-flow page-flow-d", html)
+        self.assertIn('class="page-clouds"', html)
+        self.assertIn("@keyframes cloud-a", css)
+        self.assertIn("@keyframes cloud-d", css)
+        self.assertIn("@keyframes flow-d", css)
+        self.assertNotIn("page-shimmer", html)
 
     def test_index_script_drives_gallery_and_modal_navigation(self):
         source = read_text("www/index.js")
+        common = read_text("www/common.js")
+        download = read_text("www/download.js")
 
         for marker in [
             "loadAlbums",
@@ -73,6 +85,13 @@ class HomeGalleryFrontendTests(unittest.TestCase):
             "Escape",
         ]:
             self.assertIn(marker, source)
+
+        self.assertNotIn("album-count", source)
+        self.assertNotIn("gallery-modal-count", source)
+        self.assertNotIn("album-title", source)
+        self.assertNotIn("7777", source)
+        self.assertNotIn("7777", common)
+        self.assertNotIn("7777", download)
 
 
 if __name__ == "__main__":

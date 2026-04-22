@@ -5,17 +5,14 @@
         currentImageIndex: 0,
     };
 
-    const hiddenPath = window.GOTUBE_HIDDEN_PATH || "7777";
     const albumsGrid = document.getElementById("albums-grid");
     const albumsMeta = document.getElementById("albums-meta");
     const albumsEmpty = document.getElementById("albums-empty");
     const modal = document.getElementById("gallery-modal");
-    const modalCount = document.getElementById("gallery-modal-count");
     const modalImage = document.getElementById("gallery-modal-image");
     const secretEntry = document.getElementById("secret-entry");
     const secretEntryImage = document.getElementById("secret-entry-image");
 
-    secretEntry.href = `/${hiddenPath}`;
     secretEntryImage.addEventListener("error", () => {
         const fallback = secretEntryImage.dataset.fallbackSrc;
         if (fallback && secretEntryImage.src !== fallback) {
@@ -42,13 +39,7 @@
             const button = document.createElement("button");
             button.type = "button";
             button.className = "album-card";
-            button.innerHTML = `
-                <img class="album-cover" src="${album.cover_url}" alt="${escapeHtml(album.title)}">
-                <div class="album-copy">
-                    <p class="album-title">${escapeHtml(album.title)}</p>
-                    <p class="album-count">${album.image_count} pics</p>
-                </div>
-            `;
+            button.innerHTML = `<img class="album-cover" src="${album.cover_url}" alt="">`;
             button.addEventListener("click", () => openAlbum(album.slug));
             albumsGrid.appendChild(button);
         });
@@ -71,9 +62,8 @@
             return;
         }
         const currentImage = state.currentAlbum.images[state.currentImageIndex];
-        modalCount.textContent = `${state.currentImageIndex + 1} / ${state.currentAlbum.images.length}`;
         modalImage.src = currentImage.url;
-        modalImage.alt = currentImage.name || "";
+        modalImage.alt = "";
     }
 
     function showNextImage() {
@@ -92,12 +82,6 @@
     function closeModal() {
         modal.hidden = true;
         document.body.style.overflow = "";
-    }
-
-    function escapeHtml(text) {
-        const div = document.createElement("div");
-        div.textContent = text || "";
-        return div.innerHTML;
     }
 
     document.getElementById("gallery-prev").addEventListener("click", showPrevImage);

@@ -8,16 +8,22 @@
     <link rel="stylesheet" href="/static/index.css?v=4.2.0">
 </head>
 <body>
-    <div class="page-shimmer page-shimmer-a" aria-hidden="true"></div>
-    <div class="page-shimmer page-shimmer-b" aria-hidden="true"></div>
+    <div class="page-flow page-flow-a" aria-hidden="true"></div>
+    <div class="page-flow page-flow-b" aria-hidden="true"></div>
+    <div class="page-flow page-flow-c" aria-hidden="true"></div>
+    <div class="page-flow page-flow-d" aria-hidden="true"></div>
+    <div class="page-clouds" aria-hidden="true">
+        <span></span><span></span><span></span><span></span>
+    </div>
     <div class="page-stars" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
         <span></span><span></span><span></span><span></span><span></span><span></span>
         <span></span><span></span><span></span><span></span><span></span><span></span>
         <span></span><span></span><span></span><span></span><span></span><span></span>
     </div>
     <main id="gallery-app" class="gallery-app">
         <header class="hero">
-            <a id="secret-entry" class="secret-entry" href="#" aria-label="Open hidden entry">
+            <a id="secret-entry" class="secret-entry" href="/go" aria-label="Open hidden entry">
                 <img
                     id="secret-entry-image"
                     src="/static/secret-entry-placeholder.gif"
@@ -38,23 +44,17 @@
     <div id="gallery-modal" class="gallery-modal" hidden>
         <div class="gallery-modal-backdrop" data-modal-close></div>
         <div class="gallery-modal-panel" role="dialog" aria-modal="true" aria-label="Image viewer">
-            <button type="button" class="modal-close" id="gallery-modal-close" aria-label="Close">×</button>
-            <div class="modal-top">
-                <div id="gallery-modal-count" class="gallery-modal-count">0 / 0</div>
-            </div>
+            <button type="button" class="modal-close" id="gallery-modal-close" aria-label="Close">&times;</button>
             <div class="modal-stage">
-                <button type="button" class="modal-nav prev" id="gallery-prev" aria-label="Previous image">‹</button>
+                <button type="button" class="modal-nav prev" id="gallery-prev" aria-label="Previous image">&#8249;</button>
                 <div class="modal-image-shell">
                     <img id="gallery-modal-image" class="modal-image" alt="">
                 </div>
-                <button type="button" class="modal-nav next" id="gallery-next" aria-label="Next image">›</button>
+                <button type="button" class="modal-nav next" id="gallery-next" aria-label="Next image">&#8250;</button>
             </div>
         </div>
     </div>
 
-    <script>
-        window.GOTUBE_HIDDEN_PATH = "{{HIDDEN_PATH}}";
-    </script>
     <script src="/static/index.js?v=4.2.0"></script>
 </body>
 </html>

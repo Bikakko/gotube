@@ -204,7 +204,7 @@ function getApiBase() {
 
     // 从当前页面 URL 推断
     const pathname = window.location.pathname;
-    // 如果是 /7777/admin，则 API 路径为 /7777/admin/api
+    // 如果是 /<hidden>/admin，则 API 路径为 /<hidden>/admin/api
     if (pathname.includes('/admin')) {
         const match = pathname.match(/^(\/[^\/]+\/admin)/);
         if (match) return match[1] + '/api';

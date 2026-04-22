@@ -144,12 +144,19 @@ async function handleAdminNav(view) {
 }
 
 function bindAdminShellEvents() {
+    const deriveHiddenPath = () => {
+        const parts = window.location.pathname.split('/').filter(Boolean);
+        return parts[0] || '';
+    };
+
     const homeLink = $('#admin-home-link');
     if (homeLink) {
         homeLink.addEventListener('click', (e) => {
             e.preventDefault();
-            const hiddenPath = window.GOTUBE_HIDDEN_PATH || '7777';
-            window.location.href = `/${hiddenPath}`;
+            const hiddenPath = window.GOTUBE_HIDDEN_PATH || deriveHiddenPath();
+            if (hiddenPath) {
+                window.location.href = `/${hiddenPath}`;
+            }
         });
     }
 
