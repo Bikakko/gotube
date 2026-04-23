@@ -12,9 +12,11 @@ async function loadSystemPage(forceReload = false) {
     state.system.loading = true;
     renderSystemPanels();
 
-    const [runtimeResult, cookieResult] = await Promise.allSettled([
+    const [runtimeResult, cookieResult, appLogResult, accessLogResult] = await Promise.allSettled([
         window.loadRuntimeHealth(),
         window.loadCookiesStatusData(),
+        window.loadRuntimeLogsData('app'),
+        window.loadRuntimeLogsData('access'),
     ]);
 
     state.system.runtimeHealth = runtimeResult.status === 'fulfilled'
@@ -23,6 +25,12 @@ async function loadSystemPage(forceReload = false) {
     state.system.cookieStatus = cookieResult.status === 'fulfilled'
         ? cookieResult.value
         : { error: cookieResult.reason?.message || 'Cookie 状态加载失败' };
+    state.system.appLogs = appLogResult.status === 'fulfilled'
+        ? appLogResult.value
+        : { error: appLogResult.reason?.message || '应用日志加载失败', type: 'app', lines: [] };
+    state.system.accessLogs = accessLogResult.status === 'fulfilled'
+        ? accessLogResult.value
+        : { error: accessLogResult.reason?.message || '访问日志加载失败', type: 'access', lines: [] };
     state.system.loading = false;
     state.system.ready = true;
 
@@ -32,6 +40,7 @@ async function loadSystemPage(forceReload = false) {
 function renderSystemPanels() {
     renderRuntimeHealth();
     renderSystemCookieStatus();
+    renderSystemLogs();
 }
 
 function renderRuntimeHealth() {
@@ -53,16 +62,15 @@ function renderRuntimeHealth() {
     }
 
     const blockers = Array.isArray(data.blockers) ? data.blockers : [];
-    const git = data.git || {};
-    const ffmpegText = data.ffmpeg_available ? (data.ffmpeg_version || '已安装') : '未安装';
-    const ytdlpText = data.yt_dlp_version || '未安装';
+    const ffmpegText = data.ffmpeg_summary || (data.ffmpeg_available ? '已安装' : '未安装');
+    const ytdlpText = data.yt_dlp_summary || '未安装';
 
     slot.innerHTML = '';
     slot.appendChild(el('div', { className: 'system-panel-grid' }, [
         createSystemSummaryCard('阻断项', String(blockers.length), blockers.length === 0 ? '当前未发现阻断项' : blockers.join(' / ')),
         createSystemSummaryCard('FFmpeg', ffmpegText, data.ffmpeg_available ? '运行环境已检测到 ffmpeg' : '请先安装 ffmpeg'),
         createSystemSummaryCard('yt-dlp', ytdlpText, data.yt_dlp_version ? '运行环境已检测到 yt-dlp' : '请先安装 yt-dlp'),
-        createSystemSummaryCard('Git', git.branch || '--', git.commit ? `当前提交 ${git.commit}` : '未检测到 git 信息'),
+        createSystemSummaryCard('版本', data.version || '--', '当前运行版本'),
     ]));
 }
 
@@ -113,6 +121,83 @@ function syncSystemCookieActions(data = null) {
     deleteBtn.disabled = !hasCookies;
 }
 
+function getCurrentSystemLogs() {
+    return state.system.logView === 'access' ? state.system.accessLogs : state.system.appLogs;
+}
+
+function renderSystemLogs() {
+    const slot = $('#system-log-slot');
+    if (!slot) return;
+
+    const appTab = $('#system-log-tab-app');
+    const accessTab = $('#system-log-tab-access');
+    if (appTab) appTab.classList.toggle('active', state.system.logView !== 'access');
+    if (accessTab) accessTab.classList.toggle('active', state.system.logView === 'access');
+
+    const data = getCurrentSystemLogs();
+    if (state.system.loading && !data) {
+        slot.innerHTML = '<div class="loading">加载运行日志中</div>';
+        return;
+    }
+    if (!data) {
+        slot.innerHTML = `<div class="empty-state">${state.system.logView === 'access' ? '暂无访问日志' : '暂无应用日志'}</div>`;
+        return;
+    }
+    if (data.error) {
+        slot.innerHTML = `<div class="error">加载失败: ${data.error}</div>`;
+        return;
+    }
+
+    const lines = Array.isArray(data.lines) ? data.lines : [];
+    if (!lines.length) {
+        slot.innerHTML = `<div class="empty-state">${state.system.logView === 'access' ? '暂无访问日志' : '暂无应用日志'}</div>`;
+        return;
+    }
+
+    slot.innerHTML = '';
+    const panel = el('div', { className: 'system-log-panel' }, [
+        el('div', { className: 'system-log-meta', textContent: `${state.system.logView === 'access' ? '访问日志' : '应用日志'} · 最近 ${lines.length} 行` }),
+        el('pre', { className: 'system-log-pre', textContent: lines.join('\n') }),
+    ]);
+    slot.appendChild(panel);
+}
+
+function switchSystemLogView(logView) {
+    if (state.system.logView === logView) return;
+    state.system.logView = logView;
+    renderSystemLogs();
+}
+
+async function copySystemLogView() {
+    const data = getCurrentSystemLogs();
+    const lines = Array.isArray(data?.lines) ? data.lines : [];
+    if (!lines.length) {
+        showToast('当前日志为空', 'warning');
+        return;
+    }
+    const text = lines.join('\n');
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+        } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            textarea.remove();
+        }
+        showToast('日志已复制', 'success');
+    } catch (error) {
+        showToast('复制日志失败', 'error');
+    }
+}
+
 window.loadSystemPage = loadSystemPage;
 window.renderSystemPanels = renderSystemPanels;
 window.renderRuntimeHealth = renderRuntimeHealth;
+window.switchSystemLogView = switchSystemLogView;
+window.copySystemLogView = copySystemLogView;

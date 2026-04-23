@@ -1,7 +1,7 @@
 {
   "name": "gotube-frontend-build",
   "private": true,
-  "version": "4.2.1",
+  "version": "4.3.0",
   "description": "GoTube static asset build pipeline",
   "scripts": {
     "build": "node build.js"

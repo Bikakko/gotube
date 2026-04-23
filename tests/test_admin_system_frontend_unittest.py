@@ -17,9 +17,16 @@ class AdminSystemFrontendTests(unittest.TestCase):
         self.assertIn("运行巡检加载失败", source)
         self.assertIn("Cookie 状态加载失败", source)
         self.assertIn("加载运行巡检中", source)
-        self.assertIn("未检测到 git 信息", source.lower())
+        self.assertIn("加载运行日志中", source)
+        self.assertIn("暂无应用日志", source)
+        self.assertIn("暂无访问日志", source)
+        self.assertIn("createSystemSummaryCard('版本'", source)
+        self.assertNotIn("createSystemSummaryCard('Git'", source)
         self.assertIn("更新 Cookie", source)
         self.assertIn("删除当前 Cookie", render_source)
+        self.assertIn("运行日志", render_source)
+        self.assertIn("刷新日志", render_source)
+        self.assertIn("复制日志", render_source)
 
     def test_cookies_js_uses_standard_status_copy(self):
         source = read_text("www/admin/js/cookies.js")

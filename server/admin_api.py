@@ -34,7 +34,7 @@ from .cookie_store import (
     set_runtime_cookies_source,
 )
 from .db import AuthToken, MediaAsset, User, UserVideoItem
-from .health_checks import collect_runtime_health
+from .health_checks import collect_runtime_health, read_runtime_logs
 from .models import (
     ChangePasswordRequest,
     CreateInviteRequest,
@@ -1574,6 +1574,16 @@ async def get_runtime_health(
 ) -> dict:
     """Return release-readiness runtime checks for administrators."""
     return collect_runtime_health()
+
+
+@router.get("/runtime/logs")
+async def get_runtime_logs(
+    log_type: str = Query(default="app", pattern="^(app|access)$"),
+    line_limit: int = Query(default=120, ge=1, le=300),
+    admin: User = Depends(require_admin),
+) -> dict:
+    """Return recent runtime log lines for administrators."""
+    return read_runtime_logs(log_type=log_type, line_limit=line_limit)
 
 
 @router.post("/cookies/check_merge")

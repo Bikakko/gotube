@@ -97,19 +97,44 @@ function getUserSearchKeyword() {
     return String(state.userSearchKeyword || '').trim().toLowerCase();
 }
 
+function getUserStatusFilter() {
+    return String(state.userStatusFilter || 'all');
+}
+
+function getUserRoleFilter() {
+    return String(state.userRoleFilter || 'all');
+}
+
 function filterUsers(users) {
     const keyword = getUserSearchKeyword();
-    if (!keyword) return users;
+    const statusFilter = getUserStatusFilter();
+    const roleFilter = getUserRoleFilter();
 
-    return users.filter((user) => {
-        const haystacks = [
-            String(user.id || ''),
-            String(user.username || ''),
-            formatRole(user.role),
-            user.is_active ? '启用' : '禁用',
-            user.is_system_account ? '系统账号' : '',
-        ];
-        return haystacks.some((value) => value.toLowerCase().includes(keyword));
+    const filtered = users.filter((user) => {
+        if (statusFilter === 'active' && !user.is_active) return false;
+        if (statusFilter === 'inactive' && user.is_active) return false;
+        if (roleFilter !== 'all' && String(user.role || 'user') !== roleFilter) return false;
+
+        if (!keyword) return true;
+
+        const username = String(user.username || '').toLowerCase();
+        const idText = String(user.id || '');
+
+        if (/^\d+$/.test(keyword)) {
+            return idText === keyword || username.includes(keyword);
+        }
+        return username.includes(keyword);
+    });
+
+    if (!keyword || !/^\d+$/.test(keyword)) {
+        return filtered;
+    }
+
+    return filtered.slice().sort((a, b) => {
+        const aExact = String(a.id || '') === keyword ? 0 : 1;
+        const bExact = String(b.id || '') === keyword ? 0 : 1;
+        if (aExact !== bExact) return aExact - bExact;
+        return String(a.username || '').localeCompare(String(b.username || ''), 'zh-CN');
     });
 }
 
@@ -149,13 +174,31 @@ function renderUsersTable(users) {
     ]));
 
     container.appendChild(el('div', { className: 'user-toolbar' }, [
-        el('input', {
-            id: 'user-search-input',
-            className: 'search-input user-search-input',
-            type: 'search',
-            placeholder: '搜索用户名 / ID / 角色 / 状态',
-            value: state.userSearchKeyword || '',
-        }),
+        el('div', { className: 'user-toolbar-main' }, [
+            el('input', {
+                id: 'user-search-input',
+                className: 'search-input user-search-input',
+                type: 'search',
+                placeholder: '输入用户名或用户 ID',
+                value: state.userSearchKeyword || '',
+            }),
+            el('select', {
+                id: 'user-status-filter',
+                className: 'filter-select user-filter-select',
+            }, [
+                el('option', { value: 'all', textContent: '全部状态' }),
+                el('option', { value: 'active', textContent: '启用' }),
+                el('option', { value: 'inactive', textContent: '禁用' }),
+            ]),
+            el('select', {
+                id: 'user-role-filter',
+                className: 'filter-select user-filter-select',
+            }, [
+                el('option', { value: 'all', textContent: '全部角色' }),
+                el('option', { value: 'admin', textContent: '管理员' }),
+                el('option', { value: 'user', textContent: '普通用户' }),
+            ]),
+        ]),
         el('div', {
             className: 'user-search-summary user-summary-pill',
             textContent: `显示 ${users.length} / ${state.users.length} 个用户`,
@@ -167,6 +210,24 @@ function renderUsersTable(users) {
         searchInput.addEventListener('input', (event) => {
             state.userSearchKeyword = event.target.value;
             rerenderUsersTablePreservingSearch();
+        });
+    }
+
+    const statusFilter = container.querySelector('#user-status-filter');
+    if (statusFilter) {
+        statusFilter.value = getUserStatusFilter();
+        statusFilter.addEventListener('change', (event) => {
+            state.userStatusFilter = event.target.value;
+            renderUsersTable(filterUsers(state.users));
+        });
+    }
+
+    const roleFilter = container.querySelector('#user-role-filter');
+    if (roleFilter) {
+        roleFilter.value = getUserRoleFilter();
+        roleFilter.addEventListener('change', (event) => {
+            state.userRoleFilter = event.target.value;
+            renderUsersTable(filterUsers(state.users));
         });
     }
 

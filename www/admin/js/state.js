@@ -31,8 +31,11 @@ let state = {
     users: [],
     usersLoaded: false,
     userSearchKeyword: '',
+    userStatusFilter: 'all',
+    userRoleFilter: 'all',
     invites: [],
     invitesLoaded: false,
+    inviteView: 'active',
 
     overview: {
         ready: false,
@@ -47,6 +50,9 @@ let state = {
         loading: false,
         cookieStatus: null,
         runtimeHealth: null,
+        logView: 'app',
+        appLogs: null,
+        accessLogs: null,
     },
 
     isTransitioning: false,

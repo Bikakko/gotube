@@ -20,7 +20,7 @@ async function showInviteManagement() {
 
 async function loadInvites(forceReload = false) {
     if (state.invitesLoaded && !forceReload) {
-        renderInvitesTable(state.invites);
+        renderInvitesTable();
         return;
     }
 
@@ -33,7 +33,7 @@ async function loadInvites(forceReload = false) {
         const invites = await apiFetch('/invites');
         state.invites = invites;
         state.invitesLoaded = true;
-        renderInvitesTable(invites);
+        renderInvitesTable();
     } catch (err) {
         console.error('加载邀请码失败:', err);
         if (slot) {
@@ -42,18 +42,55 @@ async function loadInvites(forceReload = false) {
     }
 }
 
-function renderInvitesTable(invites) {
+function getInviteView() {
+    return state.inviteView || 'active';
+}
+
+function filterInvitesByView(invites) {
+    const view = getInviteView();
+    if (view === 'archive') {
+        return invites.filter((invite) => String(invite.status || '') !== 'active');
+    }
+    return invites.filter((invite) => String(invite.status || '') === 'active');
+}
+
+function getInviteViewSummary(invites) {
+    const activeCount = invites.filter((invite) => String(invite.status || '') === 'active').length;
+    const archivedCount = invites.length - activeCount;
+    return { activeCount, archivedCount };
+}
+
+function renderInviteViewTabs(summary) {
+    const currentView = getInviteView();
+    const tabs = [
+        { value: 'active', label: '可用邀请码', count: summary.activeCount },
+        { value: 'archive', label: '归档记录', count: summary.archivedCount },
+    ];
+
+    return el('div', { className: 'invite-view-tabs' }, tabs.map((tab) => el('button', {
+        type: 'button',
+        className: `invite-view-tab${currentView === tab.value ? ' active' : ''}`,
+        textContent: `${tab.label} ${tab.count}`,
+        onClick: () => {
+            if (state.inviteView === tab.value) return;
+            state.inviteView = tab.value;
+            renderInvitesTable();
+        },
+    })));
+}
+
+function renderInvitesTable() {
     const slot = $('#invites-table-slot');
     if (!slot) return;
+    const invites = state.invites || [];
+    const filteredInvites = filterInvitesByView(invites);
+    const summary = getInviteViewSummary(invites);
+    const isArchiveView = getInviteView() === 'archive';
 
     const container = el('div', { className: 'user-table-wrapper invite-table-wrapper' }, [
         el('div', { className: 'admin-section-header' }, [
             el('div', {}, [
                 el('h2', { textContent: '邀请码' }),
-                el('p', {
-                    className: 'info-text',
-                    textContent: '邀请码明文只在创建时显示一次，请当场复制。',
-                }),
             ]),
             el('button', {
                 className: 'btn btn-primary',
@@ -61,45 +98,53 @@ function renderInvitesTable(invites) {
                 onClick: () => showCreateInviteModal(),
             }),
         ]),
+        renderInviteViewTabs(summary),
     ]);
 
-    if (!invites.length) {
-        container.appendChild(el('div', { className: 'empty-state', textContent: '暂无邀请码' }));
+    if (!filteredInvites.length) {
+        container.appendChild(el('div', {
+            className: 'empty-state empty-state-card',
+            textContent: isArchiveView ? '暂无归档邀请码' : '暂无可用邀请码',
+        }));
     } else {
-        container.appendChild(el('table', { className: 'users-table' }, [
-            el('thead', {}, [
-                el('tr', {}, [
-                    el('th', { textContent: 'ID' }),
-                    el('th', { textContent: '状态' }),
-                    el('th', { textContent: '使用次数' }),
-                    el('th', { textContent: '过期时间' }),
-                    el('th', { textContent: '创建时间' }),
-                    el('th', { textContent: '操作' }),
+        container.appendChild(el('div', { className: 'users-table-shell invite-table-shell' }, [
+            el('table', { className: 'users-table' }, [
+                el('thead', {}, [
+                    el('tr', {}, [
+                        el('th', { textContent: 'ID' }),
+                        el('th', { textContent: '状态' }),
+                        el('th', { textContent: '使用次数' }),
+                        el('th', { textContent: '过期时间' }),
+                        el('th', { textContent: '创建时间' }),
+                        el('th', { className: 'invite-actions-head', textContent: '操作' }),
+                    ]),
                 ]),
-            ]),
-            el('tbody', {}, invites.map(invite => el('tr', {}, [
-                el('td', { textContent: invite.id }),
-                el('td', {}, [
-                    el('span', {
-                        className: `status-badge ${invite.status === 'active' ? 'active' : 'inactive'}`,
-                        textContent: formatInviteStatus(invite.status),
+                el('tbody', {}, filteredInvites.map((invite) => el('tr', {}, [
+                    el('td', { textContent: invite.id }),
+                    el('td', {}, [
+                        el('span', {
+                            className: `status-badge ${invite.status === 'active' ? 'active' : 'inactive'}`,
+                            textContent: formatInviteStatus(invite.status),
+                        }),
+                    ]),
+                    el('td', { textContent: `${invite.used_count || 0} / ${invite.max_uses}` }),
+                    el('td', {
+                        textContent: invite.expires_at ? new Date(invite.expires_at).toLocaleString('zh-CN') : '永不过期',
                     }),
-                ]),
-                el('td', { textContent: `${invite.used_count || 0} / ${invite.max_uses}` }),
-                el('td', {
-                    textContent: invite.expires_at ? new Date(invite.expires_at).toLocaleString('zh-CN') : '永不过期',
-                }),
-                el('td', {
-                    textContent: invite.created_at ? new Date(invite.created_at).toLocaleString('zh-CN') : '-',
-                }),
-                el('td', { className: 'user-actions' }, [
-                    invite.is_active ? el('button', {
-                        className: 'action-btn-sm danger',
-                        textContent: '作废',
-                        onClick: () => handleRevokeInvite(invite),
-                    }) : null,
-                ]),
-            ]))),
+                    el('td', {
+                        textContent: invite.created_at ? new Date(invite.created_at).toLocaleString('zh-CN') : '-',
+                    }),
+                    el('td', { className: 'invite-actions-cell' }, [
+                        !isArchiveView && invite.is_active
+                            ? el('button', {
+                                className: 'action-btn-sm danger',
+                                textContent: '作废',
+                                onClick: () => handleRevokeInvite(invite),
+                            })
+                            : el('span', { className: 'invite-actions-placeholder', textContent: '—' }),
+                    ]),
+                ]))),
+            ]),
         ]));
     }
 

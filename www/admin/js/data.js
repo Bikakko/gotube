@@ -143,6 +143,14 @@ async function loadCookiesStatusData() {
     return apiFetch('/cookies/status');
 }
 
+async function loadRuntimeLogsData(logType = 'app') {
+    const params = new URLSearchParams({
+        type: logType,
+        line_limit: '120',
+    });
+    return apiFetch(`/runtime/logs?${params}`);
+}
+
 /**
  * 删除单个视频（入口函数）
  */
@@ -356,6 +364,7 @@ window.loadStats = loadStats;
 window.loadUserLibrary = loadUserLibrary;
 window.loadRuntimeHealth = loadRuntimeHealth;
 window.loadCookiesStatusData = loadCookiesStatusData;
+window.loadRuntimeLogsData = loadRuntimeLogsData;
 window.handleDeleteVideo = handleDeleteVideo;
 window.showDeleteConfirmModal = showDeleteConfirmModal;
 window.handleBatchDelete = handleBatchDelete;

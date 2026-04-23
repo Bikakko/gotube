@@ -10,6 +10,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from dotenv import dotenv_values
+
 from .config import settings
 from .cookie_store import (
     diagnose_cookie_content,
@@ -59,7 +61,7 @@ def collect_runtime_health(
 
     return {
         "project_root": str(root),
-        "git": _git_info(root),
+        "version": _app_version(root),
         "cookie_source": cookie_info["source"],
         "cookie_file_exists": cookie_info["exists"],
         "cookie_file_path": cookie_info["path"],
@@ -70,8 +72,52 @@ def collect_runtime_health(
         "database_writable": database_writable,
         "ffmpeg_available": ffmpeg_info["available"],
         "ffmpeg_version": ffmpeg_info["version"],
+        "ffmpeg_summary": _summarize_command_version(ffmpeg_info["version"], available=ffmpeg_info["available"]),
         "yt_dlp_version": yt_dlp_version,
+        "yt_dlp_summary": yt_dlp_version or "未安装",
         "blockers": blockers,
+    }
+
+
+def read_runtime_logs(
+    *,
+    project_root: Path | None = None,
+    log_path: Path | None = None,
+    log_type: str = "app",
+    line_limit: int = 120,
+) -> dict[str, Any]:
+    root = Path(project_root or settings.project_root).resolve()
+    resolved_log_path = Path(log_path or _resolve_runtime_log_path(root)).resolve()
+    limit = max(1, min(int(line_limit), 300))
+    exists = resolved_log_path.exists()
+    if not exists:
+        return {
+            "type": log_type,
+            "path": str(resolved_log_path),
+            "exists": False,
+            "lines": [],
+        }
+
+    try:
+        lines = resolved_log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return {
+            "type": log_type,
+            "path": str(resolved_log_path),
+            "exists": True,
+            "lines": [],
+        }
+
+    if log_type == "access":
+        filtered = [line for line in lines if _is_access_log_line(line)]
+    else:
+        filtered = [line for line in lines if not _is_access_log_line(line)]
+
+    return {
+        "type": log_type,
+        "path": str(resolved_log_path),
+        "exists": True,
+        "lines": filtered[-limit:],
     }
 
 
@@ -151,19 +197,37 @@ def _yt_dlp_version() -> str:
         return ""
     return __version__
 
-
-def _git_info(project_root: Path) -> dict[str, str]:
-    return {
-        "branch": _git_output(project_root, ["git", "rev-parse", "--abbrev-ref", "HEAD"]),
-        "commit": _git_output(project_root, ["git", "rev-parse", "--short", "HEAD"]),
-    }
-
-
-def _git_output(project_root: Path, args: list[str]) -> str:
+def _app_version(project_root: Path) -> str:
+    version_file = project_root / "VERSION"
     try:
-        result = subprocess.run(args, cwd=project_root, capture_output=True, text=True, timeout=5, check=False)
-    except (OSError, subprocess.SubprocessError):
-        return ""
-    if result.returncode != 0:
-        return ""
-    return result.stdout.strip()
+        return version_file.read_text(encoding="utf-8").strip() or "--"
+    except OSError:
+        return "--"
+
+
+def _summarize_command_version(version: str, *, available: bool) -> str:
+    if not available:
+        return "未安装"
+    if not version:
+        return "已安装"
+    parts = version.strip().split()
+    if len(parts) >= 3:
+        return parts[2]
+    if len(parts) >= 2:
+        return parts[1]
+    return "已安装"
+
+
+def _resolve_runtime_log_path(project_root: Path) -> Path:
+    env_file = project_root / ".env"
+    if env_file.exists():
+        raw = dotenv_values(str(env_file))
+        configured = (raw.get("GOTUBE_LOG_FILE") or "").strip()
+        if configured:
+            path = Path(configured)
+            return path if path.is_absolute() else (project_root / path)
+    return project_root / "server.log"
+
+
+def _is_access_log_line(line: str) -> bool:
+    return line.startswith('time="[') and ' method="' in line and ' status=' in line

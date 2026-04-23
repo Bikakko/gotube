@@ -164,6 +164,46 @@ function renderSystemSection() {
                     el('div', { className: 'loading', textContent: '加载 Cookie 状态中' }),
                 ]),
             ]),
+            el('div', { className: 'system-block system-log-block' }, [
+                el('div', { className: 'system-block-header' }, [
+                    el('div', {}, [
+                        el('h3', { textContent: '运行日志' }),
+                    ]),
+                    el('div', { className: 'system-block-actions' }, [
+                        el('button', {
+                            type: 'button',
+                            className: 'btn btn-secondary',
+                            textContent: '刷新日志',
+                            onClick: () => window.loadSystemPage(true),
+                        }),
+                        el('button', {
+                            type: 'button',
+                            className: 'btn btn-secondary',
+                            textContent: '复制日志',
+                            onClick: () => window.copySystemLogView(),
+                        }),
+                    ]),
+                ]),
+                el('div', { className: 'invite-view-tabs system-log-tabs' }, [
+                    el('button', {
+                        type: 'button',
+                        className: 'invite-view-tab active',
+                        id: 'system-log-tab-app',
+                        textContent: '应用日志',
+                        onClick: () => window.switchSystemLogView('app'),
+                    }),
+                    el('button', {
+                        type: 'button',
+                        className: 'invite-view-tab',
+                        id: 'system-log-tab-access',
+                        textContent: '访问日志',
+                        onClick: () => window.switchSystemLogView('access'),
+                    }),
+                ]),
+                el('div', { id: 'system-log-slot' }, [
+                    el('div', { className: 'loading', textContent: '加载运行日志中' }),
+                ]),
+            ]),
         ]),
     ]));
 }

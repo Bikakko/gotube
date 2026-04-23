@@ -18,7 +18,11 @@ class AdminUsersFrontendTests(unittest.TestCase):
         self.assertIn("className: 'user-search-summary user-summary-pill'", source)
         self.assertIn("textContent: '用户'", source)
         self.assertIn("textContent: '新增用户'", source)
-        self.assertIn("'搜索用户名 / ID / 角色 / 状态'", source)
+        self.assertIn("'输入用户名或用户 ID'", source)
+        self.assertIn("textContent: '全部状态'", source)
+        self.assertIn("textContent: '全部角色'", source)
+        self.assertIn("state.userStatusFilter", source)
+        self.assertIn("state.userRoleFilter", source)
 
     def test_users_css_styles_management_table_shell(self):
         css = read_text("www/admin/css/admin.css")
@@ -28,6 +32,8 @@ class AdminUsersFrontendTests(unittest.TestCase):
         self.assertIn(".user-name-cell {", css)
         self.assertIn(".user-summary-pill {", css)
         self.assertIn(".user-actions-compact {", css)
+        self.assertIn(".user-toolbar-main {", css)
+        self.assertIn(".user-filter-select {", css)
 
 
 if __name__ == "__main__":
