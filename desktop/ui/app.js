@@ -30,6 +30,12 @@ async function saveCookie() {
     setText('#tools-status', result.message);
 }
 
+async function openDownloadDir() {
+    const bridge = await api();
+    const result = await bridge.open_download_dir();
+    setText('#tools-status', result.ok ? `已打开：${result.path}` : '打开保存目录失败');
+}
+
 async function detectTools() {
     const bridge = await api();
     const result = await bridge.detect_tools();
@@ -101,6 +107,7 @@ async function refreshLogs() {
 
 document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('#save-config-button').addEventListener('click', saveConfig);
+    document.querySelector('#open-download-dir-button').addEventListener('click', openDownloadDir);
     document.querySelector('#save-cookie-button').addEventListener('click', saveCookie);
     document.querySelector('#detect-tools-button').addEventListener('click', detectTools);
     document.querySelector('#upgrade-ytdlp-button').addEventListener('click', upgradeYtdlp);

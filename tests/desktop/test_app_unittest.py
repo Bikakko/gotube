@@ -77,6 +77,33 @@ class DesktopAppTests(unittest.TestCase):
             self.assertEqual("https://example.com/video", tasks[0]["url"])
             self.assertIn(tasks[0]["status"], {"pending", "running"})
 
+    def test_open_download_dir_creates_directory_and_uses_opener(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+
+            opened = []
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                ),
+                folder_opener=lambda path: opened.append(path),
+            )
+
+            result = api.open_download_dir()
+
+            self.assertTrue(result["ok"])
+            self.assertTrue(Path(result["path"]).exists())
+            self.assertEqual([Path(result["path"])], opened)
+
+    def test_desktop_ui_has_open_download_dir_button(self):
+        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
+        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("open-download-dir-button", ui)
+        self.assertIn("open_download_dir", script)
+
 
 if __name__ == "__main__":
     unittest.main()

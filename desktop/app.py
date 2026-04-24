@@ -20,11 +20,13 @@ class DesktopApi:
         *,
         config_store: DesktopConfigStore | None = None,
         downloader_factory: Callable[[DesktopConfig], DesktopDownloader] | None = None,
+        folder_opener: Callable[[Path], None] | None = None,
     ) -> None:
         self.config_store = config_store or DesktopConfigStore()
         self.config = self.config_store.load()
         self.cookie_store = DesktopCookieStore(self.config_store.config_dir)
         self.downloader_factory = downloader_factory or self._create_downloader
+        self.folder_opener = folder_opener or self._open_folder
         self.tasks: list[DesktopTask] = []
         self.logs: list[str] = []
         self._lock = threading.Lock()
@@ -46,6 +48,11 @@ class DesktopApi:
         self.config.ffmpeg_path = Path(path) if path else None
         self.config_store.save(self.config)
         return self.get_config()
+
+    def open_download_dir(self) -> dict:
+        self.config.download_dir.mkdir(parents=True, exist_ok=True)
+        self.folder_opener(self.config.download_dir)
+        return {"ok": True, "path": str(self.config.download_dir)}
 
     def save_cookie(self, content: str) -> dict:
         result = self.cookie_store.save_manual_cookie(content)
@@ -124,6 +131,9 @@ class DesktopApi:
             cookies_file=config.cookies_file,
             ffmpeg_path=config.ffmpeg_path,
         )
+
+    def _open_folder(self, path: Path) -> None:
+        os.startfile(path)  # type: ignore[attr-defined]
 
 
 def _tool_to_dict(status) -> dict:
