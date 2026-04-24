@@ -5,19 +5,29 @@ from __future__ import annotations
 import os
 import threading
 from pathlib import Path
+from typing import Callable
 
 from .core.config import DesktopConfig, DesktopConfigStore
 from .core.cookies import DesktopCookieStore
 from .core.downloader import DesktopDownloader
+from .core.tasks import DesktopTask
 from .core.tools import detect_ffmpeg, detect_ytdlp, upgrade_ytdlp
 
 
 class DesktopApi:
-    def __init__(self, *, config_store: DesktopConfigStore | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        config_store: DesktopConfigStore | None = None,
+        downloader_factory: Callable[[DesktopConfig], DesktopDownloader] | None = None,
+    ) -> None:
         self.config_store = config_store or DesktopConfigStore()
         self.config = self.config_store.load()
         self.cookie_store = DesktopCookieStore(self.config_store.config_dir)
-        self.tasks = []
+        self.downloader_factory = downloader_factory or self._create_downloader
+        self.tasks: list[DesktopTask] = []
+        self.logs: list[str] = []
+        self._lock = threading.Lock()
 
     def get_config(self) -> dict:
         return {
@@ -66,21 +76,29 @@ class DesktopApi:
         }
 
     def create_download(self, url: str) -> dict:
-        downloader = DesktopDownloader(
-            download_dir=self.config.download_dir,
-            cookies_file=self.config.cookies_file,
-            ffmpeg_path=self.config.ffmpeg_path,
-        )
+        task = DesktopTask.create(url=url)
+        with self._lock:
+            self.tasks.append(task)
+            self.logs.append(f"下载任务已创建：{url}")
 
         def run() -> None:
-            task = downloader.download(url)
-            self.tasks.append(task)
+            task.mark_running()
+            downloader = self.downloader_factory(self.config)
+            try:
+                finished_task = downloader.download(url)
+                _copy_task_state(target=task, source=finished_task)
+                self.logs.append(f"下载任务已完成：{url}")
+            except Exception as exc:
+                task.mark_failed(str(exc))
+                self.logs.append(f"下载任务失败：{url}，{exc}")
 
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
-        return {"ok": True, "message": "下载任务已开始"}
+        return {"ok": True, "message": "下载任务已开始", "task_id": task.id}
 
     def get_tasks(self) -> list[dict]:
+        with self._lock:
+            tasks = list(self.tasks)
         return [
             {
                 "id": task.id,
@@ -92,11 +110,20 @@ class DesktopApi:
                 "file_path": task.file_path,
                 "error": task.error,
             }
-            for task in self.tasks
+            for task in tasks
         ]
 
     def get_logs(self) -> dict:
-        return {"lines": []}
+        with self._lock:
+            lines = list(self.logs[-200:])
+        return {"lines": lines}
+
+    def _create_downloader(self, config: DesktopConfig) -> DesktopDownloader:
+        return DesktopDownloader(
+            download_dir=config.download_dir,
+            cookies_file=config.cookies_file,
+            ffmpeg_path=config.ffmpeg_path,
+        )
 
 
 def _tool_to_dict(status) -> dict:
@@ -108,6 +135,16 @@ def _tool_to_dict(status) -> dict:
         "source": status.source,
         "message": status.message,
     }
+
+
+def _copy_task_state(*, target: DesktopTask, source: DesktopTask) -> None:
+    target.status = source.status
+    target.percent = source.percent
+    target.speed = source.speed
+    target.eta = source.eta
+    target.file_path = source.file_path
+    target.error = source.error
+    target.updated_at = source.updated_at
 
 
 def main() -> None:

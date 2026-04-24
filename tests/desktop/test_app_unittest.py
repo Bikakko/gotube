@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from threading import Event
 
 
 class DesktopAppTests(unittest.TestCase):
@@ -26,6 +27,37 @@ class DesktopAppTests(unittest.TestCase):
         self.assertIn("download-url", ui)
         self.assertIn("settings-panel", ui)
         self.assertIn("logs-panel", ui)
+
+    def test_create_download_registers_task_before_background_finish(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+            from desktop.core.tasks import DesktopTask
+
+            release = Event()
+
+            class BlockingDownloader:
+                def download(self, url):
+                    release.wait(timeout=2)
+                    task = DesktopTask.create(url=url)
+                    task.mark_completed(file_path="video.mp4")
+                    return task
+
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                ),
+                downloader_factory=lambda config: BlockingDownloader(),
+            )
+
+            api.create_download("https://example.com/video")
+            tasks = api.get_tasks()
+            release.set()
+
+            self.assertEqual(1, len(tasks))
+            self.assertEqual("https://example.com/video", tasks[0]["url"])
+            self.assertIn(tasks[0]["status"], {"pending", "running"})
 
 
 if __name__ == "__main__":
