@@ -89,7 +89,13 @@ python -m pip install -U yt-dlp
 
 ## 打包 Windows 可执行文件
 
-先安装桌面依赖，然后执行：
+先安装桌面依赖，然后执行桌面版自检：
+
+```powershell
+python scripts/desktop_check.py
+```
+
+自检会运行桌面版单元测试、前端脚本语法检查和 Python 编译检查。自检通过后再执行打包：
 
 ```powershell
 pyinstaller --clean --noconfirm --distpath desktop_dist --workpath desktop_build desktop/packaging/gotube-desktop.spec

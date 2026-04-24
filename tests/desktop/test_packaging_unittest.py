@@ -24,6 +24,15 @@ class DesktopPackagingTests(unittest.TestCase):
         self.assertIn("desktop_build/", ignore)
         self.assertIn("desktop_dist/", ignore)
 
+    def test_desktop_check_script_runs_required_verifications(self):
+        script = Path("scripts/desktop_check.py").read_text(encoding="utf-8")
+
+        self.assertIn("unittest", script)
+        self.assertIn("tests/desktop", script)
+        self.assertIn("node", script)
+        self.assertIn("--check", script)
+        self.assertIn("py_compile", script)
+
 
 if __name__ == "__main__":
     unittest.main()
