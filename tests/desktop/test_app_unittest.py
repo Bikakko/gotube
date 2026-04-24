@@ -46,6 +46,13 @@ class DesktopAppTests(unittest.TestCase):
         self.assertIn("get_tasks", script)
         self.assertIn("setInterval(refreshTasks", script)
 
+    def test_desktop_ui_has_open_download_dir_button(self):
+        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
+        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("open-download-dir-button", ui)
+        self.assertIn("open_download_dir", script)
+
     def test_create_download_registers_task_before_background_finish(self):
         with tempfile.TemporaryDirectory() as tmp:
             from desktop.app import DesktopApi
@@ -113,13 +120,6 @@ class DesktopAppTests(unittest.TestCase):
             logs = reloaded_api.get_logs()
 
             self.assertTrue(any("下载任务已创建" in line for line in logs["lines"]))
-
-    def test_desktop_ui_has_open_download_dir_button(self):
-        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
-        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
-
-        self.assertIn("open-download-dir-button", ui)
-        self.assertIn("open_download_dir", script)
 
 
 if __name__ == "__main__":

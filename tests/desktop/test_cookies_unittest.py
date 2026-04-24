@@ -26,6 +26,7 @@ class DesktopCookieTests(unittest.TestCase):
             result = store.save_manual_cookie(content)
 
             self.assertTrue(result.ok)
+            self.assertEqual("Cookie 已保存", result.message)
             self.assertEqual(store.cookie_file.read_text(encoding="utf-8"), content)
 
     def test_delete_cookie_file_removes_saved_cookie(self):
@@ -37,6 +38,7 @@ class DesktopCookieTests(unittest.TestCase):
             result = store.delete_cookie_file()
 
             self.assertTrue(result.ok)
+            self.assertEqual("Cookie 已删除", result.message)
             self.assertFalse(store.cookie_file.exists())
 
     def test_import_from_browser_returns_structured_result(self):
@@ -48,6 +50,7 @@ class DesktopCookieTests(unittest.TestCase):
 
             self.assertIsInstance(result.ok, bool)
             self.assertTrue(result.message)
+            self.assertIn("浏览器 Cookie 导入", result.message)
 
 
 if __name__ == "__main__":
