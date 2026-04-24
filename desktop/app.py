@@ -10,6 +10,7 @@ from typing import Callable
 from .core.config import DesktopConfig, DesktopConfigStore
 from .core.cookies import DesktopCookieStore
 from .core.downloader import DesktopDownloader
+from .core.logs import DesktopLogStore
 from .core.tasks import DesktopTask
 from .core.tools import detect_ffmpeg, detect_ytdlp, upgrade_ytdlp
 
@@ -25,10 +26,10 @@ class DesktopApi:
         self.config_store = config_store or DesktopConfigStore()
         self.config = self.config_store.load()
         self.cookie_store = DesktopCookieStore(self.config_store.config_dir)
+        self.log_store = DesktopLogStore(self.config_store.config_dir / "desktop.log")
         self.downloader_factory = downloader_factory or self._create_downloader
         self.folder_opener = folder_opener or self._open_folder
         self.tasks: list[DesktopTask] = []
-        self.logs: list[str] = []
         self._lock = threading.Lock()
 
     def get_config(self) -> dict:
@@ -86,7 +87,7 @@ class DesktopApi:
         task = DesktopTask.create(url=url)
         with self._lock:
             self.tasks.append(task)
-            self.logs.append(f"下载任务已创建：{url}")
+        self.log_store.append(f"下载任务已创建：{url}")
 
         def run() -> None:
             task.mark_running()
@@ -94,10 +95,10 @@ class DesktopApi:
             try:
                 finished_task = downloader.download(url)
                 _copy_task_state(target=task, source=finished_task)
-                self.logs.append(f"下载任务已完成：{url}")
+                self.log_store.append(f"下载任务已完成：{url}")
             except Exception as exc:
                 task.mark_failed(str(exc))
-                self.logs.append(f"下载任务失败：{url}，{exc}")
+                self.log_store.append(f"下载任务失败：{url}，{exc}")
 
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
@@ -121,9 +122,7 @@ class DesktopApi:
         ]
 
     def get_logs(self) -> dict:
-        with self._lock:
-            lines = list(self.logs[-200:])
-        return {"lines": lines}
+        return {"lines": self.log_store.read_recent()}
 
     def _create_downloader(self, config: DesktopConfig) -> DesktopDownloader:
         return DesktopDownloader(

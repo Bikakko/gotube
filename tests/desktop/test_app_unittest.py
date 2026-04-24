@@ -97,6 +97,23 @@ class DesktopAppTests(unittest.TestCase):
             self.assertTrue(Path(result["path"]).exists())
             self.assertEqual([Path(result["path"])], opened)
 
+    def test_desktop_api_reads_logs_from_store(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+
+            store = DesktopConfigStore(
+                appdata_dir=Path(tmp) / "AppData",
+                user_profile=Path(tmp) / "User",
+            )
+            api = DesktopApi(config_store=store)
+
+            api.create_download("https://example.com/video")
+            reloaded_api = DesktopApi(config_store=store)
+            logs = reloaded_api.get_logs()
+
+            self.assertTrue(any("下载任务已创建" in line for line in logs["lines"]))
+
     def test_desktop_ui_has_open_download_dir_button(self):
         ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
         script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
