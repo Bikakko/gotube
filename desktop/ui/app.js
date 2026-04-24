@@ -122,6 +122,12 @@ async function cancelTask(taskId) {
     await refreshTasks();
 }
 
+async function openTaskLocation(taskId) {
+    const bridge = await api();
+    const result = await bridge.open_task_location(taskId);
+    setText('#log-output', result.message);
+}
+
 async function refreshTasks() {
     const bridge = await api();
     const tasks = await bridge.get_tasks();
@@ -165,6 +171,14 @@ function renderTasks(tasks) {
             cancelButton.textContent = '取消';
             cancelButton.addEventListener('click', () => cancelTask(task.id));
             card.append(cancelButton);
+        }
+        if (task.status === 'completed') {
+            const openButton = document.createElement('button');
+            openButton.className = 'open-task-location-button';
+            openButton.type = 'button';
+            openButton.textContent = '打开位置';
+            openButton.addEventListener('click', () => openTaskLocation(task.id));
+            card.append(openButton);
         }
         list.append(card);
     }

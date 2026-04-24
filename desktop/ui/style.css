@@ -141,7 +141,8 @@ label {
     overflow-wrap: anywhere;
 }
 
-.cancel-task-button {
+.cancel-task-button,
+.open-task-location-button {
     margin-top: 10px;
 }
 

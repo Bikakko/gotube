@@ -254,6 +254,48 @@ class DesktopAppTests(unittest.TestCase):
             self.assertTrue(Path(result["path"]).exists())
             self.assertEqual([Path(result["path"])], opened)
 
+    def test_open_task_location_uses_completed_file_parent(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+            from desktop.core.tasks import DesktopTask
+
+            opened = []
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                ),
+                folder_opener=lambda path: opened.append(path),
+            )
+            task = DesktopTask.create(url="https://example.com/video")
+            file_path = Path(tmp) / "downloads" / "video.mp4"
+            task.mark_completed(file_path=str(file_path))
+            api.tasks.append(task)
+
+            result = api.open_task_location(task.id)
+
+            self.assertTrue(result["ok"])
+            self.assertEqual([file_path.parent], opened)
+
+    def test_open_task_location_rejects_unfinished_task(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+            from desktop.core.tasks import DesktopTask
+
+            api = DesktopApi(config_store=DesktopConfigStore(
+                appdata_dir=Path(tmp) / "AppData",
+                user_profile=Path(tmp) / "User",
+            ))
+            task = DesktopTask.create(url="https://example.com/video")
+            task.mark_running()
+            api.tasks.append(task)
+
+            result = api.open_task_location(task.id)
+
+            self.assertFalse(result["ok"])
+
     def test_desktop_api_reads_logs_from_store(self):
         with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
@@ -326,6 +368,12 @@ class DesktopAppTests(unittest.TestCase):
 
         self.assertIn("cancel_task", script)
         self.assertIn("cancel-task-button", script)
+
+    def test_desktop_ui_can_open_completed_task_location(self):
+        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("open_task_location", script)
+        self.assertIn("open-task-location-button", script)
 
     def test_desktop_ui_localizes_task_status(self):
         script = Path("desktop/ui/app.js").read_text(encoding="utf-8")

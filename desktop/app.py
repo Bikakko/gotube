@@ -68,6 +68,19 @@ class DesktopApi:
         self.folder_opener(self.config.download_dir)
         return {"ok": True, "path": str(self.config.download_dir)}
 
+    def open_task_location(self, task_id: str) -> dict:
+        with self._lock:
+            task = next((item for item in self.tasks if item.id == task_id), None)
+        if task is None:
+            return {"ok": False, "message": "任务不存在"}
+        if task.status != "completed" or not task.file_path:
+            return {"ok": False, "message": "任务尚未完成"}
+
+        folder = Path(task.file_path).parent
+        folder.mkdir(parents=True, exist_ok=True)
+        self.folder_opener(folder)
+        return {"ok": True, "message": "已打开文件位置", "path": str(folder)}
+
     def save_cookie(self, content: str) -> dict:
         result = self.cookie_store.save_manual_cookie(content)
         if result.ok:
