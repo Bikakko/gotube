@@ -19,10 +19,15 @@ async function loadConfig() {
 
 async function saveConfig() {
     const bridge = await api();
-    await bridge.set_download_dir(document.querySelector('#download-dir').value.trim());
+    const result = await bridge.set_download_dir(document.querySelector('#download-dir').value.trim());
+    if (!result.ok) {
+        setText('#tools-status', result.message);
+        await loadConfig();
+        return;
+    }
     await bridge.set_ffmpeg_path(document.querySelector('#ffmpeg-path').value.trim());
     await loadConfig();
-    setText('#tools-status', '设置已保存');
+    setText('#tools-status', result.message);
 }
 
 async function saveCookie() {

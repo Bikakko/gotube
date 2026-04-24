@@ -24,6 +24,22 @@ class DesktopAppTests(unittest.TestCase):
             self.assertIn("download_dir", config)
             self.assertTrue(config["download_dir"].endswith("Downloads\\GoTube"))
 
+    def test_set_download_dir_rejects_blank_path(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+
+            api = DesktopApi(config_store=DesktopConfigStore(
+                appdata_dir=Path(tmp) / "AppData",
+                user_profile=Path(tmp) / "User",
+            ))
+            before = api.get_config()["download_dir"]
+
+            result = api.set_download_dir("  ")
+
+            self.assertFalse(result["ok"])
+            self.assertEqual(before, api.get_config()["download_dir"])
+
     def test_desktop_ui_contains_required_sections(self):
         ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
 

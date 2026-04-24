@@ -41,9 +41,12 @@ class DesktopApi:
         }
 
     def set_download_dir(self, path: str) -> dict:
-        self.config.download_dir = Path(path)
+        clean_path = path.strip()
+        if not clean_path:
+            return {"ok": False, "message": "保存位置不能为空", **self.get_config()}
+        self.config.download_dir = Path(clean_path)
         self.config_store.save(self.config)
-        return self.get_config()
+        return {"ok": True, "message": "保存位置已更新", **self.get_config()}
 
     def set_ffmpeg_path(self, path: str) -> dict:
         self.config.ffmpeg_path = Path(path) if path else None
