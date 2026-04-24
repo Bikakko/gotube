@@ -447,6 +447,20 @@ class DesktopAppTests(unittest.TestCase):
         self.assertIn("已完成", script)
         self.assertIn("已取消", script)
 
+    def test_desktop_ui_uses_fixed_dashboard_layout_without_page_scroll(self):
+        style = Path("desktop/ui/style.css").read_text(encoding="utf-8")
+        app = Path("desktop/app.py").read_text(encoding="utf-8")
+
+        self.assertIn("overflow: hidden", style)
+        self.assertIn("height: 100vh", style)
+        self.assertIn("grid-template-columns", style)
+        self.assertIn("grid-template-rows", style)
+        self.assertIn(".download-panel", style)
+        self.assertIn(".task-list", style)
+        self.assertIn("min-height: 0", style)
+        self.assertIn("overflow: auto", style)
+        self.assertIn("height=720", app)
+
 
 if __name__ == "__main__":
     unittest.main()
