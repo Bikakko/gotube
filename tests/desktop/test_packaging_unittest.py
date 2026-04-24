@@ -34,6 +34,12 @@ class DesktopPackagingTests(unittest.TestCase):
         self.assertIn("--check", script)
         self.assertIn("py_compile", script)
 
+    def test_desktop_entrypoint_uses_absolute_package_imports_for_pyinstaller(self):
+        script = Path("desktop/app.py").read_text(encoding="utf-8")
+
+        self.assertNotIn("from .core", script)
+        self.assertIn("from desktop.core.config", script)
+
     def test_desktop_build_script_runs_check_before_pyinstaller(self):
         script = Path("scripts/desktop_build.py").read_text(encoding="utf-8")
 

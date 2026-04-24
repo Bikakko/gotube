@@ -8,13 +8,13 @@ import threading
 from pathlib import Path
 from typing import Callable
 
-from .core.config import DesktopConfig, DesktopConfigStore
-from .core.cookies import DesktopCookieStore
-from .core.downloader import DesktopDownloader
-from .core.environment import collect_environment_report, has_missing_required_checks
-from .core.logs import DesktopLogStore
-from .core.tasks import DesktopTask
-from .core.tools import detect_ffmpeg, detect_ytdlp, upgrade_ytdlp
+from desktop.core.config import DesktopConfig, DesktopConfigStore
+from desktop.core.cookies import DesktopCookieStore
+from desktop.core.downloader import DesktopDownloader
+from desktop.core.environment import collect_environment_report, has_missing_required_checks
+from desktop.core.logs import DesktopLogStore
+from desktop.core.tasks import DesktopTask
+from desktop.core.tools import detect_ffmpeg, detect_ytdlp, upgrade_ytdlp
 
 
 class DesktopApi:
