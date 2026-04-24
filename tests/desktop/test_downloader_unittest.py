@@ -79,6 +79,30 @@ class DesktopDownloaderTests(unittest.TestCase):
 
             self.assertEqual("canceled", task.status)
 
+    def test_cleanup_partial_downloads_removes_temp_artifacts_only(self):
+        with workspace_tempdir() as tmp:
+            from desktop.core.downloader import DesktopDownloader
+
+            root = Path(tmp)
+            keep = root / "video.mp4"
+            part = root / "video.mp4.part"
+            ytdl = root / "video.mp4.ytdl"
+            nested_part = root / "nested" / "audio.m4a.part"
+            nested_part.parent.mkdir()
+            keep.write_text("keep", encoding="utf-8")
+            part.write_text("part", encoding="utf-8")
+            ytdl.write_text("ytdl", encoding="utf-8")
+            nested_part.write_text("part", encoding="utf-8")
+
+            downloader = DesktopDownloader(download_dir=root)
+            removed = downloader.cleanup_partial_downloads()
+
+            self.assertEqual(3, removed)
+            self.assertTrue(keep.exists())
+            self.assertFalse(part.exists())
+            self.assertFalse(ytdl.exists())
+            self.assertFalse(nested_part.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -147,6 +147,9 @@ class DesktopAppTests(unittest.TestCase):
             release = Event()
 
             class SlowDownloader:
+                def __init__(self):
+                    self.cleaned = False
+
                 def download(self, url, on_progress=None, should_cancel=None):
                     task = DesktopTask.create(url=url)
                     task.mark_running()
@@ -162,12 +165,17 @@ class DesktopAppTests(unittest.TestCase):
                     task.mark_completed(file_path="video.mp4")
                     return task
 
+                def cleanup_partial_downloads(self):
+                    self.cleaned = True
+                    return 2
+
+            downloader = SlowDownloader()
             api = DesktopApi(
                 config_store=DesktopConfigStore(
                     appdata_dir=Path(tmp) / "AppData",
                     user_profile=Path(tmp) / "User",
                 ),
-                downloader_factory=lambda config: SlowDownloader(),
+                downloader_factory=lambda config: downloader,
             )
 
             created = api.create_download("https://example.com/video")
@@ -179,6 +187,8 @@ class DesktopAppTests(unittest.TestCase):
             self.assertTrue(cancel_result["ok"])
             self.assertEqual("canceled", api.get_tasks()[0]["status"])
             self.assertEqual("", api.get_tasks()[0]["file_path"])
+            self.assertTrue(downloader.cleaned)
+            self.assertTrue(any("已清理临时文件：2" in line for line in api.get_logs()["lines"]))
 
     def test_failed_download_is_logged_as_failed(self):
         with workspace_tempdir() as tmp:

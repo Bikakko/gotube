@@ -130,6 +130,9 @@ class DesktopApi:
                     if task.id in self.canceled_task_ids:
                         task.mark_canceled()
                         self.log_store.append(f"下载任务已取消：{url}")
+                        removed = _cleanup_partial_downloads(downloader)
+                        if removed:
+                            self.log_store.append(f"已清理临时文件：{removed}")
                         return
                     _copy_task_state(target=task, source=finished_task)
                 if task.status == "completed":
@@ -223,6 +226,13 @@ def _download_with_supported_args(
     if "should_cancel" in params:
         kwargs["should_cancel"] = should_cancel
     return downloader.download(url, **kwargs)
+
+
+def _cleanup_partial_downloads(downloader) -> int:
+    cleanup = getattr(downloader, "cleanup_partial_downloads", None)
+    if not callable(cleanup):
+        return 0
+    return int(cleanup() or 0)
 
 
 def main() -> None:

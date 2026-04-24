@@ -17,6 +17,8 @@ class DownloadCanceled(Exception):
 
 
 class DesktopDownloader:
+    PARTIAL_SUFFIXES = (".part", ".ytdl", ".temp", ".tmp")
+
     def __init__(
         self,
         *,
@@ -79,6 +81,7 @@ class DesktopDownloader:
             return task
         except DownloadCanceled:
             task.mark_canceled()
+            self.cleanup_partial_downloads()
             if on_progress:
                 on_progress(task)
             return task
@@ -113,3 +116,19 @@ class DesktopDownloader:
                 task.update_progress(percent=100.0)
 
         return hook
+
+    def cleanup_partial_downloads(self) -> int:
+        if not self.download_dir.exists():
+            return 0
+
+        removed = 0
+        for path in self.download_dir.rglob("*"):
+            if not path.is_file():
+                continue
+            if path.name.lower().endswith(self.PARTIAL_SUFFIXES):
+                try:
+                    path.unlink()
+                    removed += 1
+                except OSError:
+                    continue
+        return removed
