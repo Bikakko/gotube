@@ -53,14 +53,25 @@ python -m desktop.app
 
 ## Cookie 管理
 
-桌面版支持手动保存 Netscape Cookie 文本。推荐从浏览器扩展导出 Cookie 后粘贴到桌面版设置区域。
+桌面版支持两种 Cookie 使用方式：
+
+- 手动保存 Netscape Cookie 文本。
+- 设置浏览器 Cookie 来源，由 `yt-dlp` 在下载时读取 Edge、Chrome 或 Firefox 的 Cookie。
+
+手动 Cookie 文件优先级更高。如果已经保存了手动 Cookie，下载时会优先使用手动 Cookie；只有没有手动 Cookie 文件时，才会使用浏览器 Cookie 来源。
+
+推荐流程：
+
+1. 优先尝试“浏览器 Cookie 来源”，选择当前已经登录视频网站的浏览器。
+2. 如果浏览器来源不可用，再从浏览器扩展导出 Netscape Cookie 文本并粘贴保存。
+3. Cookie 失效或需要更换账号时，先点击“删除 Cookie”，再重新保存或重新选择浏览器来源。
 
 注意事项：
 
 - Cookie 只保存在当前 Windows 用户的 GoTube Desktop 本地数据目录。
 - Cookie 不会写回项目根目录的 `cookies.txt`。
 - Cookie 内容必须是 Netscape 格式，否则会被拒绝。
-- 浏览器 Cookie 导入目前是占位能力，后续版本再接入实际导入流程。
+- 浏览器 Cookie 来源依赖 `yt-dlp` 的浏览器 Cookie 读取能力；如果浏览器正在运行或系统权限限制导致读取失败，需要关闭浏览器后重试，或改用手动 Cookie。
 
 ## ffmpeg 与 yt-dlp
 

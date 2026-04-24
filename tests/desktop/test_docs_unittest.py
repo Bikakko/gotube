@@ -10,6 +10,8 @@ class DesktopDocsTests(unittest.TestCase):
         self.assertIn("python -m desktop.app", doc)
         self.assertIn("desktop/packaging/gotube-desktop.spec", doc)
         self.assertIn("Cookie", doc)
+        self.assertIn("删除 Cookie", doc)
+        self.assertIn("浏览器 Cookie 来源", doc)
         self.assertIn("ffmpeg", doc)
         self.assertIn("yt-dlp", doc)
 
