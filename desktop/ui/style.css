@@ -40,6 +40,18 @@ h2 {
     font-size: 20px;
 }
 
+.title-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.app-version {
+    color: var(--muted);
+    font-size: 13px;
+}
+
 .download-row,
 .button-row {
     display: flex;

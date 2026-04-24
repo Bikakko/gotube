@@ -24,6 +24,21 @@ class DesktopAppTests(unittest.TestCase):
             self.assertIn("download_dir", config)
             self.assertTrue(config["download_dir"].endswith("Downloads\\GoTube"))
 
+    def test_desktop_api_returns_version(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+
+            api = DesktopApi(config_store=DesktopConfigStore(
+                appdata_dir=Path(tmp) / "AppData",
+                user_profile=Path(tmp) / "User",
+            ))
+
+            info = api.get_app_info()
+
+            self.assertIn("version", info)
+            self.assertTrue(info["version"])
+
     def test_set_download_dir_rejects_blank_path(self):
         with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
@@ -46,6 +61,7 @@ class DesktopAppTests(unittest.TestCase):
         self.assertIn("download-url", ui)
         self.assertIn("settings-panel", ui)
         self.assertIn("logs-panel", ui)
+        self.assertIn("app-version", ui)
 
     def test_desktop_ui_uses_clear_labels_and_deemphasizes_ffmpeg(self):
         ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")

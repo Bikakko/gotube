@@ -42,6 +42,12 @@ async function loadConfig() {
     document.querySelector('#browser-cookie-source').value = config.browser_cookie_source || 'edge';
 }
 
+async function loadAppInfo() {
+    const bridge = await api();
+    const info = await bridge.get_app_info();
+    setText('#app-version', `v${info.version || 'unknown'}`);
+}
+
 async function saveConfig() {
     const bridge = await api();
     const result = await bridge.set_download_dir(document.querySelector('#download-dir').value.trim());
@@ -181,6 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('#download-button').addEventListener('click', createDownload);
 
     loadConfig().catch((error) => setText('#log-output', error.message));
+    loadAppInfo().catch(() => {});
     refreshTasks().catch((error) => setText('#log-output', error.message));
     refreshLogs().catch(() => {});
     setInterval(refreshTasks, 1200);

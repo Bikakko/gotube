@@ -42,6 +42,14 @@ class DesktopApi:
             "browser_cookie_source": self.config.browser_cookie_source or "",
         }
 
+    def get_app_info(self) -> dict:
+        version_file = Path(__file__).resolve().parents[1] / "VERSION"
+        try:
+            version = version_file.read_text(encoding="utf-8").strip()
+        except OSError:
+            version = "unknown"
+        return {"name": "GoTube Desktop", "version": version or "unknown"}
+
     def set_download_dir(self, path: str) -> dict:
         clean_path = path.strip()
         if not clean_path:
