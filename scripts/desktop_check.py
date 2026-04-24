@@ -22,6 +22,7 @@ def main() -> int:
             "desktop/core/config.py",
             "desktop/core/cookies.py",
             "desktop/core/downloader.py",
+            "desktop/core/environment.py",
             "desktop/core/logs.py",
             "desktop/core/tasks.py",
             "desktop/core/tools.py",

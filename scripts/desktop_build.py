@@ -13,10 +13,14 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Build GoTube Desktop")
-    parser.add_argument("--skip-check", action="store_true", help="skip scripts/desktop_check.py")
+    parser.add_argument("--skip-check", action="store_true", help="skip desktop doctor and self-check")
     args = parser.parse_args()
 
     if not args.skip_check:
+        doctor = subprocess.run([sys.executable, "scripts/desktop_doctor.py", "--strict"], cwd=ROOT)
+        if doctor.returncode != 0:
+            return doctor.returncode
+
         check = subprocess.run([sys.executable, "scripts/desktop_check.py"], cwd=ROOT)
         if check.returncode != 0:
             return check.returncode

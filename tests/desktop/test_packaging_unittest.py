@@ -36,6 +36,8 @@ class DesktopPackagingTests(unittest.TestCase):
     def test_desktop_build_script_runs_check_before_pyinstaller(self):
         script = Path("scripts/desktop_build.py").read_text(encoding="utf-8")
 
+        self.assertIn("desktop_doctor.py", script)
+        self.assertIn("--strict", script)
         self.assertIn("desktop_check.py", script)
         self.assertIn("pyinstaller", script)
         self.assertIn("desktop_dist", script)

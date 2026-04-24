@@ -89,7 +89,21 @@ python -m pip install -U yt-dlp
 
 ## 打包 Windows 可执行文件
 
-先安装桌面依赖，然后执行桌面版自检：
+先安装桌面依赖，然后执行环境诊断：
+
+```powershell
+python scripts/desktop_doctor.py
+```
+
+该命令会检查 `pywebview`、`yt-dlp`、`pyinstaller`、`ffmpeg` 和 `node` 的可用状态。`ffmpeg` 与 `node` 按辅助项展示；缺失时应按实际用途处理，其中 `ffmpeg` 会影响音视频分离格式合并，`node` 会影响前端脚本语法自检。
+
+如果需要在自动化流程中把关键依赖缺失视为失败，可以执行：
+
+```powershell
+python scripts/desktop_doctor.py --strict
+```
+
+确认环境后，执行桌面版自检：
 
 ```powershell
 python scripts/desktop_check.py
@@ -101,7 +115,7 @@ python scripts/desktop_check.py
 python scripts/desktop_build.py
 ```
 
-该脚本会再次执行 `scripts/desktop_check.py`，然后调用 PyInstaller。需要手工排查 PyInstaller 参数时，可以直接执行底层命令：
+该脚本会先执行 `scripts/desktop_doctor.py --strict`，再执行 `scripts/desktop_check.py`，然后调用 PyInstaller。需要手工排查 PyInstaller 参数时，可以直接执行底层命令：
 
 ```powershell
 pyinstaller --clean --noconfirm --distpath desktop_dist --workpath desktop_build desktop/packaging/gotube-desktop.spec
