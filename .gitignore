@@ -79,3 +79,5 @@ www_dist/
 # 操作系统文件
 .DS_Store
 Thumbs.db
+desktop_build/
+desktop_dist/
