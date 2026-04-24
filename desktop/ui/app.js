@@ -9,6 +9,31 @@ function setText(selector, value) {
     document.querySelector(selector).textContent = value || '';
 }
 
+function formatTaskStatus(status) {
+    const labels = {
+        pending: '等待中',
+        running: '下载中',
+        completed: '已完成',
+        failed: '失败',
+        canceled: '已取消',
+    };
+    return labels[status] || status || '未知';
+}
+
+function formatTaskMeta(task) {
+    const pieces = [
+        formatTaskStatus(task.status),
+        `${Math.round(task.percent || 0)}%`,
+    ];
+    if (task.speed) {
+        pieces.push(task.speed);
+    }
+    if (task.eta) {
+        pieces.push(`剩余 ${task.eta}`);
+    }
+    return pieces.join(' · ');
+}
+
 async function loadConfig() {
     const bridge = await api();
     const config = await bridge.get_config();
@@ -119,7 +144,7 @@ function renderTasks(tasks) {
 
         const meta = document.createElement('div');
         meta.className = 'task-meta';
-        meta.textContent = `${task.status || 'pending'} · ${Math.round(task.percent || 0)}%`;
+        meta.textContent = formatTaskMeta(task);
 
         const file = document.createElement('div');
         file.className = 'task-file';

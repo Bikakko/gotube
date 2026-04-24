@@ -311,6 +311,14 @@ class DesktopAppTests(unittest.TestCase):
         self.assertIn("cancel_task", script)
         self.assertIn("cancel-task-button", script)
 
+    def test_desktop_ui_localizes_task_status(self):
+        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("formatTaskStatus", script)
+        self.assertIn("下载中", script)
+        self.assertIn("已完成", script)
+        self.assertIn("已取消", script)
+
 
 if __name__ == "__main__":
     unittest.main()
