@@ -95,7 +95,13 @@ python -m pip install -U yt-dlp
 python scripts/desktop_check.py
 ```
 
-自检会运行桌面版单元测试、前端脚本语法检查和 Python 编译检查。自检通过后再执行打包：
+自检会运行桌面版单元测试、前端脚本语法检查和 Python 编译检查。自检通过后，推荐用固定构建脚本打包：
+
+```powershell
+python scripts/desktop_build.py
+```
+
+该脚本会再次执行 `scripts/desktop_check.py`，然后调用 PyInstaller。需要手工排查 PyInstaller 参数时，可以直接执行底层命令：
 
 ```powershell
 pyinstaller --clean --noconfirm --distpath desktop_dist --workpath desktop_build desktop/packaging/gotube-desktop.spec

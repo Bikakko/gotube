@@ -33,6 +33,15 @@ class DesktopPackagingTests(unittest.TestCase):
         self.assertIn("--check", script)
         self.assertIn("py_compile", script)
 
+    def test_desktop_build_script_runs_check_before_pyinstaller(self):
+        script = Path("scripts/desktop_build.py").read_text(encoding="utf-8")
+
+        self.assertIn("desktop_check.py", script)
+        self.assertIn("pyinstaller", script)
+        self.assertIn("desktop_dist", script)
+        self.assertIn("desktop_build", script)
+        self.assertIn("desktop/packaging/gotube-desktop.spec", script)
+
 
 if __name__ == "__main__":
     unittest.main()
