@@ -10,7 +10,7 @@ APP_VERSION = VERSION_FILE.read_text(encoding="utf-8").strip() if VERSION_FILE.e
 
 
 a = Analysis(
-    ["desktop/app.py"],
+    [str(ROOT / "desktop/app.py")],
     pathex=[str(ROOT)],
     binaries=[],
     datas=[

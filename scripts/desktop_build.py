@@ -26,7 +26,9 @@ def main() -> int:
             return check.returncode
 
     command = [
-        "pyinstaller",
+        sys.executable,
+        "-m",
+        "PyInstaller",
         "--clean",
         "--noconfirm",
         "--distpath",

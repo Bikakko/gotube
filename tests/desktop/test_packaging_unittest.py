@@ -13,7 +13,7 @@ class DesktopPackagingTests(unittest.TestCase):
     def test_pyinstaller_spec_bundles_ui_and_version(self):
         spec = Path("desktop/packaging/gotube-desktop.spec").read_text(encoding="utf-8")
 
-        self.assertIn("desktop/app.py", spec)
+        self.assertIn('str(ROOT / "desktop/app.py")', spec)
         self.assertIn("desktop/ui", spec)
         self.assertIn("VERSION", spec)
         self.assertIn("GoTubeDesktop", spec)
@@ -40,7 +40,8 @@ class DesktopPackagingTests(unittest.TestCase):
         self.assertIn("desktop_doctor.py", script)
         self.assertIn("--strict", script)
         self.assertIn("desktop_check.py", script)
-        self.assertIn("pyinstaller", script)
+        self.assertIn("-m", script)
+        self.assertIn("PyInstaller", script)
         self.assertIn("desktop_dist", script)
         self.assertIn("desktop_build", script)
         self.assertIn("desktop/packaging/gotube-desktop.spec", script)
