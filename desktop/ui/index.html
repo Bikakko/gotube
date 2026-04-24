@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GoTube Desktop</title>
+    <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+    <main class="app-shell">
+        <section class="panel download-panel">
+            <h1>GoTube Desktop</h1>
+            <div class="download-row">
+                <input id="download-url" type="url" placeholder="输入视频链接">
+                <button id="download-button">下载</button>
+            </div>
+            <div id="task-list" class="task-list"></div>
+        </section>
+
+        <section id="settings-panel" class="panel settings-panel">
+            <h2>设置</h2>
+            <label>
+                保存位置
+                <input id="download-dir" type="text">
+            </label>
+            <label>
+                ffmpeg 路径
+                <input id="ffmpeg-path" type="text">
+            </label>
+            <label>
+                Cookie
+                <textarea id="cookie-content" rows="5" placeholder="# Netscape HTTP Cookie File"></textarea>
+            </label>
+            <div class="button-row">
+                <button id="save-config-button">保存设置</button>
+                <button id="save-cookie-button">保存 Cookie</button>
+                <button id="detect-tools-button">检测工具</button>
+                <button id="upgrade-ytdlp-button">升级 yt-dlp</button>
+            </div>
+            <pre id="tools-status" class="status-box"></pre>
+        </section>
+
+        <section id="logs-panel" class="panel logs-panel">
+            <h2>日志</h2>
+            <pre id="log-output" class="status-box"></pre>
+        </section>
+    </main>
+    <script src="./app.js"></script>
+</body>
+</html>

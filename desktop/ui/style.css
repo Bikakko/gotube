@@ -1,0 +1,93 @@
+:root {
+    --bg: #07111f;
+    --panel: rgba(12, 22, 38, 0.92);
+    --border: rgba(220, 232, 255, 0.14);
+    --text: #f4f7ff;
+    --muted: #9daccc;
+    --accent: #9cc4ff;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: linear-gradient(180deg, #07111f, #09192b);
+    color: var(--text);
+    font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+.app-shell {
+    width: min(1120px, calc(100vw - 32px));
+    margin: 0 auto;
+    padding: 28px 0;
+    display: grid;
+    gap: 16px;
+}
+
+.panel {
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--panel);
+}
+
+h1,
+h2 {
+    margin: 0 0 16px;
+    font-size: 20px;
+}
+
+.download-row,
+.button-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+input,
+textarea,
+button {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font: inherit;
+}
+
+input,
+textarea {
+    width: 100%;
+    padding: 10px 12px;
+    background: rgba(5, 12, 22, 0.82);
+    color: var(--text);
+}
+
+.download-row input {
+    flex: 1 1 360px;
+}
+
+button {
+    padding: 10px 14px;
+    background: rgba(156, 196, 255, 0.14);
+    color: var(--text);
+    cursor: pointer;
+}
+
+label {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 14px;
+    color: var(--muted);
+}
+
+.status-box {
+    min-height: 80px;
+    margin: 14px 0 0;
+    padding: 12px;
+    border-radius: 8px;
+    background: rgba(4, 10, 20, 0.88);
+    color: var(--muted);
+    white-space: pre-wrap;
+    overflow: auto;
+}
