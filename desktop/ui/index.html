@@ -8,11 +8,19 @@
 </head>
 <body>
     <main class="app-shell">
-        <section class="panel download-panel">
+        <header class="app-header">
             <div class="title-row">
                 <h1>GoTube Desktop</h1>
                 <span id="app-version" class="app-version"></span>
             </div>
+            <nav class="desktop-tabs" aria-label="桌面版功能页">
+                <button class="tab-button is-active" type="button" data-page="download-page" aria-selected="true">下载</button>
+                <button class="tab-button" type="button" data-page="settings-panel" aria-selected="false">设置</button>
+                <button class="tab-button" type="button" data-page="logs-panel" aria-selected="false">日志</button>
+            </nav>
+        </header>
+
+        <section id="download-page" class="page panel download-panel is-active">
             <div class="download-row">
                 <input id="download-url" type="url" placeholder="输入视频链接">
                 <button id="download-button">下载</button>
@@ -21,7 +29,7 @@
             <div id="task-list" class="task-list"></div>
         </section>
 
-        <section id="settings-panel" class="panel settings-panel">
+        <section id="settings-panel" class="page panel settings-panel">
             <h2>设置</h2>
             <label>
                 保存位置
@@ -61,7 +69,7 @@
             <pre id="tools-status" class="status-box"></pre>
         </section>
 
-        <section id="logs-panel" class="panel logs-panel">
+        <section id="logs-panel" class="page panel logs-panel">
             <h2>日志</h2>
             <pre id="log-output" class="status-box"></pre>
         </section>

@@ -21,12 +21,11 @@ body {
 }
 
 .app-shell {
-    width: min(1160px, calc(100vw - 28px));
+    width: min(1080px, calc(100vw - 28px));
     height: 100vh;
     margin: 0 auto;
     padding: 18px 0;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 380px;
     grid-template-rows: auto minmax(0, 1fr);
     gap: 14px;
     overflow: hidden;
@@ -34,14 +33,57 @@ body {
 
 .panel {
     min-height: 0;
-    padding: 16px;
+    padding: 18px;
     border: 1px solid var(--border);
     border-radius: 10px;
     background: var(--panel);
 }
 
+.app-header {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 16px;
+    align-items: center;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: rgba(10, 20, 36, 0.78);
+}
+
+.desktop-tabs {
+    display: flex;
+    gap: 8px;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(4, 10, 20, 0.5);
+}
+
+.tab-button {
+    min-width: 72px;
+    padding: 8px 12px;
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted);
+}
+
+.tab-button.is-active {
+    background: rgba(156, 196, 255, 0.18);
+    color: var(--text);
+}
+
+.page {
+    display: none;
+    overflow: hidden;
+}
+
+.page.is-active {
+    display: flex;
+    flex-direction: column;
+}
+
 .download-panel {
-    grid-column: 1 / -1;
+    gap: 14px;
 }
 
 .settings-panel,
@@ -49,19 +91,9 @@ body {
     overflow: hidden;
 }
 
-.settings-panel {
-    display: flex;
-    flex-direction: column;
-}
-
-.logs-panel {
-    display: flex;
-    flex-direction: column;
-}
-
 h1,
 h2 {
-    margin: 0 0 12px;
+    margin: 0;
     font-size: 20px;
 }
 
@@ -136,11 +168,11 @@ label {
 
 .task-list {
     display: grid;
-    max-height: 210px;
+    min-height: 0;
     gap: 10px;
-    margin-top: 12px;
     overflow: auto;
     padding-right: 2px;
+    align-content: start;
 }
 
 .task-card {
@@ -187,6 +219,7 @@ label {
 
 .settings-panel .status-box {
     flex: 1 1 auto;
+    min-height: 150px;
 }
 
 .logs-panel .status-box {
@@ -201,9 +234,20 @@ label {
     .app-shell {
         height: auto;
         min-height: 100vh;
-        grid-template-columns: 1fr;
         grid-template-rows: auto;
         overflow: visible;
+    }
+
+    .app-header {
+        grid-template-columns: 1fr;
+    }
+
+    .desktop-tabs {
+        width: 100%;
+    }
+
+    .tab-button {
+        flex: 1;
     }
 
     .task-list {

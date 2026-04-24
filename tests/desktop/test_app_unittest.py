@@ -83,6 +83,11 @@ class DesktopAppTests(unittest.TestCase):
     def test_desktop_ui_contains_required_sections(self):
         ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
 
+        self.assertIn("desktop-tabs", ui)
+        self.assertIn('data-page="download-page"', ui)
+        self.assertIn('data-page="settings-panel"', ui)
+        self.assertIn('data-page="logs-panel"', ui)
+        self.assertIn("download-page", ui)
         self.assertIn("download-url", ui)
         self.assertIn("settings-panel", ui)
         self.assertIn("logs-panel", ui)
@@ -453,13 +458,24 @@ class DesktopAppTests(unittest.TestCase):
 
         self.assertIn("overflow: hidden", style)
         self.assertIn("height: 100vh", style)
-        self.assertIn("grid-template-columns", style)
         self.assertIn("grid-template-rows", style)
+        self.assertIn(".desktop-tabs", style)
+        self.assertIn(".tab-button", style)
+        self.assertIn(".page", style)
+        self.assertIn(".page.is-active", style)
         self.assertIn(".download-panel", style)
         self.assertIn(".task-list", style)
         self.assertIn("min-height: 0", style)
         self.assertIn("overflow: auto", style)
-        self.assertIn("height=720", app)
+        self.assertIn("height=700", app)
+
+    def test_desktop_ui_switches_between_pages(self):
+        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("function switchPage", script)
+        self.assertIn("tab-button", script)
+        self.assertIn("is-active", script)
+        self.assertIn("aria-selected", script)
 
 
 if __name__ == "__main__":

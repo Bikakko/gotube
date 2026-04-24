@@ -9,6 +9,17 @@ function setText(selector, value) {
     document.querySelector(selector).textContent = value || '';
 }
 
+function switchPage(pageId) {
+    document.querySelectorAll('.page').forEach((page) => {
+        page.classList.toggle('is-active', page.id === pageId);
+    });
+    document.querySelectorAll('.tab-button').forEach((button) => {
+        const selected = button.dataset.page === pageId;
+        button.classList.toggle('is-active', selected);
+        button.setAttribute('aria-selected', selected ? 'true' : 'false');
+    });
+}
+
 function formatTaskStatus(status) {
     const labels = {
         pending: '等待中',
@@ -217,6 +228,9 @@ async function refreshLogs() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('.tab-button').forEach((button) => {
+        button.addEventListener('click', () => switchPage(button.dataset.page));
+    });
     document.querySelector('#save-config-button').addEventListener('click', saveConfig);
     document.querySelector('#open-download-dir-button').addEventListener('click', openDownloadDir);
     document.querySelector('#save-cookie-button').addEventListener('click', saveCookie);

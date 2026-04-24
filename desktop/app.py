@@ -306,7 +306,7 @@ def main() -> None:
         ui_path.as_uri(),
         js_api=api,
         width=1180,
-        height=720,
+        height=700,
     )
     webview.start()
 
