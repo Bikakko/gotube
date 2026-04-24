@@ -30,6 +30,16 @@ async function saveCookie() {
     setText('#tools-status', result.message);
 }
 
+async function deleteCookie() {
+    const bridge = await api();
+    const result = await bridge.delete_cookie();
+    if (result.ok) {
+        document.querySelector('#cookie-content').value = '';
+        await loadConfig();
+    }
+    setText('#tools-status', result.message);
+}
+
 async function openDownloadDir() {
     const bridge = await api();
     const result = await bridge.open_download_dir();
@@ -109,6 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('#save-config-button').addEventListener('click', saveConfig);
     document.querySelector('#open-download-dir-button').addEventListener('click', openDownloadDir);
     document.querySelector('#save-cookie-button').addEventListener('click', saveCookie);
+    document.querySelector('#delete-cookie-button').addEventListener('click', deleteCookie);
     document.querySelector('#detect-tools-button').addEventListener('click', detectTools);
     document.querySelector('#upgrade-ytdlp-button').addEventListener('click', upgradeYtdlp);
     document.querySelector('#download-button').addEventListener('click', createDownload);

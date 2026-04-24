@@ -121,6 +121,34 @@ class DesktopAppTests(unittest.TestCase):
 
             self.assertTrue(any("下载任务已创建" in line for line in logs["lines"]))
 
+    def test_delete_cookie_clears_saved_cookie_and_config(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+
+            store = DesktopConfigStore(
+                appdata_dir=Path(tmp) / "AppData",
+                user_profile=Path(tmp) / "User",
+            )
+            api = DesktopApi(config_store=store)
+            content = "# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\tSID\tsecret\n"
+            save_result = api.save_cookie(content)
+
+            self.assertTrue(save_result["ok"])
+            self.assertTrue(Path(api.get_config()["cookies_file"]).exists())
+
+            delete_result = api.delete_cookie()
+
+            self.assertTrue(delete_result["ok"])
+            self.assertEqual("", api.get_config()["cookies_file"])
+
+    def test_desktop_ui_has_delete_cookie_button(self):
+        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
+        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("delete-cookie-button", ui)
+        self.assertIn("delete_cookie", script)
+
 
 if __name__ == "__main__":
     unittest.main()

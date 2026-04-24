@@ -62,6 +62,14 @@ class DesktopApi:
             self.config_store.save(self.config)
         return {"ok": result.ok, "message": result.message}
 
+    def delete_cookie(self) -> dict:
+        result = self.cookie_store.delete_cookie_file()
+        if result.ok:
+            self.config.cookies_file = None
+            self.config_store.save(self.config)
+            self.log_store.append("Cookie 已删除")
+        return {"ok": result.ok, "message": result.message}
+
     def import_browser_cookie(self, browser: str) -> dict:
         result = self.cookie_store.import_from_browser(browser)
         return {"ok": result.ok, "message": result.message}
