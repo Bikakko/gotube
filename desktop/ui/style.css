@@ -95,6 +95,38 @@ label {
     color: var(--text);
 }
 
+.task-list {
+    display: grid;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.task-card {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(4, 10, 20, 0.58);
+}
+
+.task-title {
+    overflow: hidden;
+    color: var(--text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.task-meta,
+.task-file,
+.empty-state {
+    margin-top: 6px;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.task-file {
+    overflow-wrap: anywhere;
+}
+
 .status-box {
     min-height: 80px;
     margin: 14px 0 0;

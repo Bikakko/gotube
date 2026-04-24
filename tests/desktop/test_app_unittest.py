@@ -38,6 +38,14 @@ class DesktopAppTests(unittest.TestCase):
         self.assertNotIn("涓", ui)
         self.assertNotIn("璁", ui)
 
+    def test_desktop_ui_refreshes_task_list(self):
+        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("async function refreshTasks()", script)
+        self.assertIn("renderTasks", script)
+        self.assertIn("get_tasks", script)
+        self.assertIn("setInterval(refreshTasks", script)
+
     def test_create_download_registers_task_before_background_finish(self):
         with tempfile.TemporaryDirectory() as tmp:
             from desktop.app import DesktopApi
