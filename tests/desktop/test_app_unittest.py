@@ -1,12 +1,15 @@
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from threading import Event
 
+from tests.desktop.temp_utils import workspace_tempdir
+
 
 class DesktopAppTests(unittest.TestCase):
     def test_desktop_api_returns_config(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
             from desktop.core.config import DesktopConfigStore
 
@@ -54,7 +57,7 @@ class DesktopAppTests(unittest.TestCase):
         self.assertIn("open_download_dir", script)
 
     def test_create_download_registers_task_before_background_finish(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
             from desktop.core.config import DesktopConfigStore
             from desktop.core.tasks import DesktopTask
@@ -84,8 +87,36 @@ class DesktopAppTests(unittest.TestCase):
             self.assertEqual("https://example.com/video", tasks[0]["url"])
             self.assertIn(tasks[0]["status"], {"pending", "running"})
 
+    def test_failed_download_is_logged_as_failed(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+            from desktop.core.tasks import DesktopTask
+
+            class FailingDownloader:
+                def download(self, url):
+                    task = DesktopTask.create(url=url)
+                    task.mark_failed("network error")
+                    return task
+
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                ),
+                downloader_factory=lambda config: FailingDownloader(),
+            )
+
+            api.create_download("https://example.com/video")
+            wait_for(lambda: api.get_tasks()[0]["status"] == "failed")
+            wait_for(lambda: any("下载任务失败" in line for line in api.get_logs()["lines"]))
+            logs = api.get_logs()["lines"]
+
+            self.assertTrue(any("下载任务失败" in line for line in logs))
+            self.assertFalse(any("下载任务已完成" in line for line in logs))
+
     def test_open_download_dir_creates_directory_and_uses_opener(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
             from desktop.core.config import DesktopConfigStore
 
@@ -105,7 +136,7 @@ class DesktopAppTests(unittest.TestCase):
             self.assertEqual([Path(result["path"])], opened)
 
     def test_desktop_api_reads_logs_from_store(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
             from desktop.core.config import DesktopConfigStore
 
@@ -122,7 +153,7 @@ class DesktopAppTests(unittest.TestCase):
             self.assertTrue(any("下载任务已创建" in line for line in logs["lines"]))
 
     def test_delete_cookie_clears_saved_cookie_and_config(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
             from desktop.core.config import DesktopConfigStore
 
@@ -143,7 +174,7 @@ class DesktopAppTests(unittest.TestCase):
             self.assertEqual("", api.get_config()["cookies_file"])
 
     def test_import_browser_cookie_updates_config_source(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
             from desktop.core.config import DesktopConfigStore
 
@@ -174,3 +205,11 @@ class DesktopAppTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def wait_for(predicate, *, attempts=50):
+    for _ in range(attempts):
+        if predicate():
+            return
+        time.sleep(0.02)
+    raise AssertionError("condition was not met")

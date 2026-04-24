@@ -2,12 +2,14 @@ import unittest
 import tempfile
 from pathlib import Path
 
+from tests.desktop.temp_utils import workspace_tempdir
+
 
 class DesktopLogsTests(unittest.TestCase):
     def test_log_store_appends_and_reads_recent_lines(self):
         from desktop.core.logs import DesktopLogStore
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             store = DesktopLogStore(Path(tmp) / "desktop.log", max_lines=2)
             store.append("first")
             store.append("second")
@@ -21,7 +23,7 @@ class DesktopLogsTests(unittest.TestCase):
     def test_log_store_creates_parent_directory(self):
         from desktop.core.logs import DesktopLogStore
 
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             log_file = Path(tmp) / "nested" / "desktop.log"
             store = DesktopLogStore(log_file)
             store.append("hello")

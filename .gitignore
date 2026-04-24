@@ -26,6 +26,7 @@ tests/
 !tests/test_auth_roles_unittest.py
 .pytest_cache/
 .ruff_cache/
+.tmp_tests/
 
 # 虚拟环境 - 生产独立创建
 venv/

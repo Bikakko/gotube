@@ -107,7 +107,12 @@ class DesktopApi:
             try:
                 finished_task = downloader.download(url)
                 _copy_task_state(target=task, source=finished_task)
-                self.log_store.append(f"下载任务已完成：{url}")
+                if task.status == "completed":
+                    self.log_store.append(f"下载任务已完成：{url}")
+                elif task.status == "canceled":
+                    self.log_store.append(f"下载任务已取消：{url}")
+                else:
+                    self.log_store.append(f"下载任务失败：{url}，{task.error}")
             except Exception as exc:
                 task.mark_failed(str(exc))
                 self.log_store.append(f"下载任务失败：{url}，{exc}")

@@ -3,10 +3,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.desktop.temp_utils import workspace_tempdir
+
 
 class DesktopConfigTests(unittest.TestCase):
     def test_load_uses_default_download_dir(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             root = Path(tmp)
             appdata = root / "AppData"
             profile = root / "User"
@@ -19,7 +21,7 @@ class DesktopConfigTests(unittest.TestCase):
             self.assertEqual(config.download_dir, profile / "Downloads" / "GoTube")
 
     def test_save_and_load_round_trip(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             root = Path(tmp)
             appdata = root / "AppData"
             profile = root / "User"
@@ -44,7 +46,7 @@ class DesktopConfigTests(unittest.TestCase):
             self.assertEqual(loaded.browser_cookie_source, "edge")
 
     def test_invalid_config_falls_back_to_default(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             root = Path(tmp)
             appdata = root / "AppData"
             profile = root / "User"

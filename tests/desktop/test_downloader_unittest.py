@@ -2,10 +2,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from tests.desktop.temp_utils import workspace_tempdir
+
 
 class DesktopDownloaderTests(unittest.TestCase):
     def test_downloader_builds_ytdlp_options_with_download_dir(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             from desktop.core.downloader import DesktopDownloader
 
             download_dir = Path(tmp)
@@ -15,7 +17,7 @@ class DesktopDownloaderTests(unittest.TestCase):
             self.assertIn(str(download_dir), opts["outtmpl"])
 
     def test_downloader_injects_cookie_file_and_ffmpeg_location(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             from desktop.core.downloader import DesktopDownloader
 
             root = Path(tmp)
@@ -32,7 +34,7 @@ class DesktopDownloaderTests(unittest.TestCase):
             self.assertEqual(opts["ffmpeg_location"], str(ffmpeg.parent))
 
     def test_downloader_uses_browser_cookies_when_no_cookie_file_exists(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             from desktop.core.downloader import DesktopDownloader
 
             downloader = DesktopDownloader(
@@ -45,7 +47,7 @@ class DesktopDownloaderTests(unittest.TestCase):
             self.assertNotIn("cookiefile", opts)
 
     def test_downloader_prefers_manual_cookie_file_over_browser_source(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             from desktop.core.downloader import DesktopDownloader
 
             root = Path(tmp)

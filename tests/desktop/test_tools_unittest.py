@@ -4,10 +4,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from tests.desktop.temp_utils import workspace_tempdir
+
 
 class DesktopToolsTests(unittest.TestCase):
     def test_ffmpeg_detection_accepts_configured_executable(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             root = Path(tmp)
             ffmpeg = root / "ffmpeg.exe"
             ffmpeg.write_text("", encoding="utf-8")
@@ -21,7 +23,7 @@ class DesktopToolsTests(unittest.TestCase):
             self.assertEqual(result.source, "configured")
 
     def test_ffmpeg_detection_reports_missing_configured_path(self):
-        with tempfile.TemporaryDirectory() as tmp:
+        with workspace_tempdir() as tmp:
             root = Path(tmp)
 
             from desktop.core.tools import detect_ffmpeg
