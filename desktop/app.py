@@ -182,6 +182,16 @@ class DesktopApi:
                     return {"ok": True, "message": "任务已取消"}
         return {"ok": False, "message": "任务不存在"}
 
+    def clear_finished_tasks(self) -> dict:
+        finished_statuses = {"completed", "failed", "canceled"}
+        with self._lock:
+            before = len(self.tasks)
+            self.tasks = [task for task in self.tasks if task.status not in finished_statuses]
+            removed = before - len(self.tasks)
+        if removed:
+            self.log_store.append(f"已清理任务记录：{removed}")
+        return {"ok": True, "message": f"已清理 {removed} 个任务", "removed": removed}
+
     def get_tasks(self) -> list[dict]:
         with self._lock:
             tasks = list(self.tasks)

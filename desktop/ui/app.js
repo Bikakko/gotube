@@ -128,6 +128,13 @@ async function openTaskLocation(taskId) {
     setText('#log-output', result.message);
 }
 
+async function clearFinishedTasks() {
+    const bridge = await api();
+    const result = await bridge.clear_finished_tasks();
+    setText('#log-output', result.message);
+    await refreshTasks();
+}
+
 async function refreshTasks() {
     const bridge = await api();
     const tasks = await bridge.get_tasks();
@@ -199,6 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('#detect-tools-button').addEventListener('click', detectTools);
     document.querySelector('#upgrade-ytdlp-button').addEventListener('click', upgradeYtdlp);
     document.querySelector('#download-button').addEventListener('click', createDownload);
+    document.querySelector('#clear-finished-tasks-button').addEventListener('click', clearFinishedTasks);
 
     loadConfig().catch((error) => setText('#log-output', error.message));
     loadAppInfo().catch(() => {});

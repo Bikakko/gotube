@@ -296,6 +296,30 @@ class DesktopAppTests(unittest.TestCase):
 
             self.assertFalse(result["ok"])
 
+    def test_clear_finished_tasks_keeps_running_tasks(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+            from desktop.core.tasks import DesktopTask
+
+            api = DesktopApi(config_store=DesktopConfigStore(
+                appdata_dir=Path(tmp) / "AppData",
+                user_profile=Path(tmp) / "User",
+            ))
+            running = DesktopTask.create(url="https://example.com/running")
+            running.mark_running()
+            completed = DesktopTask.create(url="https://example.com/done")
+            completed.mark_completed(file_path=str(Path(tmp) / "done.mp4"))
+            failed = DesktopTask.create(url="https://example.com/failed")
+            failed.mark_failed("failed")
+            api.tasks.extend([running, completed, failed])
+
+            result = api.clear_finished_tasks()
+
+            self.assertTrue(result["ok"])
+            self.assertEqual(2, result["removed"])
+            self.assertEqual([running.id], [task["id"] for task in api.get_tasks()])
+
     def test_desktop_api_reads_logs_from_store(self):
         with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
@@ -374,6 +398,13 @@ class DesktopAppTests(unittest.TestCase):
 
         self.assertIn("open_task_location", script)
         self.assertIn("open-task-location-button", script)
+
+    def test_desktop_ui_can_clear_finished_tasks(self):
+        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
+        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("clear-finished-tasks-button", ui)
+        self.assertIn("clear_finished_tasks", script)
 
     def test_desktop_ui_localizes_task_status(self):
         script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
