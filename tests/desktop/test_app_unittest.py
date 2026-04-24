@@ -28,6 +28,16 @@ class DesktopAppTests(unittest.TestCase):
         self.assertIn("settings-panel", ui)
         self.assertIn("logs-panel", ui)
 
+    def test_desktop_ui_uses_clear_labels_and_deemphasizes_ffmpeg(self):
+        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
+
+        self.assertIn("输入视频链接", ui)
+        self.assertIn("下载", ui)
+        self.assertIn("高级设置", ui)
+        self.assertIn("<details", ui)
+        self.assertNotIn("涓", ui)
+        self.assertNotIn("璁", ui)
+
     def test_create_download_registers_task_before_background_finish(self):
         with tempfile.TemporaryDirectory() as tmp:
             from desktop.app import DesktopApi

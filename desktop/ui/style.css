@@ -81,6 +81,20 @@ label {
     color: var(--muted);
 }
 
+.advanced-settings {
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+}
+
+.advanced-settings summary {
+    width: fit-content;
+    margin-bottom: 12px;
+    cursor: pointer;
+    color: var(--text);
+}
+
 .status-box {
     min-height: 80px;
     margin: 14px 0 0;

@@ -24,19 +24,24 @@
                 <input id="download-dir" type="text">
             </label>
             <label>
-                ffmpeg 路径
-                <input id="ffmpeg-path" type="text">
-            </label>
-            <label>
                 Cookie
                 <textarea id="cookie-content" rows="5" placeholder="# Netscape HTTP Cookie File"></textarea>
             </label>
             <div class="button-row">
                 <button id="save-config-button">保存设置</button>
                 <button id="save-cookie-button">保存 Cookie</button>
-                <button id="detect-tools-button">检测工具</button>
                 <button id="upgrade-ytdlp-button">升级 yt-dlp</button>
             </div>
+            <details class="advanced-settings">
+                <summary>高级设置</summary>
+                <label>
+                    ffmpeg 路径
+                    <input id="ffmpeg-path" type="text">
+                </label>
+                <div class="button-row">
+                    <button id="detect-tools-button">检测本机工具</button>
+                </div>
+            </details>
             <pre id="tools-status" class="status-box"></pre>
         </section>
 
