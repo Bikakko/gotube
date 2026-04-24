@@ -104,9 +104,15 @@ class DesktopApi:
         def run() -> None:
             task.mark_running()
             downloader = self.downloader_factory(self.config)
+
+            def on_progress(progress_task: DesktopTask) -> None:
+                with self._lock:
+                    _copy_task_state(target=task, source=progress_task)
+
             try:
-                finished_task = downloader.download(url)
-                _copy_task_state(target=task, source=finished_task)
+                finished_task = downloader.download(url, on_progress=on_progress)
+                with self._lock:
+                    _copy_task_state(target=task, source=finished_task)
                 if task.status == "completed":
                     self.log_store.append(f"下载任务已完成：{url}")
                 elif task.status == "canceled":

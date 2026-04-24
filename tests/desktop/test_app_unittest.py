@@ -65,7 +65,7 @@ class DesktopAppTests(unittest.TestCase):
             release = Event()
 
             class BlockingDownloader:
-                def download(self, url):
+                def download(self, url, on_progress=None):
                     release.wait(timeout=2)
                     task = DesktopTask.create(url=url)
                     task.mark_completed(file_path="video.mp4")
@@ -87,6 +87,41 @@ class DesktopAppTests(unittest.TestCase):
             self.assertEqual("https://example.com/video", tasks[0]["url"])
             self.assertIn(tasks[0]["status"], {"pending", "running"})
 
+    def test_download_progress_updates_registered_task_before_finish(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+            from desktop.core.tasks import DesktopTask
+
+            release = Event()
+
+            class ProgressDownloader:
+                def download(self, url, on_progress=None):
+                    task = DesktopTask.create(url=url)
+                    task.mark_running()
+                    task.update_progress(percent=42.0, speed="1 MiB/s", eta="10s")
+                    if on_progress:
+                        on_progress(task)
+                    release.wait(timeout=2)
+                    task.mark_completed(file_path="video.mp4")
+                    return task
+
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                ),
+                downloader_factory=lambda config: ProgressDownloader(),
+            )
+
+            api.create_download("https://example.com/video")
+            wait_for(lambda: api.get_tasks()[0]["percent"] == 42.0)
+            release.set()
+
+            task = api.get_tasks()[0]
+            self.assertEqual("running", task["status"])
+            self.assertEqual("1 MiB/s", task["speed"])
+
     def test_failed_download_is_logged_as_failed(self):
         with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
@@ -94,7 +129,7 @@ class DesktopAppTests(unittest.TestCase):
             from desktop.core.tasks import DesktopTask
 
             class FailingDownloader:
-                def download(self, url):
+                def download(self, url, on_progress=None):
                     task = DesktopTask.create(url=url)
                     task.mark_failed("network error")
                     return task
