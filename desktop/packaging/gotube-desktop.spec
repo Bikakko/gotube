@@ -46,5 +46,6 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    version=None,
+        version=None,
+        icon=str(ROOT / "desktop/assets/gotube.ico"),
 )

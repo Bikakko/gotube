@@ -17,6 +17,8 @@ class DesktopPackagingTests(unittest.TestCase):
         self.assertIn("desktop/ui", spec)
         self.assertIn("VERSION", spec)
         self.assertIn("GoTubeDesktop", spec)
+        self.assertIn("desktop/assets/gotube.ico", spec)
+        self.assertTrue(Path("desktop/assets/gotube.ico").is_file())
 
     def test_gitignore_excludes_desktop_packaging_outputs(self):
         ignore = Path(".gitignore").read_text(encoding="utf-8", errors="ignore")

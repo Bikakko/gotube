@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import inspect
+import sys
 import threading
 from pathlib import Path
 from typing import Callable
@@ -285,6 +286,13 @@ def _cleanup_partial_downloads(downloader) -> int:
     return int(cleanup() or 0)
 
 
+def _resource_path(relative_path: str) -> Path:
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if bundle_root:
+        return Path(bundle_root) / relative_path
+    return Path(__file__).resolve().parents[1] / relative_path
+
+
 def main() -> None:
     try:
         import webview
@@ -292,7 +300,7 @@ def main() -> None:
         raise SystemExit("缺少 pywebview，请先安装桌面版依赖。") from exc
 
     api = DesktopApi()
-    ui_path = Path(__file__).parent / "ui" / "index.html"
+    ui_path = _resource_path("desktop/ui/index.html")
     webview.create_window(
         "GoTube Desktop",
         ui_path.as_uri(),

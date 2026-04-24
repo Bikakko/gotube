@@ -1,6 +1,7 @@
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 from threading import Event
 
@@ -54,6 +55,14 @@ class DesktopAppTests(unittest.TestCase):
             self.assertIn("checks", report)
             self.assertIn("missing_required", report)
             self.assertTrue(any(check["name"] == "yt-dlp" for check in report["checks"]))
+
+    def test_resource_path_uses_pyinstaller_bundle_root(self):
+        from desktop.app import _resource_path
+
+        with patch("sys._MEIPASS", "C:/bundle/root", create=True):
+            path = _resource_path("desktop/ui/index.html")
+
+        self.assertEqual(Path("C:/bundle/root/desktop/ui/index.html"), path)
 
     def test_set_download_dir_rejects_blank_path(self):
         with workspace_tempdir() as tmp:
