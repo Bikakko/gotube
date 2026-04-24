@@ -39,6 +39,22 @@ class DesktopAppTests(unittest.TestCase):
             self.assertIn("version", info)
             self.assertTrue(info["version"])
 
+    def test_desktop_api_returns_environment_report(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+
+            api = DesktopApi(config_store=DesktopConfigStore(
+                appdata_dir=Path(tmp) / "AppData",
+                user_profile=Path(tmp) / "User",
+            ))
+
+            report = api.get_environment()
+
+            self.assertIn("checks", report)
+            self.assertIn("missing_required", report)
+            self.assertTrue(any(check["name"] == "yt-dlp" for check in report["checks"]))
+
     def test_set_download_dir_rejects_blank_path(self):
         with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
@@ -87,6 +103,14 @@ class DesktopAppTests(unittest.TestCase):
 
         self.assertIn("open-download-dir-button", ui)
         self.assertIn("open_download_dir", script)
+
+    def test_desktop_ui_can_show_environment_report(self):
+        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
+        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("detect-environment-button", ui)
+        self.assertIn("get_environment", script)
+        self.assertIn("formatEnvironmentReport", script)
 
     def test_create_download_registers_task_before_background_finish(self):
         with workspace_tempdir() as tmp:

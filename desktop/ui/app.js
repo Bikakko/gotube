@@ -97,6 +97,25 @@ async function detectTools() {
     setText('#tools-status', JSON.stringify(result, null, 2));
 }
 
+function formatEnvironmentReport(result) {
+    const lines = (result.checks || []).map((check) => {
+        const label = check.ok ? '正常' : '缺失';
+        const required = check.required ? '必需' : '可选';
+        const detail = check.version || check.path || check.message || '';
+        return `[${label}] ${check.name}（${required}）${detail}`;
+    });
+    if (result.missing_required) {
+        lines.unshift('存在必需依赖缺失，请先安装桌面版依赖。');
+    }
+    return lines.join('\n');
+}
+
+async function detectEnvironment() {
+    const bridge = await api();
+    const result = await bridge.get_environment();
+    setText('#tools-status', formatEnvironmentReport(result));
+}
+
 async function upgradeYtdlp() {
     const bridge = await api();
     const result = await bridge.upgrade_ytdlp();
@@ -204,6 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('#delete-cookie-button').addEventListener('click', deleteCookie);
     document.querySelector('#import-browser-cookie-button').addEventListener('click', importBrowserCookie);
     document.querySelector('#detect-tools-button').addEventListener('click', detectTools);
+    document.querySelector('#detect-environment-button').addEventListener('click', detectEnvironment);
     document.querySelector('#upgrade-ytdlp-button').addEventListener('click', upgradeYtdlp);
     document.querySelector('#download-button').addEventListener('click', createDownload);
     document.querySelector('#clear-finished-tasks-button').addEventListener('click', clearFinishedTasks);

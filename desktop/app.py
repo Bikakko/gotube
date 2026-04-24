@@ -11,6 +11,7 @@ from typing import Callable
 from .core.config import DesktopConfig, DesktopConfigStore
 from .core.cookies import DesktopCookieStore
 from .core.downloader import DesktopDownloader
+from .core.environment import collect_environment_report, has_missing_required_checks
 from .core.logs import DesktopLogStore
 from .core.tasks import DesktopTask
 from .core.tools import detect_ffmpeg, detect_ytdlp, upgrade_ytdlp
@@ -110,6 +111,13 @@ class DesktopApi:
         return {
             "ffmpeg": _tool_to_dict(ffmpeg),
             "yt_dlp": _tool_to_dict(ytdlp),
+        }
+
+    def get_environment(self) -> dict:
+        checks = collect_environment_report()
+        return {
+            "missing_required": has_missing_required_checks(checks),
+            "checks": [_environment_check_to_dict(check) for check in checks],
         }
 
     def upgrade_ytdlp(self) -> dict:
@@ -232,6 +240,17 @@ def _tool_to_dict(status) -> dict:
         "path": str(status.path) if status.path else "",
         "source": status.source,
         "message": status.message,
+    }
+
+
+def _environment_check_to_dict(check) -> dict:
+    return {
+        "name": check.name,
+        "ok": check.ok,
+        "required": check.required,
+        "version": check.version,
+        "path": str(check.path) if check.path else "",
+        "message": check.message,
     }
 
 
