@@ -62,6 +62,23 @@ class DesktopDownloaderTests(unittest.TestCase):
             self.assertEqual(str(cookies), opts["cookiefile"])
             self.assertNotIn("cookiesfrombrowser", opts)
 
+    def test_progress_hook_raises_cancel_when_cancel_requested(self):
+        with workspace_tempdir() as tmp:
+            from desktop.core.downloader import DesktopDownloader, DownloadCanceled
+            from desktop.core.tasks import DesktopTask
+
+            task = DesktopTask.create(url="https://example.com/video")
+            downloader = DesktopDownloader(download_dir=Path(tmp))
+            opts = downloader.build_ytdlp_options(
+                task=task,
+                should_cancel=lambda: True,
+            )
+
+            with self.assertRaises(DownloadCanceled):
+                opts["progress_hooks"][0]({"status": "downloading"})
+
+            self.assertEqual("canceled", task.status)
+
 
 if __name__ == "__main__":
     unittest.main()

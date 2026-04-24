@@ -147,12 +147,18 @@ class DesktopAppTests(unittest.TestCase):
             release = Event()
 
             class SlowDownloader:
-                def download(self, url, on_progress=None):
+                def download(self, url, on_progress=None, should_cancel=None):
                     task = DesktopTask.create(url=url)
                     task.mark_running()
                     if on_progress:
                         on_progress(task)
+                    if should_cancel and should_cancel():
+                        task.mark_canceled()
+                        return task
                     release.wait(timeout=2)
+                    if should_cancel and should_cancel():
+                        task.mark_canceled()
+                        return task
                     task.mark_completed(file_path="video.mp4")
                     return task
 

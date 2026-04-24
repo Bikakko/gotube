@@ -9,6 +9,11 @@ from .tasks import DesktopTask
 
 
 ProgressCallback = Callable[[DesktopTask], None]
+CancelChecker = Callable[[], bool]
+
+
+class DownloadCanceled(Exception):
+    """Raised internally when a desktop download is canceled."""
 
 
 class DesktopDownloader:
@@ -25,7 +30,12 @@ class DesktopDownloader:
         self.browser_cookie_source = browser_cookie_source.strip().lower() if browser_cookie_source else None
         self.ffmpeg_path = Path(ffmpeg_path) if ffmpeg_path else None
 
-    def build_ytdlp_options(self, *, task: DesktopTask | None = None) -> dict:
+    def build_ytdlp_options(
+        self,
+        *,
+        task: DesktopTask | None = None,
+        should_cancel: CancelChecker | None = None,
+    ) -> dict:
         outtmpl = str(self.download_dir / "%(title).200B_%(id)s.%(ext)s")
         options = {
             "outtmpl": outtmpl,
@@ -41,10 +51,16 @@ class DesktopDownloader:
             is_executable_path = self.ffmpeg_path.name.lower() in {"ffmpeg", "ffmpeg.exe"}
             options["ffmpeg_location"] = str(self.ffmpeg_path.parent if is_executable_path else self.ffmpeg_path)
         if task is not None:
-            options["progress_hooks"] = [self._progress_hook(task)]
+            options["progress_hooks"] = [self._progress_hook(task, should_cancel=should_cancel)]
         return options
 
-    def download(self, url: str, *, on_progress: ProgressCallback | None = None) -> DesktopTask:
+    def download(
+        self,
+        url: str,
+        *,
+        on_progress: ProgressCallback | None = None,
+        should_cancel: CancelChecker | None = None,
+    ) -> DesktopTask:
         task = DesktopTask.create(url=url)
         task.mark_running()
         if on_progress:
@@ -54,10 +70,15 @@ class DesktopDownloader:
             from yt_dlp import YoutubeDL
 
             self.download_dir.mkdir(parents=True, exist_ok=True)
-            with YoutubeDL(self.build_ytdlp_options(task=task)) as ydl:
+            with YoutubeDL(self.build_ytdlp_options(task=task, should_cancel=should_cancel)) as ydl:
                 info = ydl.extract_info(url, download=True)
             filename = ydl.prepare_filename(info)
             task.mark_completed(file_path=filename)
+            if on_progress:
+                on_progress(task)
+            return task
+        except DownloadCanceled:
+            task.mark_canceled()
             if on_progress:
                 on_progress(task)
             return task
@@ -67,8 +88,17 @@ class DesktopDownloader:
                 on_progress(task)
             return task
 
-    def _progress_hook(self, task: DesktopTask) -> Callable[[dict], None]:
+    def _progress_hook(
+        self,
+        task: DesktopTask,
+        *,
+        should_cancel: CancelChecker | None = None,
+    ) -> Callable[[dict], None]:
         def hook(data: dict) -> None:
+            if should_cancel and should_cancel():
+                task.mark_canceled()
+                raise DownloadCanceled("download canceled")
+
             status = data.get("status")
             if status == "downloading":
                 total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0

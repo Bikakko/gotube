@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import inspect
 import threading
 from pathlib import Path
 from typing import Callable
@@ -119,7 +120,12 @@ class DesktopApi:
                     _copy_task_state(target=task, source=progress_task)
 
             try:
-                finished_task = downloader.download(url, on_progress=on_progress)
+                finished_task = _download_with_supported_args(
+                    downloader,
+                    url,
+                    on_progress=on_progress,
+                    should_cancel=lambda: task.id in self.canceled_task_ids,
+                )
                 with self._lock:
                     if task.id in self.canceled_task_ids:
                         task.mark_canceled()
@@ -203,6 +209,20 @@ def _copy_task_state(*, target: DesktopTask, source: DesktopTask) -> None:
     target.file_path = source.file_path
     target.error = source.error
     target.updated_at = source.updated_at
+
+
+def _download_with_supported_args(
+    downloader,
+    url: str,
+    *,
+    on_progress,
+    should_cancel,
+) -> DesktopTask:
+    params = inspect.signature(downloader.download).parameters
+    kwargs = {"on_progress": on_progress}
+    if "should_cancel" in params:
+        kwargs["should_cancel"] = should_cancel
+    return downloader.download(url, **kwargs)
 
 
 def main() -> None:
