@@ -118,6 +118,26 @@ class DesktopAppTests(unittest.TestCase):
         self.assertIn("open-download-dir-button", ui)
         self.assertIn("open_download_dir", script)
 
+    def test_desktop_download_page_has_cookie_shortcuts(self):
+        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
+
+        self.assertIn("download-cookie-panel", ui)
+        self.assertIn("download-browser-cookie-source", ui)
+        self.assertIn("download-import-browser-cookie-button", ui)
+        self.assertIn("download-save-cookie-button", ui)
+        self.assertIn("download-delete-cookie-button", ui)
+
+    def test_desktop_settings_inputs_are_collapsible(self):
+        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
+        style = Path("desktop/ui/style.css").read_text(encoding="utf-8")
+
+        self.assertIn("settings-group", ui)
+        self.assertIn("<summary>保存位置</summary>", ui)
+        self.assertIn("<summary>手动 Cookie</summary>", ui)
+        self.assertIn("<summary>浏览器 Cookie 来源</summary>", ui)
+        self.assertIn("settings-scroll", ui)
+        self.assertIn(".settings-scroll", style)
+
     def test_desktop_ui_can_show_environment_report(self):
         ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
         script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
@@ -374,6 +394,20 @@ class DesktopAppTests(unittest.TestCase):
             logs = reloaded_api.get_logs()
 
             self.assertTrue(any("下载任务已创建" in line for line in logs["lines"]))
+
+    def test_desktop_api_ignores_log_write_failures(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+
+            api = DesktopApi(config_store=DesktopConfigStore(
+                appdata_dir=Path(tmp) / "AppData",
+                user_profile=Path(tmp) / "User",
+            ))
+            api.log_store.path.parent.mkdir(parents=True, exist_ok=True)
+            api.log_store.path.parent.rmdir()
+
+            api._append_log("should not crash")
 
     def test_delete_cookie_clears_saved_cookie_and_config(self):
         with workspace_tempdir() as tmp:

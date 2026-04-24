@@ -26,46 +26,81 @@
                 <button id="download-button">下载</button>
                 <button id="clear-finished-tasks-button">清理已结束</button>
             </div>
+            <details class="download-cookie-panel">
+                <summary>Cookie 快捷操作</summary>
+                <label>
+                    手动 Cookie
+                    <textarea id="download-cookie-content" rows="4" placeholder="# Netscape HTTP Cookie File"></textarea>
+                </label>
+                <label>
+                    浏览器 Cookie 来源
+                    <select id="download-browser-cookie-source">
+                        <option value="edge">Edge</option>
+                        <option value="chrome">Chrome</option>
+                        <option value="firefox">Firefox</option>
+                    </select>
+                </label>
+                <div class="button-row">
+                    <button id="download-save-cookie-button">保存 Cookie</button>
+                    <button id="download-delete-cookie-button">删除 Cookie</button>
+                    <button id="download-import-browser-cookie-button">使用浏览器 Cookie</button>
+                </div>
+            </details>
             <div id="task-list" class="task-list"></div>
         </section>
 
         <section id="settings-panel" class="page panel settings-panel">
             <h2>设置</h2>
-            <label>
-                保存位置
-                <input id="download-dir" type="text">
-            </label>
-            <label>
-                Cookie
-                <textarea id="cookie-content" rows="5" placeholder="# Netscape HTTP Cookie File"></textarea>
-            </label>
-            <label>
-                浏览器 Cookie 来源
-                <select id="browser-cookie-source">
-                    <option value="edge">Edge</option>
-                    <option value="chrome">Chrome</option>
-                    <option value="firefox">Firefox</option>
-                </select>
-            </label>
-            <div class="button-row">
-                <button id="save-config-button">保存设置</button>
-                <button id="open-download-dir-button">打开保存目录</button>
-                <button id="save-cookie-button">保存 Cookie</button>
-                <button id="delete-cookie-button">删除 Cookie</button>
-                <button id="import-browser-cookie-button">使用浏览器 Cookie</button>
-                <button id="upgrade-ytdlp-button">升级 yt-dlp</button>
+            <div class="settings-scroll">
+                <details class="settings-group" open>
+                    <summary>保存位置</summary>
+                    <label>
+                        保存目录
+                        <input id="download-dir" type="text">
+                    </label>
+                    <div class="button-row">
+                        <button id="save-config-button">保存设置</button>
+                        <button id="open-download-dir-button">打开保存目录</button>
+                    </div>
+                </details>
+                <details class="settings-group">
+                    <summary>手动 Cookie</summary>
+                    <label>
+                        Cookie
+                        <textarea id="cookie-content" rows="5" placeholder="# Netscape HTTP Cookie File"></textarea>
+                    </label>
+                    <div class="button-row">
+                        <button id="save-cookie-button">保存 Cookie</button>
+                        <button id="delete-cookie-button">删除 Cookie</button>
+                    </div>
+                </details>
+                <details class="settings-group">
+                    <summary>浏览器 Cookie 来源</summary>
+                    <label>
+                        浏览器
+                        <select id="browser-cookie-source">
+                            <option value="edge">Edge</option>
+                            <option value="chrome">Chrome</option>
+                            <option value="firefox">Firefox</option>
+                        </select>
+                    </label>
+                    <div class="button-row">
+                        <button id="import-browser-cookie-button">使用浏览器 Cookie</button>
+                    </div>
+                </details>
+                <details class="settings-group advanced-settings">
+                    <summary>高级设置</summary>
+                    <label>
+                        ffmpeg 路径
+                        <input id="ffmpeg-path" type="text">
+                    </label>
+                    <div class="button-row">
+                        <button id="detect-tools-button">检测本机工具</button>
+                        <button id="detect-environment-button">运行环境诊断</button>
+                        <button id="upgrade-ytdlp-button">升级 yt-dlp</button>
+                    </div>
+                </details>
             </div>
-            <details class="advanced-settings">
-                <summary>高级设置</summary>
-                <label>
-                    ffmpeg 路径
-                    <input id="ffmpeg-path" type="text">
-                </label>
-                <div class="button-row">
-                    <button id="detect-tools-button">检测本机工具</button>
-                    <button id="detect-environment-button">运行环境诊断</button>
-                </div>
-            </details>
             <pre id="tools-status" class="status-box"></pre>
         </section>
 

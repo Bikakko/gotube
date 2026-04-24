@@ -51,6 +51,7 @@ async function loadConfig() {
     document.querySelector('#download-dir').value = config.download_dir || '';
     document.querySelector('#ffmpeg-path').value = config.ffmpeg_path || '';
     document.querySelector('#browser-cookie-source').value = config.browser_cookie_source || 'edge';
+    document.querySelector('#download-browser-cookie-source').value = config.browser_cookie_source || 'edge';
 }
 
 async function loadAppInfo() {
@@ -78,14 +79,36 @@ async function saveCookie() {
     setText('#tools-status', result.message);
 }
 
+async function saveDownloadCookie() {
+    const bridge = await api();
+    const result = await bridge.save_cookie(document.querySelector('#download-cookie-content').value);
+    if (result.ok) {
+        document.querySelector('#cookie-content').value = document.querySelector('#download-cookie-content').value;
+        await loadConfig();
+    }
+    setText('#log-output', result.message);
+}
+
 async function deleteCookie() {
     const bridge = await api();
     const result = await bridge.delete_cookie();
     if (result.ok) {
         document.querySelector('#cookie-content').value = '';
+        document.querySelector('#download-cookie-content').value = '';
         await loadConfig();
     }
     setText('#tools-status', result.message);
+}
+
+async function deleteDownloadCookie() {
+    const bridge = await api();
+    const result = await bridge.delete_cookie();
+    if (result.ok) {
+        document.querySelector('#cookie-content').value = '';
+        document.querySelector('#download-cookie-content').value = '';
+        await loadConfig();
+    }
+    setText('#log-output', result.message);
 }
 
 async function importBrowserCookie() {
@@ -94,6 +117,14 @@ async function importBrowserCookie() {
     const result = await bridge.import_browser_cookie(browser);
     await loadConfig();
     setText('#tools-status', result.message);
+}
+
+async function importDownloadBrowserCookie() {
+    const bridge = await api();
+    const browser = document.querySelector('#download-browser-cookie-source').value;
+    const result = await bridge.import_browser_cookie(browser);
+    await loadConfig();
+    setText('#log-output', result.message);
 }
 
 async function openDownloadDir() {
@@ -236,6 +267,9 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('#save-cookie-button').addEventListener('click', saveCookie);
     document.querySelector('#delete-cookie-button').addEventListener('click', deleteCookie);
     document.querySelector('#import-browser-cookie-button').addEventListener('click', importBrowserCookie);
+    document.querySelector('#download-save-cookie-button').addEventListener('click', saveDownloadCookie);
+    document.querySelector('#download-delete-cookie-button').addEventListener('click', deleteDownloadCookie);
+    document.querySelector('#download-import-browser-cookie-button').addEventListener('click', importDownloadBrowserCookie);
     document.querySelector('#detect-tools-button').addEventListener('click', detectTools);
     document.querySelector('#detect-environment-button').addEventListener('click', detectEnvironment);
     document.querySelector('#upgrade-ytdlp-button').addEventListener('click', upgradeYtdlp);

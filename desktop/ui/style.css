@@ -86,6 +86,21 @@ body {
     gap: 14px;
 }
 
+.download-cookie-panel,
+.settings-group {
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(4, 10, 20, 0.38);
+    color: var(--muted);
+}
+
+.download-cookie-panel summary,
+.settings-group summary {
+    cursor: pointer;
+    color: var(--text);
+}
+
 .settings-panel,
 .logs-panel {
     overflow: hidden;
@@ -152,18 +167,12 @@ label {
     color: var(--muted);
 }
 
-.advanced-settings {
-    margin-top: 14px;
-    padding-top: 14px;
-    border-top: 1px solid var(--border);
-    color: var(--muted);
-}
-
-.advanced-settings summary {
-    width: fit-content;
-    margin-bottom: 12px;
-    cursor: pointer;
-    color: var(--text);
+.settings-scroll {
+    display: grid;
+    min-height: 0;
+    gap: 10px;
+    overflow: auto;
+    padding-right: 2px;
 }
 
 .task-list {
@@ -218,7 +227,7 @@ label {
 }
 
 .settings-panel .status-box {
-    flex: 1 1 auto;
+    flex: 0 0 150px;
     min-height: 150px;
 }
 

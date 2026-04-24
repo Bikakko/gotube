@@ -95,7 +95,7 @@ class DesktopApi:
         if result.ok:
             self.config.cookies_file = None
             self.config_store.save(self.config)
-            self.log_store.append("Cookie 已删除")
+            self._append_log("Cookie 已删除")
         return {"ok": result.ok, "message": result.message}
 
     def import_browser_cookie(self, browser: str) -> dict:
@@ -103,7 +103,7 @@ class DesktopApi:
         if result.ok:
             self.config.browser_cookie_source = browser.strip().lower()
             self.config_store.save(self.config)
-            self.log_store.append(f"浏览器 Cookie 来源已设置：{self.config.browser_cookie_source}")
+            self._append_log(f"浏览器 Cookie 来源已设置：{self.config.browser_cookie_source}")
         return {"ok": result.ok, "message": result.message}
 
     def detect_tools(self) -> dict:
@@ -134,7 +134,7 @@ class DesktopApi:
         task = DesktopTask.create(url=url)
         with self._lock:
             self.tasks.append(task)
-        self.log_store.append(f"下载任务已创建：{url}")
+        self._append_log(f"下载任务已创建：{url}")
 
         def run() -> None:
             with self._lock:
@@ -159,21 +159,21 @@ class DesktopApi:
                 with self._lock:
                     if task.id in self.canceled_task_ids:
                         task.mark_canceled()
-                        self.log_store.append(f"下载任务已取消：{url}")
+                        self._append_log(f"下载任务已取消：{url}")
                         removed = _cleanup_partial_downloads(downloader)
                         if removed:
-                            self.log_store.append(f"已清理临时文件：{removed}")
+                            self._append_log(f"已清理临时文件：{removed}")
                         return
                     _copy_task_state(target=task, source=finished_task)
                 if task.status == "completed":
-                    self.log_store.append(f"下载任务已完成：{url}")
+                    self._append_log(f"下载任务已完成：{url}")
                 elif task.status == "canceled":
-                    self.log_store.append(f"下载任务已取消：{url}")
+                    self._append_log(f"下载任务已取消：{url}")
                 else:
-                    self.log_store.append(f"下载任务失败：{url}，{task.error}")
+                    self._append_log(f"下载任务失败：{url}，{task.error}")
             except Exception as exc:
                 task.mark_failed(str(exc))
-                self.log_store.append(f"下载任务失败：{url}，{exc}")
+                self._append_log(f"下载任务失败：{url}，{exc}")
 
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
@@ -187,7 +187,7 @@ class DesktopApi:
                         return {"ok": False, "message": "任务已经结束"}
                     self.canceled_task_ids.add(task_id)
                     task.mark_canceled()
-                    self.log_store.append(f"下载任务已取消：{task.url}")
+                    self._append_log(f"下载任务已取消：{task.url}")
                     return {"ok": True, "message": "任务已取消"}
         return {"ok": False, "message": "任务不存在"}
 
@@ -198,7 +198,7 @@ class DesktopApi:
             self.tasks = [task for task in self.tasks if task.status not in finished_statuses]
             removed = before - len(self.tasks)
         if removed:
-            self.log_store.append(f"已清理任务记录：{removed}")
+            self._append_log(f"已清理任务记录：{removed}")
         return {"ok": True, "message": f"已清理 {removed} 个任务", "removed": removed}
 
     def get_tasks(self) -> list[dict]:
@@ -231,6 +231,12 @@ class DesktopApi:
 
     def _open_folder(self, path: Path) -> None:
         os.startfile(path)  # type: ignore[attr-defined]
+
+    def _append_log(self, line: str) -> None:
+        try:
+            self.log_store.append(line)
+        except OSError:
+            pass
 
 
 def _tool_to_dict(status) -> dict:
