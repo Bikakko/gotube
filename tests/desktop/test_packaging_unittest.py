@@ -23,6 +23,7 @@ class DesktopPackagingTests(unittest.TestCase):
 
         self.assertIn("desktop_build/", ignore)
         self.assertIn("desktop_dist/", ignore)
+        self.assertIn(".venv-desktop/", ignore)
 
     def test_desktop_check_script_runs_required_verifications(self):
         script = Path("scripts/desktop_check.py").read_text(encoding="utf-8")

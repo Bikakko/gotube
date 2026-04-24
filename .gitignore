@@ -31,6 +31,7 @@ tests/
 # 虚拟环境 - 生产独立创建
 venv/
 .venv/
+.venv-desktop/
 server/.venv/
 
 # 本地验收原始记录 - 不入库
