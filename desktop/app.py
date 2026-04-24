@@ -72,6 +72,10 @@ class DesktopApi:
 
     def import_browser_cookie(self, browser: str) -> dict:
         result = self.cookie_store.import_from_browser(browser)
+        if result.ok:
+            self.config.browser_cookie_source = browser.strip().lower()
+            self.config_store.save(self.config)
+            self.log_store.append(f"浏览器 Cookie 来源已设置：{self.config.browser_cookie_source}")
         return {"ok": result.ok, "message": result.message}
 
     def detect_tools(self) -> dict:
@@ -136,6 +140,7 @@ class DesktopApi:
         return DesktopDownloader(
             download_dir=config.download_dir,
             cookies_file=config.cookies_file,
+            browser_cookie_source=config.browser_cookie_source,
             ffmpeg_path=config.ffmpeg_path,
         )
 

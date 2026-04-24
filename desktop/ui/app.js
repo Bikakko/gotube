@@ -14,6 +14,7 @@ async function loadConfig() {
     const config = await bridge.get_config();
     document.querySelector('#download-dir').value = config.download_dir || '';
     document.querySelector('#ffmpeg-path').value = config.ffmpeg_path || '';
+    document.querySelector('#browser-cookie-source').value = config.browser_cookie_source || 'edge';
 }
 
 async function saveConfig() {
@@ -37,6 +38,14 @@ async function deleteCookie() {
         document.querySelector('#cookie-content').value = '';
         await loadConfig();
     }
+    setText('#tools-status', result.message);
+}
+
+async function importBrowserCookie() {
+    const bridge = await api();
+    const browser = document.querySelector('#browser-cookie-source').value;
+    const result = await bridge.import_browser_cookie(browser);
+    await loadConfig();
     setText('#tools-status', result.message);
 }
 
@@ -120,6 +129,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelector('#open-download-dir-button').addEventListener('click', openDownloadDir);
     document.querySelector('#save-cookie-button').addEventListener('click', saveCookie);
     document.querySelector('#delete-cookie-button').addEventListener('click', deleteCookie);
+    document.querySelector('#import-browser-cookie-button').addEventListener('click', importBrowserCookie);
     document.querySelector('#detect-tools-button').addEventListener('click', detectTools);
     document.querySelector('#upgrade-ytdlp-button').addEventListener('click', upgradeYtdlp);
     document.querySelector('#download-button').addEventListener('click', createDownload);

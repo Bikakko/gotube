@@ -142,12 +142,34 @@ class DesktopAppTests(unittest.TestCase):
             self.assertTrue(delete_result["ok"])
             self.assertEqual("", api.get_config()["cookies_file"])
 
+    def test_import_browser_cookie_updates_config_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+
+            api = DesktopApi(config_store=DesktopConfigStore(
+                appdata_dir=Path(tmp) / "AppData",
+                user_profile=Path(tmp) / "User",
+            ))
+
+            result = api.import_browser_cookie("edge")
+
+            self.assertTrue(result["ok"])
+            self.assertEqual("edge", api.get_config()["browser_cookie_source"])
+
     def test_desktop_ui_has_delete_cookie_button(self):
         ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
         script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
 
         self.assertIn("delete-cookie-button", ui)
         self.assertIn("delete_cookie", script)
+
+    def test_desktop_ui_has_browser_cookie_import(self):
+        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
+        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("browser-cookie-source", ui)
+        self.assertIn("import_browser_cookie", script)
 
 
 if __name__ == "__main__":

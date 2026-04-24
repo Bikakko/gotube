@@ -31,6 +31,35 @@ class DesktopDownloaderTests(unittest.TestCase):
             self.assertEqual(opts["cookiefile"], str(cookies))
             self.assertEqual(opts["ffmpeg_location"], str(ffmpeg.parent))
 
+    def test_downloader_uses_browser_cookies_when_no_cookie_file_exists(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from desktop.core.downloader import DesktopDownloader
+
+            downloader = DesktopDownloader(
+                download_dir=Path(tmp),
+                browser_cookie_source="edge",
+            )
+            opts = downloader.build_ytdlp_options()
+
+            self.assertEqual(("edge",), opts["cookiesfrombrowser"])
+            self.assertNotIn("cookiefile", opts)
+
+    def test_downloader_prefers_manual_cookie_file_over_browser_source(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from desktop.core.downloader import DesktopDownloader
+
+            root = Path(tmp)
+            cookies = root / "cookies.txt"
+            downloader = DesktopDownloader(
+                download_dir=root / "downloads",
+                cookies_file=cookies,
+                browser_cookie_source="edge",
+            )
+            opts = downloader.build_ytdlp_options()
+
+            self.assertEqual(str(cookies), opts["cookiefile"])
+            self.assertNotIn("cookiesfrombrowser", opts)
+
 
 if __name__ == "__main__":
     unittest.main()

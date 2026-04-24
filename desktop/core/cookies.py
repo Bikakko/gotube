@@ -38,11 +38,11 @@ class DesktopCookieStore:
     def import_from_browser(self, browser: str) -> CookieActionResult:
         browser_name = (browser or "").strip().lower()
         if browser_name not in {"edge", "chrome", "firefox"}:
-            return CookieActionResult(ok=False, message=f"暂不支持浏览器: {browser}")
+            return CookieActionResult(ok=False, message=f"暂不支持浏览器：{browser}")
 
         return CookieActionResult(
-            ok=False,
-            message="浏览器 Cookie 导入入口已就绪，后续将接入 yt-dlp 浏览器 Cookie 能力",
+            ok=True,
+            message=f"浏览器 Cookie 导入来源已设置为 {browser_name}",
         )
 
 

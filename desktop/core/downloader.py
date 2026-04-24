@@ -17,10 +17,12 @@ class DesktopDownloader:
         *,
         download_dir: Path,
         cookies_file: Path | None = None,
+        browser_cookie_source: str | None = None,
         ffmpeg_path: Path | None = None,
     ) -> None:
         self.download_dir = Path(download_dir)
         self.cookies_file = Path(cookies_file) if cookies_file else None
+        self.browser_cookie_source = browser_cookie_source.strip().lower() if browser_cookie_source else None
         self.ffmpeg_path = Path(ffmpeg_path) if ffmpeg_path else None
 
     def build_ytdlp_options(self, *, task: DesktopTask | None = None) -> dict:
@@ -33,6 +35,8 @@ class DesktopDownloader:
         }
         if self.cookies_file:
             options["cookiefile"] = str(self.cookies_file)
+        elif self.browser_cookie_source:
+            options["cookiesfrombrowser"] = (self.browser_cookie_source,)
         if self.ffmpeg_path:
             is_executable_path = self.ffmpeg_path.name.lower() in {"ffmpeg", "ffmpeg.exe"}
             options["ffmpeg_location"] = str(self.ffmpeg_path.parent if is_executable_path else self.ffmpeg_path)
