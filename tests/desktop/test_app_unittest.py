@@ -138,6 +138,42 @@ class DesktopAppTests(unittest.TestCase):
             self.assertEqual("running", task["status"])
             self.assertEqual("1 MiB/s", task["speed"])
 
+    def test_cancel_task_prevents_late_completion_from_overwriting_state(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi
+            from desktop.core.config import DesktopConfigStore
+            from desktop.core.tasks import DesktopTask
+
+            release = Event()
+
+            class SlowDownloader:
+                def download(self, url, on_progress=None):
+                    task = DesktopTask.create(url=url)
+                    task.mark_running()
+                    if on_progress:
+                        on_progress(task)
+                    release.wait(timeout=2)
+                    task.mark_completed(file_path="video.mp4")
+                    return task
+
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                ),
+                downloader_factory=lambda config: SlowDownloader(),
+            )
+
+            created = api.create_download("https://example.com/video")
+            wait_for(lambda: api.get_tasks()[0]["status"] == "running")
+            cancel_result = api.cancel_task(created["task_id"])
+            release.set()
+            wait_for(lambda: any("下载任务已取消" in line for line in api.get_logs()["lines"]))
+
+            self.assertTrue(cancel_result["ok"])
+            self.assertEqual("canceled", api.get_tasks()[0]["status"])
+            self.assertEqual("", api.get_tasks()[0]["file_path"])
+
     def test_failed_download_is_logged_as_failed(self):
         with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
@@ -252,6 +288,12 @@ class DesktopAppTests(unittest.TestCase):
 
         self.assertIn("browser-cookie-source", ui)
         self.assertIn("import_browser_cookie", script)
+
+    def test_desktop_ui_can_cancel_task(self):
+        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
+
+        self.assertIn("cancel_task", script)
+        self.assertIn("cancel-task-button", script)
 
 
 if __name__ == "__main__":

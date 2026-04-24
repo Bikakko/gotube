@@ -129,6 +129,10 @@ label {
     overflow-wrap: anywhere;
 }
 
+.cancel-task-button {
+    margin-top: 10px;
+}
+
 .status-box {
     min-height: 80px;
     margin: 14px 0 0;

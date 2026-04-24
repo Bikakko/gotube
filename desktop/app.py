@@ -30,6 +30,7 @@ class DesktopApi:
         self.downloader_factory = downloader_factory or self._create_downloader
         self.folder_opener = folder_opener or self._open_folder
         self.tasks: list[DesktopTask] = []
+        self.canceled_task_ids: set[str] = set()
         self._lock = threading.Lock()
 
     def get_config(self) -> dict:
@@ -105,16 +106,25 @@ class DesktopApi:
         self.log_store.append(f"下载任务已创建：{url}")
 
         def run() -> None:
-            task.mark_running()
+            with self._lock:
+                if task.id in self.canceled_task_ids:
+                    return
+                task.mark_running()
             downloader = self.downloader_factory(self.config)
 
             def on_progress(progress_task: DesktopTask) -> None:
                 with self._lock:
+                    if task.id in self.canceled_task_ids:
+                        return
                     _copy_task_state(target=task, source=progress_task)
 
             try:
                 finished_task = downloader.download(url, on_progress=on_progress)
                 with self._lock:
+                    if task.id in self.canceled_task_ids:
+                        task.mark_canceled()
+                        self.log_store.append(f"下载任务已取消：{url}")
+                        return
                     _copy_task_state(target=task, source=finished_task)
                 if task.status == "completed":
                     self.log_store.append(f"下载任务已完成：{url}")
@@ -129,6 +139,18 @@ class DesktopApi:
         thread = threading.Thread(target=run, daemon=True)
         thread.start()
         return {"ok": True, "message": "下载任务已开始", "task_id": task.id}
+
+    def cancel_task(self, task_id: str) -> dict:
+        with self._lock:
+            for task in self.tasks:
+                if task.id == task_id:
+                    if task.status in {"completed", "failed", "canceled"}:
+                        return {"ok": False, "message": "任务已经结束"}
+                    self.canceled_task_ids.add(task_id)
+                    task.mark_canceled()
+                    self.log_store.append(f"下载任务已取消：{task.url}")
+                    return {"ok": True, "message": "任务已取消"}
+        return {"ok": False, "message": "任务不存在"}
 
     def get_tasks(self) -> list[dict]:
         with self._lock:

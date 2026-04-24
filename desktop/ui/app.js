@@ -84,6 +84,13 @@ async function createDownload() {
     await refreshTasks();
 }
 
+async function cancelTask(taskId) {
+    const bridge = await api();
+    const result = await bridge.cancel_task(taskId);
+    setText('#log-output', result.message);
+    await refreshTasks();
+}
+
 async function refreshTasks() {
     const bridge = await api();
     const tasks = await bridge.get_tasks();
@@ -119,6 +126,15 @@ function renderTasks(tasks) {
         file.textContent = task.file_path || task.error || '';
 
         card.append(title, meta, file);
+
+        if (task.status === 'pending' || task.status === 'running') {
+            const cancelButton = document.createElement('button');
+            cancelButton.className = 'cancel-task-button';
+            cancelButton.type = 'button';
+            cancelButton.textContent = '取消';
+            cancelButton.addEventListener('click', () => cancelTask(task.id));
+            card.append(cancelButton);
+        }
         list.append(card);
     }
 }
