@@ -288,10 +288,15 @@ async function handleBatchDelete() {
     }
 
     try {
+        const selectedVideos = state.videos.filter(v => state.selectedVideos.has(v.filename));
+        const mediaAssetIds = selectedVideos
+            .map(v => v.media_asset_id)
+            .filter(id => Number.isInteger(id));
         const result = await apiFetch('/videos/batch-delete', {
             method: 'POST',
             body: JSON.stringify({
-                filenames: Array.from(state.selectedVideos),
+                media_asset_ids: mediaAssetIds,
+                filenames: mediaAssetIds.length === selectedVideos.length ? [] : Array.from(state.selectedVideos),
             }),
         });
 

@@ -1,6 +1,7 @@
 import asyncio
 import tempfile
 import unittest
+from unittest.mock import patch
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -8,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from server.admin_api import get_user_library, get_videos, list_users, update_user
+from server.admin_api import batch_delete_videos, get_user_library, get_videos, list_users, update_user
 from server.db import Base, MediaAsset, MediaSource, User, UserVideoItem
 from server.models import UpdateUserRequest
 
@@ -94,6 +95,13 @@ class AdminManagementTests(unittest.TestCase):
         session.commit()
         session.refresh(source)
         return source
+
+    class _JsonRequest:
+        def __init__(self, payload):
+            self._payload = payload
+
+        async def json(self):
+            return self._payload
 
     def test_list_users_includes_library_usage_summary(self):
         with self.Session() as session:
@@ -202,6 +210,44 @@ class AdminManagementTests(unittest.TestCase):
                 row["source_urls"],
                 ["https://example.test/shared/1", "https://example.test/shared/2"],
             )
+
+    def test_batch_delete_videos_supports_media_asset_ids(self):
+        with self.Session() as session:
+            admin = self._user(session, "admin", role="admin")
+            alice = self._user(session, "alice")
+            asset = self._asset(session, "Shared", "dddddddd")
+            self._item(session, alice, asset)
+            Path(asset.filepath).write_bytes(b"video")
+
+            class _Downloader:
+                def invalidate_file_index_cache(self):
+                    return None
+
+                def invalidate_hash_index(self):
+                    return None
+
+            class _QueueManager:
+                downloader = _Downloader()
+
+            request = self._JsonRequest({"media_asset_ids": [asset.id]})
+            with patch("server.admin_api._get_queue_manager", return_value=_QueueManager()):
+                result = asyncio.run(batch_delete_videos(request=request, admin=admin, db=session))
+
+            self.assertEqual(result["success"], 1)
+            self.assertEqual(result["failed"], 0)
+            self.assertEqual(result["results"][0]["status"], "deleted")
+            self.assertEqual(result["results"][0]["media_asset_id"], asset.id)
+            self.assertIsNone(session.get(MediaAsset, asset.id))
+
+    def test_batch_delete_videos_rejects_empty_payload(self):
+        with self.Session() as session:
+            admin = self._user(session, "admin", role="admin")
+            request = self._JsonRequest({})
+
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(batch_delete_videos(request=request, admin=admin, db=session))
+
+            self.assertEqual(ctx.exception.status_code, 400)
 
     def test_get_videos_time_filter_handles_iso_created_at_strings(self):
         with self.Session() as session:

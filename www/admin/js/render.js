@@ -446,21 +446,22 @@ function renderVideoCard(video) {
                 }),
             ]),
         ]),
-        (video.owner_count || 0) > 1 ? el('div', { className: 'video-asset-stats' }, [
-            el('span', { textContent: `${video.owner_count || 0} 位拥有者` }),
-        ]) : null,
+        ((video.owner_count || 0) > 1 || (video.source_count || 0) > 1) ? el('div', { className: 'video-asset-stats' }, [
+            (video.owner_count || 0) > 1 ? el('span', { textContent: `${video.owner_count || 0} 位拥有者` }) : null,
+            (video.source_count || 0) > 1 ? el('span', { textContent: `${video.source_count || 0} 个来源` }) : null,
+        ].filter(Boolean)) : null,
     ]);
 
     const selectToggle = el('button', {
         className: `video-select-toggle ${isSelected ? 'selected' : ''}`,
-        textContent: isSelected ? '已选' : '选择',
+        textContent: isSelected ? '已选中' : '选择',
         title: isSelected ? '取消选择' : '选择媒体',
         onClick: (e) => {
             e.stopPropagation();
             const isCurrentlySelected = state.selectedVideos.has(video.filename);
             const newState = !isCurrentlySelected;
             toggleVideoSelection(video.filename, newState);
-            selectToggle.textContent = newState ? '已选' : '选择';
+            selectToggle.textContent = newState ? '已选中' : '选择';
             selectToggle.classList.toggle('selected', newState);
             window.updateSelectAllCheckbox();
         },

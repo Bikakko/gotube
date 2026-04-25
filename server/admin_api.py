@@ -936,60 +936,87 @@ async def delete_media_asset(
 async def batch_delete_videos(
     request: Request,
     admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
 ) -> dict:
     """
     批量删除视频。
     
-    请求体: {"filenames": ["file1.mp4", "file2.mp4"]}
+    请求体: {"media_asset_ids": [1, 2]} 或 {"filenames": ["file1.mp4", "file2.mp4"]}
     """
     try:
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="请求体格式错误")
-    
+
+    media_asset_ids = body.get("media_asset_ids", [])
     filenames = body.get("filenames", [])
-    if not filenames or not isinstance(filenames, list):
-        raise HTTPException(status_code=400, detail="缺少 filenames 参数")
-    
-    download_dir = settings.get_download_dir()
+    if media_asset_ids and not isinstance(media_asset_ids, list):
+        raise HTTPException(status_code=400, detail="media_asset_ids 必须是数组")
+    if filenames and not isinstance(filenames, list):
+        raise HTTPException(status_code=400, detail="filenames 必须是数组")
+    if not media_asset_ids and not filenames:
+        raise HTTPException(status_code=400, detail="缺少 media_asset_ids 或 filenames 参数")
+
     results = []
-    
-    for filename in filenames:
-        try:
-            filepath = _validate_filename(filename, download_dir)
-            if not filepath.is_file():
-                results.append({"filename": filename, "status": "not_found"})
-                continue
-            
-            parent_dir = filepath.parent
-            
-            # 删除视频文件
-            filepath.unlink()
-            
-            # 删除元数据和缩略图
-            for f in parent_dir.iterdir():
-                if f.is_file():
+
+    if media_asset_ids:
+        for raw_media_asset_id in media_asset_ids:
+            try:
+                media_asset_id = int(raw_media_asset_id)
+                result = admin_delete_media_asset(db, admin, media_asset_id, settings.get_download_dir())
+                results.append({
+                    "media_asset_id": media_asset_id,
+                    "filename": result.get("filename", ""),
+                    "status": "deleted",
+                })
+                logger.info("批量维护删除媒体资产: %s", media_asset_id)
+            except ValueError:
+                results.append({"media_asset_id": raw_media_asset_id, "status": "error", "reason": "非法媒体 ID"})
+            except HTTPException as e:
+                results.append({
+                    "media_asset_id": raw_media_asset_id,
+                    "status": "error",
+                    "reason": e.detail if isinstance(e.detail, str) else "删除失败",
+                })
+            except Exception as e:
+                results.append({"media_asset_id": raw_media_asset_id, "status": "error", "reason": str(e)})
+    else:
+        download_dir = settings.get_download_dir()
+        for filename in filenames:
+            try:
+                filepath = _validate_filename(filename, download_dir)
+                if not filepath.is_file():
+                    results.append({"filename": filename, "status": "not_found"})
+                    continue
+
+                parent_dir = filepath.parent
+
+                filepath.unlink()
+
+                for f in parent_dir.iterdir():
+                    if f.is_file():
+                        try:
+                            f.unlink()
+                        except OSError:
+                            pass
+
+                if parent_dir != download_dir and not any(parent_dir.iterdir()):
                     try:
-                        f.unlink()
+                        parent_dir.rmdir()
                     except OSError:
                         pass
-            
-            # 删除空目录
-            if parent_dir != download_dir and not any(parent_dir.iterdir()):
-                try:
-                    parent_dir.rmdir()
-                except OSError:
-                    pass
-            
-            results.append({"filename": filename, "status": "deleted"})
-            logger.info("批量删除: %s", filename)
-        
-        except HTTPException:
-            results.append({"filename": filename, "status": "error", "reason": "非法文件名"})
-        except Exception as e:
-            results.append({"filename": filename, "status": "error", "reason": str(e)})
-    
+
+                results.append({"filename": filename, "status": "deleted"})
+                logger.info("批量删除旧视频文件: %s", filename)
+
+            except HTTPException:
+                results.append({"filename": filename, "status": "error", "reason": "非法文件名"})
+            except Exception as e:
+                results.append({"filename": filename, "status": "error", "reason": str(e)})
+
     success = sum(1 for r in results if r["status"] == "deleted")
+    if success > 0 and media_asset_ids:
+        db.commit()
 
     # 如果有文件被删除，刷新缓存
     if success > 0:
@@ -1003,9 +1030,9 @@ async def batch_delete_videos(
 
     return {
         "status": "ok",
-        "total": len(filenames),
+        "total": len(media_asset_ids) or len(filenames),
         "success": success,
-        "failed": len(filenames) - success,
+        "failed": (len(media_asset_ids) or len(filenames)) - success,
         "results": results,
     }
 
