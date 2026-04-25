@@ -121,7 +121,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GoTube",
     description="自托管多平台视频下载工具",
-    version="4.3.1",
+    version="4.3.4",
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,

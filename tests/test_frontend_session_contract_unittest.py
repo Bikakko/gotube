@@ -59,6 +59,16 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("if (!isLibraryUser()) {", source)
         self.assertIn("section.style.display = isLibraryUser() ? 'block' : 'none';", source)
 
+    def test_download_page_archives_completed_library_tasks_but_keeps_guest_cards(self):
+        source = read_text("www/download.js")
+
+        self.assertIn("function shouldArchiveTaskCard(task)", source)
+        self.assertIn("&& isLibraryUser()", source)
+        self.assertIn("(task.status === 'completed' || task.status === 'duplicate')", source)
+        self.assertIn("&& task.user_video_item_id", source)
+        self.assertIn("delete tasks[task.task_id];", source)
+        self.assertIn("tasks[task.task_id] = task;", source)
+
     def test_download_page_renders_cancelled_status(self):
         source = read_text("www/download.js")
 

@@ -176,6 +176,25 @@
         renderTasksSafe(list, arr);
     }
 
+    function shouldArchiveTaskCard(task) {
+        return Boolean(
+            task
+            && isLibraryUser()
+            && (task.status === 'completed' || task.status === 'duplicate')
+            && task.user_video_item_id
+        );
+    }
+
+    function storeTask(task) {
+        if (!task || !task.task_id) return false;
+        if (shouldArchiveTaskCard(task)) {
+            delete tasks[task.task_id];
+            return false;
+        }
+        tasks[task.task_id] = task;
+        return true;
+    }
+
     function clearTasks() {
         Object.keys(tasks).forEach(key => delete tasks[key]);
         renderTasks();
@@ -417,7 +436,7 @@
             }
 
             const data = await res.json();
-            tasks[data.task_id] = data;
+            storeTask(data);
             setStatus('✅ 已添加', '#3fb950');
             renderTasks();
             if (isLibraryUser()) loadMyLibrary();
@@ -456,7 +475,7 @@
         try {
             const res = await fetch(`/api/tasks?client_id=${clientId}`);
             if (res.ok) {
-                (await res.json()).forEach(t => tasks[t.task_id] = t);
+                (await res.json()).forEach(storeTask);
                 renderTasks();
             }
         } catch (e) {
@@ -507,7 +526,7 @@
                     const oldTask = tasks[taskId];
                     
                     // 合并进度数据
-                    tasks[taskId] = { ...oldTask, ...d };
+                    storeTask({ ...oldTask, ...d });
                     
                     // 重新渲染任务列表
                     renderTasks();
@@ -1327,7 +1346,7 @@
             if (transferData.updated_tasks && transferData.updated_tasks.length > 0) {
                 transferData.updated_tasks.forEach(updatedTask => {
                     if (tasks[updatedTask.task_id]) {
-                        tasks[updatedTask.task_id] = updatedTask;
+                        storeTask(updatedTask);
                     }
                 });
                 // 重新渲染任务列表
