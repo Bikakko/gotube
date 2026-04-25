@@ -77,6 +77,7 @@ dist/
 build/
 node_modules/
 www_dist/
+desktop/
 
 # 操作系统文件
 .DS_Store
