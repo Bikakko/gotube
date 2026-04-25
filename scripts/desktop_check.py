@@ -13,7 +13,6 @@ ROOT = Path(__file__).resolve().parents[1]
 def main() -> int:
     checks = [
         [sys.executable, "-m", "unittest", "discover", "tests/desktop"],
-        ["node", "--check", "desktop/ui/app.js"],
         [
             sys.executable,
             "-m",

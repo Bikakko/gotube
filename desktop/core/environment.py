@@ -91,15 +91,14 @@ def collect_environment_report() -> list[EnvironmentCheck]:
 
     return [
         check_python_package(
-            "webview",
-            display_name="pywebview",
-            distribution_name="pywebview",
+            "PySide6",
+            display_name="PySide6",
+            distribution_name="PySide6",
             required=True,
         ),
         ytdlp,
         check_python_package("PyInstaller", display_name="pyinstaller", required=True),
         ffmpeg,
-        check_executable("node", args=["--version"], required=False),
     ]
 
 

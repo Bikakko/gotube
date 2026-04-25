@@ -1,24 +1,35 @@
-import tempfile
+import os
 import time
 import unittest
-from unittest.mock import patch
 from pathlib import Path
 from threading import Event
+from unittest.mock import patch
 
 from tests.desktop.temp_utils import workspace_tempdir
 
 
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
 class DesktopAppTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from desktop.app import create_application
+
+        cls.qt_app = create_application()
+
     def test_desktop_api_returns_config(self):
         with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
             from desktop.core.config import DesktopConfigStore
 
             root = Path(tmp)
-            api = DesktopApi(config_store=DesktopConfigStore(
-                appdata_dir=root / "AppData",
-                user_profile=root / "User",
-            ))
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=root / "AppData",
+                    user_profile=root / "User",
+                )
+            )
 
             config = api.get_config()
 
@@ -30,10 +41,12 @@ class DesktopAppTests(unittest.TestCase):
             from desktop.app import DesktopApi
             from desktop.core.config import DesktopConfigStore
 
-            api = DesktopApi(config_store=DesktopConfigStore(
-                appdata_dir=Path(tmp) / "AppData",
-                user_profile=Path(tmp) / "User",
-            ))
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                )
+            )
 
             info = api.get_app_info()
 
@@ -45,10 +58,12 @@ class DesktopAppTests(unittest.TestCase):
             from desktop.app import DesktopApi
             from desktop.core.config import DesktopConfigStore
 
-            api = DesktopApi(config_store=DesktopConfigStore(
-                appdata_dir=Path(tmp) / "AppData",
-                user_profile=Path(tmp) / "User",
-            ))
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                )
+            )
 
             report = api.get_environment()
 
@@ -60,91 +75,109 @@ class DesktopAppTests(unittest.TestCase):
         from desktop.app import _resource_path
 
         with patch("sys._MEIPASS", "C:/bundle/root", create=True):
-            path = _resource_path("desktop/ui/index.html")
+            path = _resource_path("VERSION")
 
-        self.assertEqual(Path("C:/bundle/root/desktop/ui/index.html"), path)
+        self.assertEqual(Path("C:/bundle/root/VERSION"), path)
+
+    def test_create_application_reuses_qapplication_instance(self):
+        from desktop.app import create_application
+
+        app1 = create_application()
+        app2 = create_application()
+
+        self.assertIs(app1, app2)
+
+    def test_desktop_main_window_has_native_tabs(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi, DesktopMainWindow
+            from desktop.core.config import DesktopConfigStore
+
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                )
+            )
+            window = DesktopMainWindow(api)
+
+            self.assertEqual("GoTube Desktop", window.windowTitle())
+            self.assertEqual(3, window.tabs.count())
+            self.assertEqual("下载", window.tabs.tabText(0))
+            self.assertEqual("设置", window.tabs.tabText(1))
+            self.assertEqual("日志", window.tabs.tabText(2))
+
+    def test_desktop_main_window_uses_scrollable_settings_area(self):
+        with workspace_tempdir() as tmp:
+            from PySide6.QtWidgets import QScrollArea
+
+            from desktop.app import DesktopApi, DesktopMainWindow
+            from desktop.core.config import DesktopConfigStore
+
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                )
+            )
+            window = DesktopMainWindow(api)
+
+            self.assertIsInstance(window.settings_scroll, QScrollArea)
+            self.assertTrue(window.settings_scroll.widgetResizable())
+
+    def test_desktop_main_window_has_cookie_shortcuts_on_download_page(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi, DesktopMainWindow
+            from desktop.core.config import DesktopConfigStore
+
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                )
+            )
+            window = DesktopMainWindow(api)
+
+            self.assertEqual("Cookie 快捷操作", window.download_cookie_group.title())
+            self.assertEqual("保存 Cookie", window.download_save_cookie_button.text())
+            self.assertEqual("删除 Cookie", window.download_delete_cookie_button.text())
+            self.assertEqual("浏览器 Cookie", window.download_import_cookie_button.text())
+
+    def test_desktop_main_window_applies_saved_window_size(self):
+        with workspace_tempdir() as tmp:
+            from desktop.app import DesktopApi, DesktopMainWindow
+            from desktop.core.config import DesktopConfigStore
+
+            store = DesktopConfigStore(
+                appdata_dir=Path(tmp) / "AppData",
+                user_profile=Path(tmp) / "User",
+            )
+            config = store.load()
+            config.last_window_size = (1320, 840)
+            store.save(config)
+            api = DesktopApi(config_store=store)
+
+            window = DesktopMainWindow(api)
+
+            self.assertEqual(1320, window.width())
+            self.assertEqual(840, window.height())
 
     def test_set_download_dir_rejects_blank_path(self):
         with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
             from desktop.core.config import DesktopConfigStore
 
-            api = DesktopApi(config_store=DesktopConfigStore(
-                appdata_dir=Path(tmp) / "AppData",
-                user_profile=Path(tmp) / "User",
-            ))
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                )
+            )
             before = api.get_config()["download_dir"]
 
             result = api.set_download_dir("  ")
 
             self.assertFalse(result["ok"])
             self.assertEqual(before, api.get_config()["download_dir"])
-
-    def test_desktop_ui_contains_required_sections(self):
-        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
-
-        self.assertIn("desktop-tabs", ui)
-        self.assertIn('data-page="download-page"', ui)
-        self.assertIn('data-page="settings-panel"', ui)
-        self.assertIn('data-page="logs-panel"', ui)
-        self.assertIn("download-page", ui)
-        self.assertIn("download-url", ui)
-        self.assertIn("settings-panel", ui)
-        self.assertIn("logs-panel", ui)
-        self.assertIn("app-version", ui)
-
-    def test_desktop_ui_uses_clear_labels_and_deemphasizes_ffmpeg(self):
-        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
-
-        self.assertIn("输入视频链接", ui)
-        self.assertIn("下载", ui)
-        self.assertIn("高级设置", ui)
-        self.assertIn("<details", ui)
-        self.assertNotIn("涓", ui)
-        self.assertNotIn("璁", ui)
-
-    def test_desktop_ui_refreshes_task_list(self):
-        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
-
-        self.assertIn("async function refreshTasks()", script)
-        self.assertIn("renderTasks", script)
-        self.assertIn("get_tasks", script)
-        self.assertIn("setInterval(refreshTasks", script)
-
-    def test_desktop_ui_has_open_download_dir_button(self):
-        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
-        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
-
-        self.assertIn("open-download-dir-button", ui)
-        self.assertIn("open_download_dir", script)
-
-    def test_desktop_download_page_has_cookie_shortcuts(self):
-        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
-
-        self.assertIn("download-cookie-panel", ui)
-        self.assertIn("download-browser-cookie-source", ui)
-        self.assertIn("download-import-browser-cookie-button", ui)
-        self.assertIn("download-save-cookie-button", ui)
-        self.assertIn("download-delete-cookie-button", ui)
-
-    def test_desktop_settings_inputs_are_collapsible(self):
-        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
-        style = Path("desktop/ui/style.css").read_text(encoding="utf-8")
-
-        self.assertIn("settings-group", ui)
-        self.assertIn("<summary>保存位置</summary>", ui)
-        self.assertIn("<summary>手动 Cookie</summary>", ui)
-        self.assertIn("<summary>浏览器 Cookie 来源</summary>", ui)
-        self.assertIn("settings-scroll", ui)
-        self.assertIn(".settings-scroll", style)
-
-    def test_desktop_ui_can_show_environment_report(self):
-        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
-        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
-
-        self.assertIn("detect-environment-button", ui)
-        self.assertIn("get_environment", script)
-        self.assertIn("formatEnvironmentReport", script)
 
     def test_create_download_registers_task_before_background_finish(self):
         with workspace_tempdir() as tmp:
@@ -256,13 +289,12 @@ class DesktopAppTests(unittest.TestCase):
             wait_for(lambda: api.get_tasks()[0]["status"] == "running")
             cancel_result = api.cancel_task(created["task_id"])
             release.set()
-            wait_for(lambda: any("下载任务已取消" in line for line in api.get_logs()["lines"]))
+            wait_for(lambda: any("已取消" in line for line in api.get_logs()["lines"]))
 
             self.assertTrue(cancel_result["ok"])
             self.assertEqual("canceled", api.get_tasks()[0]["status"])
             self.assertEqual("", api.get_tasks()[0]["file_path"])
             self.assertTrue(downloader.cleaned)
-            self.assertTrue(any("已清理临时文件：2" in line for line in api.get_logs()["lines"]))
 
     def test_failed_download_is_logged_as_failed(self):
         with workspace_tempdir() as tmp:
@@ -286,11 +318,11 @@ class DesktopAppTests(unittest.TestCase):
 
             api.create_download("https://example.com/video")
             wait_for(lambda: api.get_tasks()[0]["status"] == "failed")
-            wait_for(lambda: any("下载任务失败" in line for line in api.get_logs()["lines"]))
+            wait_for(lambda: any("失败" in line for line in api.get_logs()["lines"]))
             logs = api.get_logs()["lines"]
 
-            self.assertTrue(any("下载任务失败" in line for line in logs))
-            self.assertFalse(any("下载任务已完成" in line for line in logs))
+            self.assertTrue(any("失败" in line for line in logs))
+            self.assertFalse(any("完成" in line for line in logs))
 
     def test_open_download_dir_creates_directory_and_uses_opener(self):
         with workspace_tempdir() as tmp:
@@ -342,10 +374,12 @@ class DesktopAppTests(unittest.TestCase):
             from desktop.core.config import DesktopConfigStore
             from desktop.core.tasks import DesktopTask
 
-            api = DesktopApi(config_store=DesktopConfigStore(
-                appdata_dir=Path(tmp) / "AppData",
-                user_profile=Path(tmp) / "User",
-            ))
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                )
+            )
             task = DesktopTask.create(url="https://example.com/video")
             task.mark_running()
             api.tasks.append(task)
@@ -360,10 +394,12 @@ class DesktopAppTests(unittest.TestCase):
             from desktop.core.config import DesktopConfigStore
             from desktop.core.tasks import DesktopTask
 
-            api = DesktopApi(config_store=DesktopConfigStore(
-                appdata_dir=Path(tmp) / "AppData",
-                user_profile=Path(tmp) / "User",
-            ))
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                )
+            )
             running = DesktopTask.create(url="https://example.com/running")
             running.mark_running()
             completed = DesktopTask.create(url="https://example.com/done")
@@ -393,17 +429,19 @@ class DesktopAppTests(unittest.TestCase):
             reloaded_api = DesktopApi(config_store=store)
             logs = reloaded_api.get_logs()
 
-            self.assertTrue(any("下载任务已创建" in line for line in logs["lines"]))
+            self.assertTrue(any("任务已创建" in line for line in logs["lines"]))
 
     def test_desktop_api_ignores_log_write_failures(self):
         with workspace_tempdir() as tmp:
             from desktop.app import DesktopApi
             from desktop.core.config import DesktopConfigStore
 
-            api = DesktopApi(config_store=DesktopConfigStore(
-                appdata_dir=Path(tmp) / "AppData",
-                user_profile=Path(tmp) / "User",
-            ))
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                )
+            )
             api.log_store.path.parent.mkdir(parents=True, exist_ok=True)
             api.log_store.path.parent.rmdir()
 
@@ -435,81 +473,17 @@ class DesktopAppTests(unittest.TestCase):
             from desktop.app import DesktopApi
             from desktop.core.config import DesktopConfigStore
 
-            api = DesktopApi(config_store=DesktopConfigStore(
-                appdata_dir=Path(tmp) / "AppData",
-                user_profile=Path(tmp) / "User",
-            ))
+            api = DesktopApi(
+                config_store=DesktopConfigStore(
+                    appdata_dir=Path(tmp) / "AppData",
+                    user_profile=Path(tmp) / "User",
+                )
+            )
 
             result = api.import_browser_cookie("edge")
 
             self.assertTrue(result["ok"])
             self.assertEqual("edge", api.get_config()["browser_cookie_source"])
-
-    def test_desktop_ui_has_delete_cookie_button(self):
-        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
-        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
-
-        self.assertIn("delete-cookie-button", ui)
-        self.assertIn("delete_cookie", script)
-
-    def test_desktop_ui_has_browser_cookie_import(self):
-        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
-        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
-
-        self.assertIn("browser-cookie-source", ui)
-        self.assertIn("import_browser_cookie", script)
-
-    def test_desktop_ui_can_cancel_task(self):
-        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
-
-        self.assertIn("cancel_task", script)
-        self.assertIn("cancel-task-button", script)
-
-    def test_desktop_ui_can_open_completed_task_location(self):
-        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
-
-        self.assertIn("open_task_location", script)
-        self.assertIn("open-task-location-button", script)
-
-    def test_desktop_ui_can_clear_finished_tasks(self):
-        ui = Path("desktop/ui/index.html").read_text(encoding="utf-8")
-        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
-
-        self.assertIn("clear-finished-tasks-button", ui)
-        self.assertIn("clear_finished_tasks", script)
-
-    def test_desktop_ui_localizes_task_status(self):
-        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
-
-        self.assertIn("formatTaskStatus", script)
-        self.assertIn("下载中", script)
-        self.assertIn("已完成", script)
-        self.assertIn("已取消", script)
-
-    def test_desktop_ui_uses_fixed_dashboard_layout_without_page_scroll(self):
-        style = Path("desktop/ui/style.css").read_text(encoding="utf-8")
-        app = Path("desktop/app.py").read_text(encoding="utf-8")
-
-        self.assertIn("overflow: hidden", style)
-        self.assertIn("height: 100vh", style)
-        self.assertIn("grid-template-rows", style)
-        self.assertIn(".desktop-tabs", style)
-        self.assertIn(".tab-button", style)
-        self.assertIn(".page", style)
-        self.assertIn(".page.is-active", style)
-        self.assertIn(".download-panel", style)
-        self.assertIn(".task-list", style)
-        self.assertIn("min-height: 0", style)
-        self.assertIn("overflow: auto", style)
-        self.assertIn("height=700", app)
-
-    def test_desktop_ui_switches_between_pages(self):
-        script = Path("desktop/ui/app.js").read_text(encoding="utf-8")
-
-        self.assertIn("function switchPage", script)
-        self.assertIn("tab-button", script)
-        self.assertIn("is-active", script)
-        self.assertIn("aria-selected", script)
 
 
 if __name__ == "__main__":

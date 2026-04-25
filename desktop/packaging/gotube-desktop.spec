@@ -14,10 +14,9 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=[],
     datas=[
-        (str(ROOT / "desktop/ui"), "desktop/ui"),
         (str(VERSION_FILE), "."),
     ],
-    hiddenimports=[],
+    hiddenimports=["PySide6.QtCore", "PySide6.QtGui", "PySide6.QtWidgets"],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

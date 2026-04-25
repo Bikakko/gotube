@@ -51,20 +51,18 @@ class DesktopEnvironmentTests(unittest.TestCase):
             patch("desktop.core.environment.detect_ytdlp") as detect_ytdlp,
             patch("desktop.core.environment.detect_ffmpeg") as detect_ffmpeg,
             patch("desktop.core.environment.check_python_package") as package_check,
-            patch("desktop.core.environment.check_executable") as executable_check,
         ):
             detect_ytdlp.return_value = ToolStatus(name="yt-dlp", available=True, version="1.0")
             detect_ffmpeg.return_value = ToolStatus(name="ffmpeg", available=False, message="missing")
             package_check.side_effect = [
-                EnvironmentCheck(name="pywebview", ok=True),
+                EnvironmentCheck(name="PySide6", ok=True),
                 EnvironmentCheck(name="pyinstaller", ok=True),
             ]
-            executable_check.return_value = EnvironmentCheck(name="node", ok=True, required=False)
 
             report = collect_environment_report()
 
         names = [check.name for check in report]
-        self.assertEqual(["pywebview", "yt-dlp", "pyinstaller", "ffmpeg", "node"], names)
+        self.assertEqual(["PySide6", "yt-dlp", "pyinstaller", "ffmpeg"], names)
         self.assertFalse(report[3].required)
         self.assertFalse(has_missing_required_checks(report))
 
