@@ -121,7 +121,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GoTube",
     description="自托管多平台视频下载工具",
-    version="4.4.0",
+    version="4.4.1",
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
@@ -448,6 +448,9 @@ async def _on_progress(task: DownloadTask, websocket: WebSocket) -> None:
             "filename": task.filename,
             "title": task.title,
             "file_hash": task.file_hash,
+            "user_video_item_id": getattr(task, "user_video_item_id", None),
+            "media_asset_id": getattr(task, "media_asset_id", None),
+            "share_token": getattr(task, "share_token", ""),
             "error": task.error,
         }
         await websocket.send_json(data)
