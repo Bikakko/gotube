@@ -40,6 +40,10 @@
         return isLoggedIn && currentUser && currentUser.role === 'user';
     }
 
+    function isLibraryUser() {
+        return isLoggedIn && currentUser && (currentUser.role === 'user' || currentUser.role === 'admin');
+    }
+
     function isQuotaError(message = '') {
         return /容量不足|quota/i.test(String(message || ''));
     }
@@ -143,6 +147,12 @@
                         addButton('download', '⬇ 下载', () => downloadMyVideo({ id: t.user_video_item_id, title: t.title }));
                     }
                 } else {
+                    if (t.share_token || t.file_hash) {
+                        addButton('share', '🔗 分享', () => copyShareLink(t.task_id));
+                    }
+                    if (t.user_video_item_id) {
+                        addButton('download', '⬇ 下载', () => downloadMyVideo({ id: t.user_video_item_id, title: t.title }));
+                    }
                     addButton('secondary', '在视频库管理', () => $('#library-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
                 }
             }
@@ -410,7 +420,7 @@
             tasks[data.task_id] = data;
             setStatus('✅ 已添加', '#3fb950');
             renderTasks();
-            if (isRegularUser()) loadMyLibrary();
+            if (isLibraryUser()) loadMyLibrary();
         } catch (e) {
             setStatus('❌ ' + e.message, '#f85149');
         } finally {
@@ -505,7 +515,7 @@
                     // 调试日志
                     if (d.status === 'completed' || d.status === 'failed') {
                         console.log(`任务 ${taskId} ${d.status}:`, d.title);
-                        if (d.status === 'completed' && isRegularUser()) {
+                        if (d.status === 'completed' && isLibraryUser()) {
                             loadMyLibrary();
                         }
                     }
@@ -612,7 +622,7 @@
     }
 
     async function loadMyLibrary() {
-        if (!isRegularUser()) {
+        if (!isLibraryUser()) {
             myVideos = [];
             myQuota = null;
             libraryPage = 1;
@@ -645,9 +655,9 @@
         const list = $('#library-list');
         if (!section || !quotaInfo || !list) return;
 
-        section.style.display = isRegularUser() ? 'block' : 'none';
+        section.style.display = isLibraryUser() ? 'block' : 'none';
         list.replaceChildren();
-        if (!isRegularUser()) {
+        if (!isLibraryUser()) {
             myVideos = [];
             myQuota = null;
             libraryPage = 1;
@@ -957,7 +967,7 @@
 
     function updateLogoStyle() {
         const logoLink = $('#logo-link');
-        if (isRegularUser()) {
+        if (isLibraryUser()) {
             logoLink.title = '查看我的视频库';
             logoLink.classList.add('logged-in');
         } else if (isLoggedIn && currentUser && currentUser.role === 'admin') {
@@ -978,7 +988,7 @@
     }
 
     function handleLogoClick() {
-        if (isRegularUser()) {
+        if (isLibraryUser()) {
             $('#library-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } else if (isLoggedIn && currentUser && currentUser.role === 'admin') {
             window.location.href = `/${hiddenPath}/admin`;
@@ -1190,9 +1200,9 @@
             updateLogoStyle();
             closeLoginModal();
 
-            // 登录后检测是否有游客临时下载；管理员保存后统一使用管理后台查看。
+            // 登录后检测是否有游客临时下载。
             await checkAndTransferGuestDownloads();
-            if (isRegularUser()) {
+            if (isLibraryUser()) {
                 await loadMyLibrary();
                 connectWS();
             } else {
@@ -1328,10 +1338,10 @@
             }
 
             if (registeredCount > 0) {
-                const targetText = isRegularUser() ? '视频库' : '管理后台';
+                const targetText = '视频库';
                 showToast(`✅ 已转移 ${transferredCount} 个视频，已保存 ${registeredCount} 个到${targetText}`, '#3fb950');
                 rotateGuestSession();
-                if (isRegularUser()) {
+                if (isLibraryUser()) {
                     await loadMyLibrary();
                 }
                 return;
@@ -1340,7 +1350,7 @@
             if (transferErrors.length > 0) {
                 const firstError = transferErrors[0].error || '入库失败';
                 showToast(`⚠️ 游客视频未入库：${firstError}`, '#d29922', 5000);
-                if (isRegularUser()) {
+                if (isLibraryUser()) {
                     await loadMyLibrary();
                 }
                 return;

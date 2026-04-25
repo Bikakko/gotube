@@ -51,6 +51,14 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("if (!t || (!canPlayGuestFile && !canPlaySharedFile)) return;", source)
         self.assertIn("if (canPlayGuestFile)", source)
 
+    def test_download_page_treats_admin_as_library_user(self):
+        source = read_text("www/download.js")
+
+        self.assertIn("function isLibraryUser()", source)
+        self.assertIn("return isLoggedIn && currentUser && (currentUser.role === 'user' || currentUser.role === 'admin');", source)
+        self.assertIn("if (!isLibraryUser()) {", source)
+        self.assertIn("section.style.display = isLibraryUser() ? 'block' : 'none';", source)
+
     def test_download_page_renders_cancelled_status(self):
         source = read_text("www/download.js")
 

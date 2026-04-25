@@ -140,13 +140,6 @@ def get_queue_manager(request: Request) -> QueueManager:
     return qm
 
 
-def _require_regular_user(current_user: User) -> User:
-    """普通用户视频库接口只接受普通用户，管理员统一走后台管理接口。"""
-    if current_user.role != "user":
-        raise HTTPException(status_code=403, detail="管理员请使用管理后台")
-    return current_user
-
-
 def _register_transferred_guest_files(
     db: Session,
     *,
@@ -494,7 +487,6 @@ async def get_my_quota(
     db: Session = Depends(get_db),
 ) -> dict:
     """返回当前用户的视频库容量状态。"""
-    current_user = _require_regular_user(current_user)
     used = refresh_user_storage_usage(db, current_user.id)
     quota = get_effective_quota_bytes(current_user)
     db.commit()
@@ -513,8 +505,7 @@ async def get_my_videos(
     db: Session = Depends(get_db),
 ) -> dict:
     """返回当前登录用户的视频库。"""
-    current_user = _require_regular_user(current_user)
-    return {"videos": list_user_video_items(db, current_user)}
+    return {"videos": list_user_video_items(db, current_user, owner_user_id=current_user.id)}
 
 
 @router.delete("/me/videos/{item_id}")
@@ -524,7 +515,6 @@ async def delete_my_video(
     db: Session = Depends(get_db),
 ) -> dict:
     """从当前用户视频库删除一个视频项。"""
-    current_user = _require_regular_user(current_user)
     result = delete_user_video_item(db, current_user, item_id, settings.get_download_dir())
     db.commit()
     return result
@@ -538,7 +528,6 @@ async def update_my_video_share(
     db: Session = Depends(get_db),
 ) -> dict:
     """开启或关闭当前用户视频库条目的分享链接。"""
-    current_user = _require_regular_user(current_user)
     result = set_user_video_share_enabled(db, current_user, item_id, body.share_enabled)
     db.commit()
     return result
@@ -551,7 +540,6 @@ async def download_my_video(
     db: Session = Depends(get_db),
 ) -> FileResponse:
     """下载当前用户自己的视频库条目，不按 filename 暴露主库路径。"""
-    current_user = _require_regular_user(current_user)
     _item, asset = get_user_video_asset_for_download(db, current_user, item_id)
     path = Path(asset.filepath)
     return FileResponse(
@@ -569,7 +557,6 @@ async def get_my_video_thumbnail(
     db: Session = Depends(get_db),
 ) -> FileResponse:
     """返回当前用户视频库条目的本地缩略图。"""
-    current_user = _require_regular_user(current_user)
     _item, asset = get_user_video_asset_for_download(db, current_user, item_id)
     return _thumbnail_response(asset.thumbnail, Path(asset.filepath).parent)
 

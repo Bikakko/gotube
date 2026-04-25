@@ -240,17 +240,49 @@ class UserLibraryTests(unittest.TestCase):
                 asyncio.run(download_my_video(item.id, current_user=bob, db=session))
             self.assertEqual(ctx.exception.status_code, 403)
 
-    def test_me_library_routes_reject_admin_users(self):
+    def test_me_library_routes_allow_admin_to_manage_own_library(self):
         with self.Session() as session:
             admin = self._user(session, "admin", role="admin")
+            alice = self._user(session, "alice")
+            admin_file = self._video_file("Admin_aaaaaaaa", "aaaaaaaa.mp4")
+            alice_file = self._video_file("Alice_bbbbbbbb", "bbbbbbbb.mp4")
+            admin_item = register_completed_file(
+                session,
+                owner_user_id=admin.id,
+                filepath=admin_file,
+                download_dir=self.download_dir,
+                source_url="https://example.test/admin",
+                title="Admin Video",
+                file_hash="aaaaaaaa",
+            )
+            register_completed_file(
+                session,
+                owner_user_id=alice.id,
+                filepath=alice_file,
+                download_dir=self.download_dir,
+                source_url="https://example.test/alice",
+                title="Alice Video",
+                file_hash="bbbbbbbb",
+            )
+            session.commit()
 
-            with self.assertRaises(HTTPException) as quota_ctx:
-                asyncio.run(get_my_quota(current_user=admin, db=session))
-            self.assertEqual(quota_ctx.exception.status_code, 403)
+            quota = asyncio.run(get_my_quota(current_user=admin, db=session))
+            videos = asyncio.run(get_my_videos(current_user=admin, db=session))
+            share = asyncio.run(
+                update_my_video_share(
+                    admin_item.id,
+                    UpdateShareRequest(share_enabled=False),
+                    current_user=admin,
+                    db=session,
+                )
+            )
+            response = asyncio.run(download_my_video(admin_item.id, current_user=admin, db=session))
 
-            with self.assertRaises(HTTPException) as videos_ctx:
-                asyncio.run(get_my_videos(current_user=admin, db=session))
-            self.assertEqual(videos_ctx.exception.status_code, 403)
+            self.assertTrue(quota["unlimited"])
+            self.assertEqual(1, len(videos["videos"]))
+            self.assertEqual(admin.id, videos["videos"][0]["owner_user_id"])
+            self.assertFalse(share["share_enabled"])
+            self.assertEqual(Path(response.path), admin_file)
 
     def test_guest_transfer_registration_creates_user_video_item_and_updates_task(self):
         class FakeTask:
