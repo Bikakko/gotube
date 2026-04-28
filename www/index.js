@@ -208,28 +208,29 @@ import * as THREE from "/static/vendor/three.module.min.js";
 
             const time = now * 0.001;
             const isMobileLike = !matchMedia("(pointer:fine)").matches;
-            if (isMobileLike && !motion.active) {
+            const gyroActive = motion.active && now - motion.lastEventAt < 180;
+            if (isMobileLike && !gyroActive) {
                 target.yaw = Math.sin(time * 0.2 + autoDriftSeed) * 0.048;
                 target.pitch = Math.cos(time * 0.15 + autoDriftSeed) * 0.042;
             }
 
-            const mobileIdle = isMobileLike && !motion.active;
-            const driftYaw = mobileIdle ? Math.sin(time * 0.17 + autoDriftSeed * 0.7) * 0.02 : 0;
-            const driftPitch = mobileIdle ? Math.cos(time * 0.13 + autoDriftSeed * 0.5) * 0.017 : 0;
+            const mobileIdle = isMobileLike && !gyroActive;
+            const driftYaw = mobileIdle ? Math.sin(time * 0.21 + autoDriftSeed * 0.7) * 0.028 : 0;
+            const driftPitch = mobileIdle ? Math.cos(time * 0.16 + autoDriftSeed * 0.5) * 0.022 : 0;
             const desiredYaw = target.yaw + driftYaw;
             const desiredPitch = target.pitch + driftPitch;
 
-            const yawEase = motion.active ? 0.14 : 0.035;
-            const pitchEase = motion.active ? 0.15 : 0.04;
+            const yawEase = gyroActive ? 0.14 : 0.05;
+            const pitchEase = gyroActive ? 0.15 : 0.055;
             current.yaw += (desiredYaw - current.yaw) * yawEase;
             current.pitch += (desiredPitch - current.pitch) * pitchEase;
 
-            const skyYaw = motion.active ? 0.36 : 0.28;
-            const skyPitch = motion.active ? 0.46 : 0.34;
-            const starYaw = motion.active ? 1.32 : 0.96;
-            const starPitch = motion.active ? 1.48 : 1.06;
-            const moonYaw = motion.active ? 0.34 : 0.58;
-            const moonPitch = motion.active ? 0.42 : 0.72;
+            const skyYaw = gyroActive ? 0.36 : 0.34;
+            const skyPitch = gyroActive ? 0.46 : 0.42;
+            const starYaw = gyroActive ? 1.32 : 1.18;
+            const starPitch = gyroActive ? 1.48 : 1.3;
+            const moonYaw = gyroActive ? 0.28 : 0.46;
+            const moonPitch = gyroActive ? 0.34 : 0.56;
 
             skyGroup.rotation.y = current.yaw * skyYaw;
             skyGroup.rotation.x = current.pitch * skyPitch;
@@ -490,7 +491,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
     }
 
     function createMotionController(target) {
-        const controller = { active: false, cleanup() {}, markInput() {} };
+        const controller = { active: false, lastEventAt: 0, cleanup() {}, markInput() {} };
 
         if (matchMedia("(pointer:fine)").matches || typeof window.DeviceOrientationEvent === "undefined") {
             return controller;
@@ -501,6 +502,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
                 return;
             }
             controller.active = true;
+            controller.lastEventAt = performance.now();
             const nextYaw = THREE.MathUtils.clamp(event.gamma / 16, -1, 1) * 0.18;
             const nextPitch = THREE.MathUtils.clamp((event.beta - 45) / 22, -1, 1) * 0.16;
             controller.markInput();

@@ -211,18 +211,18 @@ body {
     bottom: 18px;
     z-index: 6;
     display: inline-flex;
-    opacity: 0.32;
+    opacity: 0.24;
     transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
 .secret-entry:hover {
-    opacity: 0.8;
+    opacity: 0.68;
     transform: translateY(-2px) rotate(-2deg);
 }
 
 .secret-entry img {
-    width: 56px;
-    height: 56px;
+    width: 52px;
+    height: 52px;
     border-radius: 18px;
     object-fit: cover;
     border: 1px solid rgba(147, 197, 253, 0.18);
@@ -292,5 +292,17 @@ body {
 
     .modal-image {
         border-radius: 20px;
+    }
+
+    .secret-entry {
+        right: 16px;
+        bottom: 14px;
+        opacity: 0.2;
+    }
+
+    .secret-entry img {
+        width: 44px;
+        height: 44px;
+        border-radius: 15px;
     }
 }
