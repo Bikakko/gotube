@@ -201,8 +201,10 @@ import * as THREE from "/static/vendor/three.module.min.js";
                 target.pitch = Math.cos(time * 0.13 + autoDriftSeed) * 0.024;
             }
 
-            current.yaw += (target.yaw - current.yaw) * 0.035;
-            current.pitch += (target.pitch - current.pitch) * 0.04;
+            const yawEase = motion.active ? 0.09 : 0.035;
+            const pitchEase = motion.active ? 0.1 : 0.04;
+            current.yaw += (target.yaw - current.yaw) * yawEase;
+            current.pitch += (target.pitch - current.pitch) * pitchEase;
 
             skyGroup.rotation.y = current.yaw * 0.28;
             skyGroup.rotation.x = current.pitch * 0.34;
@@ -474,8 +476,8 @@ import * as THREE from "/static/vendor/three.module.min.js";
                 return;
             }
             controller.active = true;
-            target.yaw = THREE.MathUtils.clamp(event.gamma / 45, -1, 1) * 0.085;
-            target.pitch = THREE.MathUtils.clamp((event.beta - 45) / 65, -1, 1) * 0.082;
+            target.yaw = THREE.MathUtils.clamp(event.gamma / 24, -1, 1) * 0.128;
+            target.pitch = THREE.MathUtils.clamp((event.beta - 45) / 34, -1, 1) * 0.118;
         };
 
         const bindOrientation = () => {
