@@ -45,6 +45,7 @@ from .models import (
     UserResponse,
 )
 from .invites import create_invite, list_invites, revoke_invite
+from .user_profile import build_user_identity, display_name_key, validate_display_name, validate_new_password
 from .video_library import admin_delete_media_asset, list_admin_media_assets, list_user_video_items
 
 logger = logging.getLogger(__name__)
@@ -427,9 +428,8 @@ def _get_video_local_time(created_at: datetime | str) -> datetime:
         created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
     local_tz = get_local_timezone()
     if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=local_tz)
-    else:
-        created_at = created_at.astimezone(local_tz)
+        created_at = created_at.replace(tzinfo=UTC)
+    created_at = created_at.astimezone(local_tz)
     return created_at
 
 
@@ -462,11 +462,7 @@ async def admin_login(
     token = generate_token(db, user.id, user.username, user.role)
     return {
         "token": token,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "role": user.role,
-        }
+        "user": build_user_identity(user),
     }
 
 
@@ -477,11 +473,7 @@ async def auth_check(current_user: User = Depends(get_current_user)) -> dict:
     """
     return {
         "valid": True,
-        "user": {
-            "id": current_user.id,
-            "username": current_user.username,
-            "role": current_user.role,
-        }
+        "user": build_user_identity(current_user),
     }
 
 
@@ -558,6 +550,7 @@ async def get_user_library(
         "user": {
             "id": user.id,
             "username": user.username,
+            "display_name": user.display_name or user.username,
             "role": user.role,
             "is_active": user.is_active,
             "storage_quota_mb": user.storage_quota_mb,
@@ -579,25 +572,24 @@ async def create_user(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
-    """创建新用户 (仅限 admin)"""
-    # 禁止通过网页创建 admin 权限账号
+    """??????"""
     if body.role == "admin":
         raise HTTPException(
             status_code=403,
-            detail="不可通过网页创建管理员账号，请通过 .env 配置文件管理"
+            detail="????????????????? .env ??????",
         )
-
-    # 检查用户名冲突
     if db.query(User).filter(User.username == body.username).first():
-        raise HTTPException(status_code=400, detail="用户名已存在")
+        raise HTTPException(status_code=400, detail="??????")
 
     import bcrypt
 
-    salt = bcrypt.gensalt()
-    pwd_hash = bcrypt.hashpw(body.password.encode('utf-8'), salt).decode('utf-8')
-
+    display_name = validate_display_name(body.display_name)
+    password = validate_new_password(body.password)
+    pwd_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     new_user = User(
         username=body.username,
+        display_name=display_name,
+        display_name_key=display_name_key(display_name),
         password_hash=pwd_hash,
         role=body.role,
         is_active=True,
@@ -615,41 +607,46 @@ async def update_user(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
-    """更新用户信息 (仅限 admin)"""
+    """???????"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+        raise HTTPException(status_code=404, detail="?????")
 
-    # 保护 admin 权限账号，只能通过 .env 修改
+    fields_set = body.model_fields_set if hasattr(body, "model_fields_set") else getattr(body, "__fields_set__", set())
     if user.role == "admin":
-        raise HTTPException(
-            status_code=403,
-            detail="管理员账号不可修改，请通过 .env 配置文件管理"
-        )
+        forbidden = fields_set - {"display_name"}
+        if forbidden:
+            raise HTTPException(
+                status_code=403,
+                detail="???????????????????? .env ????",
+            )
 
     if body.username:
-        # 检查冲突
         existing = db.query(User).filter(User.username == body.username).first()
         if existing and existing.id != user_id:
-            raise HTTPException(status_code=400, detail="用户名已存在")
+            raise HTTPException(status_code=400, detail="??????")
         user.username = body.username
+
+    if body.display_name is not None:
+        user.display_name = validate_display_name(body.display_name)
+        user.display_name_key = display_name_key(user.display_name)
 
     if body.role:
         if body.role == "admin":
             raise HTTPException(
                 status_code=403,
-                detail="不可通过网页创建管理员账号，请通过 .env 配置文件管理"
+                detail="????????????????? .env ??????",
             )
         user.role = body.role
 
     if body.is_active is not None:
         user.is_active = body.is_active
 
-    fields_set = body.model_fields_set if hasattr(body, "model_fields_set") else getattr(body, "__fields_set__", set())
     if "storage_quota_mb" in fields_set:
         user.storage_quota_mb = body.storage_quota_mb
 
     db.commit()
+    db.refresh(user)
     return user.to_dict()
 
 
@@ -686,46 +683,43 @@ async def change_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """修改密码 (本人或 admin)"""
+    """?????????????"""
     is_admin = current_user.role == "admin"
     is_self = current_user.id == user_id
 
     if not (is_admin or is_self):
-        raise HTTPException(status_code=403, detail="权限不足")
+        raise HTTPException(status_code=403, detail="????")
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
-
-    # 保护 admin 权限账号密码
+        raise HTTPException(status_code=404, detail="?????")
     if user.role == "admin":
         raise HTTPException(
             status_code=403,
-            detail="管理员账号密码不可修改，请通过 .env 配置文件管理"
+            detail="??????????????? .env ??????",
         )
 
     import bcrypt
 
-    # 如果不是 admin，必须验证旧密码
+    new_password = validate_new_password(body.new_password)
+    try:
+        if bcrypt.checkpw(new_password.encode("utf-8"), user.password_hash.encode("utf-8")):
+            raise HTTPException(status_code=400, detail="新密码不能与旧密码相同")
+    except ValueError:
+        logger.warning("检测用户旧密码哈希失败，继续覆盖设置新密码: user_id=%s", user.id)
+
     if not is_admin:
-        if not body.old_password or not bcrypt.checkpw(body.old_password.encode('utf-8'), user.password_hash.encode('utf-8')):
-            raise HTTPException(status_code=400, detail="旧密码错误")
+        if not body.old_password or not bcrypt.checkpw(body.old_password.encode("utf-8"), user.password_hash.encode("utf-8")):
+            raise HTTPException(status_code=400, detail="?????")
 
-    salt = bcrypt.gensalt()
-    user.password_hash = bcrypt.hashpw(body.new_password.encode('utf-8'), salt).decode('utf-8')
-    db.commit()
-
-    # 修改密码后使该用户的所有活跃 token 失效（数据库操作）
+    user.password_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    db.flush()
     db.query(AuthToken).filter(
         AuthToken.user_id == user_id,
         AuthToken.is_active == True,
     ).update({"is_active": False})
     db.commit()
-
     return {"status": "ok"}
-
-
-# ── 邀请码管理 API ──
 
 
 @router.post("/invites", response_model=InviteResponse)

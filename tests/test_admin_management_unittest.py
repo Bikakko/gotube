@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from server.admin_api import batch_delete_videos, get_user_library, get_videos, list_users, update_user
+from server.admin_api import batch_delete_videos, change_password, get_user_library, get_videos, list_users, update_user
 from server.db import Base, MediaAsset, MediaSource, User, UserVideoItem
 from server.models import UpdateUserRequest
 
@@ -116,6 +116,7 @@ class AdminManagementTests(unittest.TestCase):
 
             alice_row = next(row for row in users if row["username"] == "alice")
             admin_row = next(row for row in users if row["username"] == "admin")
+            self.assertEqual(alice_row["display_name"], "alice")
             self.assertEqual(alice_row["storage_quota_mb"], 10)
             self.assertEqual(alice_row["storage_used_bytes"], 512)
             self.assertEqual(alice_row["video_count"], 1)
@@ -145,6 +146,42 @@ class AdminManagementTests(unittest.TestCase):
                         admin.id,
                         UpdateUserRequest(storage_quota_mb=25),
                         admin=admin,
+                        db=session,
+                    )
+                )
+            self.assertEqual(ctx.exception.status_code, 403)
+
+            admin_update = asyncio.run(
+                update_user(
+                    admin.id,
+                    UpdateUserRequest(display_name="星空管理员"),
+                    admin=admin,
+                    db=session,
+                )
+            )
+            self.assertEqual(admin_update["display_name"], "星空管理员")
+
+    def test_change_password_blocks_admin_target_but_allows_admin_reset_user(self):
+        with self.Session() as session:
+            admin = self._user(session, "admin", role="admin")
+            alice = self._user(session, "alice")
+
+            result = asyncio.run(
+                change_password(
+                    alice.id,
+                    body=type("Body", (), {"old_password": None, "new_password": "newpass1"})(),
+                    current_user=admin,
+                    db=session,
+                )
+            )
+            self.assertEqual(result["status"], "ok")
+
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(
+                    change_password(
+                        admin.id,
+                        body=type("Body", (), {"old_password": None, "new_password": "newpass1"})(),
+                        current_user=admin,
                         db=session,
                     )
                 )
@@ -331,6 +368,7 @@ class AdminManagementTests(unittest.TestCase):
             result = asyncio.run(get_user_library(alice.id, admin=admin, db=session))
 
             self.assertEqual(result["user"]["username"], "alice")
+            self.assertEqual(result["user"]["display_name"], "alice")
             self.assertEqual(len(result["items"]), 1)
             self.assertEqual(result["items"][0]["owner_user_id"], alice.id)
             self.assertEqual(result["items"][0]["title"], "Alpha")

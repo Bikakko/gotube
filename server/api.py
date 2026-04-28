@@ -14,17 +14,18 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from .auth import get_current_user, get_db, get_optional_current_user
-from .db import MediaAsset, User
+from .db import AuthToken, MediaAsset, User
 from . import gallery
 from .downloader import _read_meta_from_dir
 from .invites import register_user_with_invite
-from .models import AddTaskRequest, RegisterRequest, TaskResponse, UpdateShareRequest
+from .models import AddTaskRequest, ChangePasswordRequest, RegisterRequest, TaskResponse, UpdateProfileRequest, UpdateShareRequest
 from .path_utils import resolve_inside
 from .quota import get_effective_quota_bytes, refresh_user_storage_usage
 from .queue_manager import QueueManager
 from .config import settings
 from .security import validate_guest_session_id, validate_hash_id
 from .url_normalizer import normalize_media_url
+from .user_profile import build_user_identity, display_name_key, validate_display_name, validate_new_password
 from .video_library import (
     create_item_from_existing_source,
     delete_user_video_item,
@@ -88,17 +89,14 @@ async def register(
     user = register_user_with_invite(
         db,
         username=body.username,
+        display_name=body.display_name,
         password=body.password,
         invite_code=body.invite_code,
     )
     db.commit()
     return {
         "success": True,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "role": user.role,
-        },
+        "user": build_user_identity(user),
     }
 
 
@@ -479,6 +477,51 @@ async def delete_task(
     if not qm.delete_task(task_id, client_id):
         raise HTTPException(status_code=404, detail="任务不存在或无权删除")
     return {"status": "ok"}
+
+
+@router.patch("/me/profile")
+async def update_my_profile(
+    body: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Update the current user's display name."""
+    current_user.display_name = validate_display_name(body.display_name)
+    current_user.display_name_key = display_name_key(current_user.display_name)
+    db.commit()
+    db.refresh(current_user)
+    return {"success": True, "user": build_user_identity(current_user)}
+
+
+@router.post("/me/password")
+async def change_my_password(
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Allow regular users to change their own password."""
+    if current_user.role == "admin":
+        raise HTTPException(status_code=403, detail="管理员密码由服务器配置管理")
+
+    import bcrypt
+
+    if not body.old_password:
+        raise HTTPException(status_code=422, detail="请输入旧密码")
+    if not bcrypt.checkpw(body.old_password.encode("utf-8"), current_user.password_hash.encode("utf-8")):
+        raise HTTPException(status_code=400, detail="旧密码错误")
+
+    new_password = validate_new_password(body.new_password)
+    if bcrypt.checkpw(new_password.encode("utf-8"), current_user.password_hash.encode("utf-8")):
+        raise HTTPException(status_code=400, detail="新密码不能与旧密码相同")
+
+    current_user.password_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    db.flush()
+    db.query(AuthToken).filter(
+        AuthToken.user_id == current_user.id,
+        AuthToken.is_active == True,
+    ).update({"is_active": False})
+    db.commit()
+    return {"success": True, "require_relogin": True}
 
 
 @router.get("/me/quota")

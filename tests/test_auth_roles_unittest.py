@@ -9,9 +9,10 @@ from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from server.api import change_my_password, update_my_profile
 from server.auth import require_admin, verify_token
 from server.db import AuthToken, Base, User, sync_admins_from_env
-from server.models import CreateUserRequest, UpdateUserRequest
+from server.models import ChangePasswordRequest, CreateUserRequest, UpdateProfileRequest, UpdateUserRequest
 
 
 class AuthRoleTests(unittest.TestCase):
@@ -46,6 +47,7 @@ class AuthRoleTests(unittest.TestCase):
             self.assertIsNotNone(payload)
             self.assertEqual(payload["user_id"], user.id)
             self.assertEqual(payload["username"], "alice")
+            self.assertEqual(payload["display_name"], "alice")
             self.assertEqual(payload["role"], "user")
 
     def test_require_admin_rejects_regular_user(self):
@@ -82,6 +84,8 @@ class AuthRoleTests(unittest.TestCase):
             refreshed = session.query(User).filter(User.username == "admin").one()
             self.assertEqual(refreshed.role, "admin")
             self.assertTrue(refreshed.is_active)
+            self.assertEqual(refreshed.display_name, "admin")
+            self.assertEqual(refreshed.display_name_key, "admin")
 
     def test_sync_admins_from_env_promotes_and_reactivates_existing_user(self):
         with self.Session() as session:
@@ -102,6 +106,48 @@ class AuthRoleTests(unittest.TestCase):
             refreshed = session.query(User).filter(User.username == "admin").one()
             self.assertEqual(refreshed.role, "admin")
             self.assertTrue(refreshed.is_active)
+            self.assertEqual(refreshed.display_name, "admin")
+            self.assertEqual(refreshed.display_name_key, "admin")
+
+    def test_regular_user_can_update_profile_and_change_password(self):
+        with self.Session() as session:
+            user = User(username="alice", password_hash="x", role="user", is_active=True)
+            session.add(user)
+            session.commit()
+            session.refresh(user)
+
+            import bcrypt
+
+            user.password_hash = bcrypt.hashpw("abc123".encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+            session.add(
+                AuthToken(
+                    token="token-1",
+                    user_id=user.id,
+                    expires_at=datetime.now(UTC) + timedelta(hours=1),
+                    is_active=True,
+                )
+            )
+            session.commit()
+
+            profile_result = asyncio.run(
+                update_my_profile(
+                    UpdateProfileRequest(display_name="星空旅人"),
+                    current_user=user,
+                    db=session,
+                )
+            )
+            self.assertEqual(profile_result["user"]["display_name"], "星空旅人")
+
+            password_result = asyncio.run(
+                change_my_password(
+                    ChangePasswordRequest(old_password="abc123", new_password="abc1234"),
+                    current_user=user,
+                    db=session,
+                )
+            )
+            self.assertTrue(password_result["require_relogin"])
+            active_tokens = session.query(AuthToken).filter(AuthToken.user_id == user.id, AuthToken.is_active == True).count()
+            self.assertEqual(active_tokens, 0)
 
 
 if __name__ == "__main__":

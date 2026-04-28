@@ -35,6 +35,8 @@ class V4MigrationTests(unittest.TestCase):
         with self.Session() as session:
             viewer = session.query(User).filter_by(username="viewer").one()
             self.assertEqual(viewer.role, "user")
+            self.assertEqual(viewer.display_name, "viewer")
+            self.assertEqual(viewer.display_name_key, "viewer")
             self.assertEqual(viewer.storage_used_bytes, 0)
             self.assertIsNone(viewer.storage_quota_mb)
 
@@ -43,6 +45,11 @@ class V4MigrationTests(unittest.TestCase):
             self.assertIn("media_assets", inspector)
             self.assertIn("user_video_items", inspector)
             self.assertIn("invite_codes", inspector)
+            columns = {column["name"] for column in inspect(self.engine).get_columns("users")}
+            self.assertIn("display_name", columns)
+            self.assertIn("display_name_key", columns)
+            versions = session.execute(text("SELECT version FROM schema_migrations ORDER BY version")).scalars().all()
+            self.assertEqual(versions, [4, 5])
 
     def test_migration_indexes_legacy_videos_once_without_moving_files(self):
         video_dir = self.download_dir / "Example_abcd1234"
@@ -122,6 +129,22 @@ class V4MigrationTests(unittest.TestCase):
             sources = session.execute(text("SELECT normalized_url FROM media_sources")).all()
             self.assertEqual(len(sources), 1)
             self.assertEqual(sources[0].normalized_url, "https://example.test/video?a=1&b=2")
+
+    def test_migration_backfills_missing_display_name_for_existing_users(self):
+        with self.engine.begin() as conn:
+            conn.execute(text("UPDATE users SET display_name = '', display_name_key = ''"))
+        with self.Session() as session:
+            session.add(User(username="alpha", password_hash="x", role="user", is_active=True))
+            session.commit()
+            session.execute(text("UPDATE users SET display_name = '', display_name_key = '' WHERE username = 'alpha'"))
+            session.commit()
+
+        run_v4_migrations(self.engine, self.download_dir)
+
+        with self.Session() as session:
+            user = session.query(User).filter_by(username="alpha").one()
+            self.assertEqual(user.display_name, "alpha")
+            self.assertEqual(user.display_name_key, "alpha")
 
 
 if __name__ == "__main__":

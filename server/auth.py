@@ -6,6 +6,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from .db import AuthToken, User, get_session
+from .user_profile import build_user_identity
 
 
 async def get_db():
@@ -61,9 +62,8 @@ def verify_token(db: Session, token: str | None) -> dict | None:
     db.commit()
 
     return {
+        **build_user_identity(user),
         "user_id": user.id,
-        "username": user.username,
-        "role": user.role,
         "expiry": auth_token.expires_at.timestamp(),
     }
 

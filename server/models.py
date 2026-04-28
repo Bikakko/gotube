@@ -1,21 +1,21 @@
 """
-Pydantic 请求/响应模型
+Pydantic request/response models.
 
-集中管理所有 API 的数据模型。
+Centralize API payload schemas here.
 """
 
 from pydantic import BaseModel, Field, field_validator
 
 
 class AddTaskRequest(BaseModel):
-    """添加下载任务请求"""
+    """Add-download-task request."""
 
     url: str
-    session_id: str | None = None  # 匿名用户会话标识
+    session_id: str | None = None
 
 
 class TaskResponse(BaseModel):
-    """任务响应"""
+    """Download-task response."""
 
     task_id: str
     url: str
@@ -39,27 +39,34 @@ class TaskResponse(BaseModel):
 
 
 class DeleteDownloadResponse(BaseModel):
-    """删除下载响应"""
+    """Delete-download response."""
 
     status: str
     deleted_files: list[str]
 
 
-# ── 用户管理模型 ──
-
-
 class LoginRequest(BaseModel):
-    """登录请求"""
+    """Login request."""
 
     username: str = Field(alias="user")
     password: str = Field(alias="pass")
 
 
-class UserResponse(BaseModel):
-    """用户信息响应"""
+class UserIdentityResponse(BaseModel):
+    """Compact user-identity payload for frontend display."""
 
     id: int
     username: str
+    display_name: str
+    role: str
+
+
+class UserResponse(BaseModel):
+    """User response for admin management."""
+
+    id: int
+    username: str
+    display_name: str
     role: str
     is_active: bool
     storage_quota_mb: int | None = None
@@ -71,11 +78,12 @@ class UserResponse(BaseModel):
 
 
 class CreateUserRequest(BaseModel):
-    """创建用户请求"""
+    """Admin create-user request."""
 
     username: str
+    display_name: str
     password: str
-    role: str = "user"  # admin/user
+    role: str = "user"
 
     @field_validator("role")
     @classmethod
@@ -86,9 +94,10 @@ class CreateUserRequest(BaseModel):
 
 
 class UpdateUserRequest(BaseModel):
-    """更新用户信息请求"""
+    """Admin update-user request."""
 
     username: str | None = None
+    display_name: str | None = None
     role: str | None = None
     is_active: bool | None = None
     storage_quota_mb: int | None = None
@@ -108,36 +117,43 @@ class UpdateUserRequest(BaseModel):
         return value
 
 
-class ChangePasswordRequest(BaseModel):
-    """修改密码请求"""
+class UpdateProfileRequest(BaseModel):
+    """Current-user profile update request."""
 
-    old_password: str | None = None  # 本人修改时需要验证旧密码
+    display_name: str
+
+
+class ChangePasswordRequest(BaseModel):
+    """Change-password request."""
+
+    old_password: str | None = None
     new_password: str
 
 
 class RegisterRequest(BaseModel):
-    """普通用户邀请码注册请求"""
+    """Invite-based registration request."""
 
     username: str
+    display_name: str
     password: str
     invite_code: str
 
 
 class UpdateShareRequest(BaseModel):
-    """当前用户更新视频分享状态请求"""
+    """Update share status request."""
 
     share_enabled: bool
 
 
 class CreateInviteRequest(BaseModel):
-    """管理员创建邀请码请求"""
+    """Admin create-invite request."""
 
     max_uses: int = 1
     expires_hours: int | None = None
 
 
 class InviteResponse(BaseModel):
-    """邀请码元数据响应；创建时才包含 code 明文"""
+    """Invite metadata response."""
 
     id: int
     max_uses: int

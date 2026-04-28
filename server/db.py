@@ -7,6 +7,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from .user_profile import display_name_key, get_display_name
+
 logger = logging.getLogger(__name__)
 
 class Base(DeclarativeBase):
@@ -18,6 +20,8 @@ class User(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(50), unique=True, nullable=False, index=True)
+    display_name = Column(String(64), nullable=False, default="")
+    display_name_key = Column(String(96), nullable=False, default="", index=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(20), nullable=False, default="user")  # admin/user
     is_active = Column(Boolean, nullable=False, default=True)
@@ -32,6 +36,7 @@ class User(Base):
         return {
             "id": self.id,
             "username": self.username,
+            "display_name": get_display_name(self),
             "role": self.role,
             "is_active": self.is_active,
             "storage_quota_mb": self.storage_quota_mb,
@@ -206,6 +211,10 @@ def sync_admins_from_env(session: Session, admins_config: list[dict[str, str]]) 
                 logger.info("[admin同步] 提升用户 %s 为管理员", username)
                 existing_user.role = "admin"
                 existing_user.is_active = True
+                if not existing_user.display_name:
+                    existing_user.display_name = username
+                if not existing_user.display_name_key:
+                    existing_user.display_name_key = display_name_key(existing_user.display_name)
                 
                 # 同步密码
                 try:
@@ -230,6 +239,8 @@ def sync_admins_from_env(session: Session, admins_config: list[dict[str, str]]) 
 
                 new_admin = User(
                     username=username,
+                    display_name=username,
+                    display_name_key=display_name_key(username),
                     password_hash=pwd_hash,
                     role="admin",
                     is_active=True,
@@ -240,6 +251,10 @@ def sync_admins_from_env(session: Session, admins_config: list[dict[str, str]]) 
             # 同步密码（如果变了）
             db_admin = db_admin_map[username]
             db_admin.is_active = True
+            if not db_admin.display_name:
+                db_admin.display_name = username
+            if not db_admin.display_name_key:
+                db_admin.display_name_key = display_name_key(db_admin.display_name)
             try:
                 password_match = bcrypt.checkpw(
                     password.encode('utf-8'),

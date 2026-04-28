@@ -12,38 +12,56 @@ from sqlalchemy import Engine, inspect, text
 
 from .downloader import VIDEO_EXTENSIONS
 from .media_fingerprint import fingerprint_file
+from .user_profile import display_name_key
 from .video_library import normalize_source_url, source_platform
 
 logger = logging.getLogger(__name__)
 
 V4_SCHEMA_VERSION = 4
+V5_SCHEMA_VERSION = 5
 SKIP_DIR_NAMES = {"temp_guest", ".temp_ytdlp", "__pycache__"}
 
 
 def run_v4_migrations(engine: Engine, download_dir: Path) -> None:
-    """Apply v4 schema migrations and index legacy videos once."""
+    """Apply schema migrations and legacy indexing once."""
     with engine.begin() as conn:
         _ensure_schema(engine, conn)
         _backfill_media_sources(conn)
-        if _migration_exists(conn, V4_SCHEMA_VERSION):
-            return
 
-        _migrate_readonly_users(conn)
-        indexed_count = _index_legacy_media_assets(conn, download_dir)
-        conn.execute(
-            text(
-                """
-                INSERT INTO schema_migrations (version, name, applied_at)
-                VALUES (:version, :name, :applied_at)
-                """
-            ),
-            {
-                "version": V4_SCHEMA_VERSION,
-                "name": "v4_media_assets_and_invites",
-                "applied_at": _utcnow(),
-            },
-        )
-        logger.info("v4 数据库迁移完成，登记 legacy 视频 %d 个", indexed_count)
+        if not _migration_exists(conn, V4_SCHEMA_VERSION):
+            _migrate_readonly_users(conn)
+            indexed_count = _index_legacy_media_assets(conn, download_dir)
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO schema_migrations (version, name, applied_at)
+                    VALUES (:version, :name, :applied_at)
+                    """
+                ),
+                {
+                    "version": V4_SCHEMA_VERSION,
+                    "name": "v4_media_assets_and_invites",
+                    "applied_at": _utcnow(),
+                },
+            )
+            logger.info("v4 数据库迁移完成，登记 legacy 视频 %d 个", indexed_count)
+
+        if not _migration_exists(conn, V5_SCHEMA_VERSION):
+            updated = _backfill_user_display_names(conn)
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO schema_migrations (version, name, applied_at)
+                    VALUES (:version, :name, :applied_at)
+                    """
+                ),
+                {
+                    "version": V5_SCHEMA_VERSION,
+                    "name": "v5_user_display_name",
+                    "applied_at": _utcnow(),
+                },
+            )
+            logger.info("v5 数据库迁移完成，回填 display_name 用户 %d 个", updated)
 
 
 def _ensure_schema(engine: Engine, conn) -> None:
@@ -52,6 +70,10 @@ def _ensure_schema(engine: Engine, conn) -> None:
 
     if "users" in tables:
         user_columns = {column["name"] for column in inspector.get_columns("users")}
+        if "display_name" not in user_columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN display_name VARCHAR(64) NOT NULL DEFAULT ''"))
+        if "display_name_key" not in user_columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN display_name_key VARCHAR(96) NOT NULL DEFAULT ''"))
         if "storage_quota_mb" not in user_columns:
             conn.execute(text("ALTER TABLE users ADD COLUMN storage_quota_mb INTEGER"))
         if "storage_used_bytes" not in user_columns:
@@ -159,6 +181,7 @@ def _ensure_schema(engine: Engine, conn) -> None:
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_invite_codes_code_hash ON invite_codes (code_hash)"))
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_invite_codes_created_by_user_id ON invite_codes (created_by_user_id)"))
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_invite_codes_is_active ON invite_codes (is_active)"))
+    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_display_name_key ON users (display_name_key)"))
 
 
 def _migration_exists(conn, version: int) -> bool:
@@ -171,6 +194,32 @@ def _migration_exists(conn, version: int) -> bool:
 
 def _migrate_readonly_users(conn) -> None:
     conn.execute(text("UPDATE users SET role = 'user' WHERE role = 'readonly'"))
+
+
+def _backfill_user_display_names(conn) -> int:
+    rows = conn.execute(text("SELECT id, username, display_name, display_name_key FROM users")).mappings().all()
+    updated = 0
+    for row in rows:
+        display_name = str(row["display_name"] or row["username"] or "").strip()
+        next_key = display_name_key(display_name)
+        if display_name == str(row["display_name"] or "") and next_key == str(row["display_name_key"] or ""):
+            continue
+        conn.execute(
+            text(
+                """
+                UPDATE users
+                SET display_name = :display_name, display_name_key = :display_name_key
+                WHERE id = :user_id
+                """
+            ),
+            {
+                "user_id": row["id"],
+                "display_name": display_name,
+                "display_name_key": next_key,
+            },
+        )
+        updated += 1
+    return updated
 
 
 def _backfill_media_sources(conn) -> int:
@@ -308,6 +357,7 @@ def _read_meta(path: Path) -> dict[str, Any]:
         logger.warning("读取 meta.json 失败: %s, error=%s", path, exc)
         return {}
     return data if isinstance(data, dict) else {}
+
 
 def _coerce_float(value: Any) -> float | None:
     if value in (None, ""):

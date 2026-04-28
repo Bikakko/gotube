@@ -54,10 +54,11 @@ class InviteTests(unittest.TestCase):
             admin = self._admin(session)
             invite = create_invite(session, admin, max_uses=1, expires_hours=None)
 
-            user = register_user_with_invite(session, "alice", "abc123", invite["code"])
+            user = register_user_with_invite(session, "alice", "Alice", "abc123", invite["code"])
             session.commit()
 
             self.assertEqual(user.username, "alice")
+            self.assertEqual(user.display_name, "Alice")
             self.assertEqual(user.role, "user")
             row = session.query(InviteCode).one()
             self.assertEqual(row.used_count, 1)
@@ -66,10 +67,10 @@ class InviteTests(unittest.TestCase):
         with self.Session() as session:
             admin = self._admin(session)
             invite = create_invite(session, admin, max_uses=1, expires_hours=None)
-            register_user_with_invite(session, "alice", "abc123", invite["code"])
+            register_user_with_invite(session, "alice", "Alice", "abc123", invite["code"])
 
             with self.assertRaises(HTTPException) as ctx:
-                register_user_with_invite(session, "bob", "abc123", invite["code"])
+                register_user_with_invite(session, "bob", "Bob", "abc123", invite["code"])
 
             self.assertEqual(ctx.exception.status_code, 400)
 
@@ -80,7 +81,7 @@ class InviteTests(unittest.TestCase):
             revoke_invite(session, invite["id"])
 
             with self.assertRaises(HTTPException) as ctx:
-                register_user_with_invite(session, "alice", "abc123", invite["code"])
+                register_user_with_invite(session, "alice", "Alice", "abc123", invite["code"])
 
             self.assertEqual(ctx.exception.status_code, 400)
 
@@ -100,19 +101,23 @@ class InviteTests(unittest.TestCase):
         with self.Session() as session:
             admin = self._admin(session)
             invite = create_invite(session, admin, max_uses=3, expires_hours=None)
-            register_user_with_invite(session, "alice", "abc123", invite["code"])
+            register_user_with_invite(session, "alice", "Alice", "abc123", invite["code"])
 
             with self.assertRaises(HTTPException) as duplicate:
-                register_user_with_invite(session, "alice", "abc123", invite["code"])
+                register_user_with_invite(session, "alice", "Alice 2", "abc123", invite["code"])
             self.assertEqual(duplicate.exception.status_code, 400)
 
             with self.assertRaises(HTTPException) as bad_username:
-                register_user_with_invite(session, "ab", "abc123", invite["code"])
+                register_user_with_invite(session, "ab", "Ab", "abc123", invite["code"])
             self.assertEqual(bad_username.exception.status_code, 422)
 
             with self.assertRaises(HTTPException) as bad_password:
-                register_user_with_invite(session, "charlie", "123", invite["code"])
+                register_user_with_invite(session, "charlie", "Charlie", "123", invite["code"])
             self.assertEqual(bad_password.exception.status_code, 422)
+
+            with self.assertRaises(HTTPException) as bad_display_name:
+                register_user_with_invite(session, "david", "bad<script>", "abc123", invite["code"])
+            self.assertEqual(bad_display_name.exception.status_code, 422)
 
 
 if __name__ == "__main__":

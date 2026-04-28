@@ -13,9 +13,9 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from .db import InviteCode, User
+from .user_profile import display_name_key, validate_display_name, validate_new_password
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_-]{3,32}$")
-MIN_PASSWORD_LENGTH = 6
 
 
 def generate_invite_code() -> str:
@@ -94,18 +94,18 @@ def consume_invite(session: Session, code: str) -> InviteCode:
 def register_user_with_invite(
     session: Session,
     username: str,
+    display_name: str,
     password: str,
     invite_code: str,
 ) -> User:
     """Register a regular user with a valid invite code."""
     username = username.strip()
-    password = password.strip()
     invite_code = invite_code.strip()
+    display_name = validate_display_name(display_name)
+    password = validate_new_password(password)
 
     if not USERNAME_RE.fullmatch(username):
         raise HTTPException(status_code=422, detail="用户名需为 3-32 位字母、数字、下划线或短横线")
-    if len(password) < MIN_PASSWORD_LENGTH:
-        raise HTTPException(status_code=422, detail=f"密码至少 {MIN_PASSWORD_LENGTH} 位")
     if not invite_code:
         raise HTTPException(status_code=422, detail="邀请码不能为空")
     if session.query(User).filter(User.username == username).first():
@@ -116,6 +116,8 @@ def register_user_with_invite(
     password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     user = User(
         username=username,
+        display_name=display_name,
+        display_name_key=display_name_key(display_name),
         password_hash=password_hash,
         role="user",
         is_active=True,
