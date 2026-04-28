@@ -239,8 +239,8 @@ import * as THREE from "/static/vendor/three.module.min.js";
             const skyPitch = isMobileLike ? 0.42 : 0.42;
             const starYaw = isMobileLike ? 1.18 : 1.18;
             const starPitch = isMobileLike ? 1.3 : 1.3;
-            const moonYaw = isMobileLike ? 0.24 : 0.46;
-            const moonPitch = isMobileLike ? 0.3 : 0.56;
+            const moonYaw = isMobileLike ? 0.28 : 0.46;
+            const moonPitch = isMobileLike ? 0.34 : 0.56;
 
             skyGroup.rotation.y = current.yaw * skyYaw;
             skyGroup.rotation.x = current.pitch * skyPitch;
@@ -539,13 +539,11 @@ import * as THREE from "/static/vendor/three.module.min.js";
                 let deltaYaw = sampleYaw - lastSampleYaw;
                 let deltaPitch = samplePitch - lastSamplePitch;
 
-                if (Math.abs(deltaYaw) < 0.012) deltaYaw = 0;
-                if (Math.abs(deltaPitch) < 0.012) deltaPitch = 0;
+                if (Math.abs(deltaYaw) < 0.014) deltaYaw = 0;
+                if (Math.abs(deltaPitch) < 0.014) deltaPitch = 0;
 
-                gyroVelocity.yaw += deltaYaw * 0.9;
-                gyroVelocity.pitch += deltaPitch * 0.78;
-                gyroVelocity.yaw = THREE.MathUtils.clamp(gyroVelocity.yaw, -0.12, 0.12);
-                gyroVelocity.pitch = THREE.MathUtils.clamp(gyroVelocity.pitch, -0.1, 0.1);
+                gyroVelocity.yaw = accumulateGyroVelocity(gyroVelocity.yaw, deltaYaw * 0.9, 0.12);
+                gyroVelocity.pitch = accumulateGyroVelocity(gyroVelocity.pitch, deltaPitch * 0.78, 0.1);
             }
 
             lastSampleYaw = sampleYaw;
@@ -586,6 +584,16 @@ import * as THREE from "/static/vendor/three.module.min.js";
         };
 
         return controller;
+    }
+
+    function accumulateGyroVelocity(current, delta, limit) {
+        if (!delta) {
+            return current;
+        }
+        const ratio = Math.min(Math.abs(current) / limit, 1);
+        const headroom = THREE.MathUtils.lerp(1, 0.18, ratio * ratio);
+        const next = current + delta * headroom;
+        return THREE.MathUtils.clamp(next, -limit, limit);
     }
 
     function buildGlowTexture() {
