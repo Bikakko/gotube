@@ -162,12 +162,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
         const current = { yaw: 0, pitch: 0 };
         const autoDriftSeed = Math.random() * Math.PI * 2;
         const motion = createMotionController(target);
-        let orientationSettledAt = 0;
         motion.markInput = () => {
-            orientationSettledAt = 0;
-        };
-        motion.markSettled = () => {
-            orientationSettledAt = performance.now();
         };
 
         const sky = createSkyDome();
@@ -214,24 +209,13 @@ import * as THREE from "/static/vendor/three.module.min.js";
             const time = now * 0.001;
             const isMobileLike = !matchMedia("(pointer:fine)").matches;
             if (isMobileLike && !motion.active) {
-                target.yaw = Math.sin(time * 0.18 + autoDriftSeed) * 0.036;
-                target.pitch = Math.cos(time * 0.13 + autoDriftSeed) * 0.032;
+                target.yaw = Math.sin(time * 0.2 + autoDriftSeed) * 0.048;
+                target.pitch = Math.cos(time * 0.15 + autoDriftSeed) * 0.042;
             }
 
-            const shouldRecenterMobile = isMobileLike && motion.active && orientationSettledAt > 0 && now - orientationSettledAt > 260;
-            if (shouldRecenterMobile) {
-                target.yaw *= 0.92;
-                target.pitch *= 0.9;
-                if (Math.abs(target.yaw) < 0.0015) target.yaw = 0;
-                if (Math.abs(target.pitch) < 0.0015) target.pitch = 0;
-                if (target.yaw === 0 && target.pitch === 0) {
-                    orientationSettledAt = 0;
-                }
-            }
-
-            const mobileIdle = isMobileLike && (!motion.active || (orientationSettledAt > 0 && now - orientationSettledAt > 180));
-            const driftYaw = mobileIdle ? Math.sin(time * 0.11 + autoDriftSeed * 0.7) * 0.012 : 0;
-            const driftPitch = mobileIdle ? Math.cos(time * 0.09 + autoDriftSeed * 0.5) * 0.01 : 0;
+            const mobileIdle = isMobileLike && !motion.active;
+            const driftYaw = mobileIdle ? Math.sin(time * 0.17 + autoDriftSeed * 0.7) * 0.02 : 0;
+            const driftPitch = mobileIdle ? Math.cos(time * 0.13 + autoDriftSeed * 0.5) * 0.017 : 0;
             const desiredYaw = target.yaw + driftYaw;
             const desiredPitch = target.pitch + driftPitch;
 
@@ -244,8 +228,8 @@ import * as THREE from "/static/vendor/three.module.min.js";
             const skyPitch = motion.active ? 0.46 : 0.34;
             const starYaw = motion.active ? 1.32 : 0.96;
             const starPitch = motion.active ? 1.48 : 1.06;
-            const moonYaw = motion.active ? 0.46 : 0.58;
-            const moonPitch = motion.active ? 0.56 : 0.72;
+            const moonYaw = motion.active ? 0.34 : 0.58;
+            const moonPitch = motion.active ? 0.42 : 0.72;
 
             skyGroup.rotation.y = current.yaw * skyYaw;
             skyGroup.rotation.x = current.pitch * skyPitch;
@@ -506,8 +490,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
     }
 
     function createMotionController(target) {
-        const controller = { active: false, cleanup() {}, markInput() {}, markSettled() {} };
-        let lastOrientationMagnitude = 0;
+        const controller = { active: false, cleanup() {}, markInput() {} };
 
         if (matchMedia("(pointer:fine)").matches || typeof window.DeviceOrientationEvent === "undefined") {
             return controller;
@@ -520,13 +503,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
             controller.active = true;
             const nextYaw = THREE.MathUtils.clamp(event.gamma / 16, -1, 1) * 0.18;
             const nextPitch = THREE.MathUtils.clamp((event.beta - 45) / 22, -1, 1) * 0.16;
-            const magnitude = Math.abs(nextYaw) + Math.abs(nextPitch);
-            if (Math.abs(magnitude - lastOrientationMagnitude) > 0.0035 || magnitude > 0.012) {
-                controller.markInput();
-            } else {
-                controller.markSettled();
-            }
-            lastOrientationMagnitude = magnitude;
+            controller.markInput();
             target.yaw = nextYaw;
             target.pitch = nextPitch;
         };
@@ -560,7 +537,6 @@ import * as THREE from "/static/vendor/three.module.min.js";
         }
 
         controller.markInput = () => {};
-        controller.markSettled = () => {};
         controller.cleanup = () => {
             window.removeEventListener("deviceorientation", onOrientation);
             window.removeEventListener("touchstart", requestPermission);
