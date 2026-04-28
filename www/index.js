@@ -159,10 +159,10 @@ import * as THREE from "/static/vendor/three.module.min.js";
         scene.add(moonGroup);
 
         const target = { yaw: 0, pitch: 0 };
-        const gyroTarget = { yaw: 0, pitch: 0 };
         const current = { yaw: 0, pitch: 0 };
         const autoDriftSeed = Math.random() * Math.PI * 2;
         const motion = createMotionController(target);
+        const gyroVelocity = { yaw: 0, pitch: 0 };
 
         const sky = createSkyDome();
         skyGroup.add(sky);
@@ -207,34 +207,33 @@ import * as THREE from "/static/vendor/three.module.min.js";
 
             const time = now * 0.001;
             const isMobileLike = !matchMedia("(pointer:fine)").matches;
-            const gyroAge = now - motion.lastEventAt;
-            const gyroBlend = isMobileLike && motion.active
-                ? 1 - THREE.MathUtils.smoothstep(gyroAge, 90, 420)
-                : 0;
+            if (isMobileLike) {
+                const autoYaw = Math.sin(time * 0.2 + autoDriftSeed) * 0.048;
+                const autoPitch = Math.cos(time * 0.15 + autoDriftSeed) * 0.042;
+                const driftYaw = Math.sin(time * 0.21 + autoDriftSeed * 0.7) * 0.032;
+                const driftPitch = Math.cos(time * 0.16 + autoDriftSeed * 0.5) * 0.025;
 
-            const autoYaw = Math.sin(time * 0.2 + autoDriftSeed) * 0.048;
-            const autoPitch = Math.cos(time * 0.15 + autoDriftSeed) * 0.042;
-            const driftYaw = isMobileLike ? Math.sin(time * 0.21 + autoDriftSeed * 0.7) * 0.032 : 0;
-            const driftPitch = isMobileLike ? Math.cos(time * 0.16 + autoDriftSeed * 0.5) * 0.025 : 0;
+                gyroVelocity.yaw *= 0.92;
+                gyroVelocity.pitch *= 0.9;
 
-            const desiredYaw = isMobileLike
-                ? THREE.MathUtils.lerp(autoYaw + driftYaw, gyroTarget.yaw, gyroBlend)
-                : target.yaw;
-            const desiredPitch = isMobileLike
-                ? THREE.MathUtils.lerp(autoPitch + driftPitch, gyroTarget.pitch, gyroBlend)
-                : target.pitch;
+                target.yaw = autoYaw + driftYaw + gyroVelocity.yaw;
+                target.pitch = autoPitch + driftPitch + gyroVelocity.pitch;
+            }
 
-            const yawEase = gyroBlend > 0.02 ? 0.14 : 0.06;
-            const pitchEase = gyroBlend > 0.02 ? 0.15 : 0.065;
+            const desiredYaw = target.yaw;
+            const desiredPitch = target.pitch;
+
+            const yawEase = isMobileLike ? 0.08 : 0.06;
+            const pitchEase = isMobileLike ? 0.085 : 0.065;
             current.yaw += (desiredYaw - current.yaw) * yawEase;
             current.pitch += (desiredPitch - current.pitch) * pitchEase;
 
-            const skyYaw = gyroBlend > 0.02 ? 0.36 : 0.34;
-            const skyPitch = gyroBlend > 0.02 ? 0.46 : 0.42;
-            const starYaw = gyroBlend > 0.02 ? 1.32 : 1.18;
-            const starPitch = gyroBlend > 0.02 ? 1.48 : 1.3;
-            const moonYaw = gyroBlend > 0.02 ? 0.28 : 0.46;
-            const moonPitch = gyroBlend > 0.02 ? 0.34 : 0.56;
+            const skyYaw = isMobileLike ? 0.34 : 0.34;
+            const skyPitch = isMobileLike ? 0.42 : 0.42;
+            const starYaw = isMobileLike ? 1.18 : 1.18;
+            const starPitch = isMobileLike ? 1.3 : 1.3;
+            const moonYaw = isMobileLike ? 0.4 : 0.46;
+            const moonPitch = isMobileLike ? 0.5 : 0.56;
 
             skyGroup.rotation.y = current.yaw * skyYaw;
             skyGroup.rotation.x = current.pitch * skyPitch;
@@ -507,10 +506,12 @@ import * as THREE from "/static/vendor/three.module.min.js";
             }
             controller.active = true;
             controller.lastEventAt = performance.now();
-            const nextYaw = THREE.MathUtils.clamp(event.gamma / 16, -1, 1) * 0.18;
-            const nextPitch = THREE.MathUtils.clamp((event.beta - 45) / 22, -1, 1) * 0.16;
-            gyroTarget.yaw = nextYaw;
-            gyroTarget.pitch = nextPitch;
+            const nextYaw = THREE.MathUtils.clamp(event.gamma / 22, -1, 1) * 0.022;
+            const nextPitch = THREE.MathUtils.clamp((event.beta - 45) / 30, -1, 1) * 0.018;
+            gyroVelocity.yaw += nextYaw;
+            gyroVelocity.pitch += nextPitch;
+            gyroVelocity.yaw = THREE.MathUtils.clamp(gyroVelocity.yaw, -0.13, 0.13);
+            gyroVelocity.pitch = THREE.MathUtils.clamp(gyroVelocity.pitch, -0.11, 0.11);
         };
 
         const bindOrientation = () => {
