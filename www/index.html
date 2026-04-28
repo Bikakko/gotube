@@ -5,12 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Moments</title>
     <link rel="icon" href="/static/favicon.jpg" type="image/jpeg">
-    <link rel="stylesheet" href="/static/index.css?v=4.2.0">
+    <link rel="stylesheet" href="/static/index.css?v=4.4.2">
 </head>
 <body>
-    <canvas id="page-sky" class="page-sky" aria-hidden="true"></canvas>
-    <main id="gallery-app" class="gallery-app">
-        <header class="hero">
+    <div id="home-scene" class="home-scene" aria-hidden="true"></div>
+
+    <main class="home-shell">
+        <header class="home-hero">
             <a id="secret-entry" class="secret-entry" href="/go" aria-label="Open hidden entry">
                 <img
                     id="secret-entry-image"
@@ -21,11 +22,9 @@
             </a>
         </header>
 
-        <section class="albums-section" aria-labelledby="albums-title">
-            <h2 id="albums-title" class="sr-only">Gallery</h2>
-            <p id="albums-meta" class="sr-only">Loading albums...</p>
-            <div id="albums-grid" class="albums-grid"></div>
-            <div id="albums-empty" class="albums-empty" hidden>No public images yet.</div>
+        <section class="home-preview" aria-label="Album preview">
+            <div id="albums-grid" class="home-grid"></div>
+            <div id="albums-empty" class="home-empty" hidden>No public images yet.</div>
         </section>
     </main>
 
@@ -43,6 +42,6 @@
         </div>
     </div>
 
-    <script src="/static/index.js?v=4.2.0"></script>
+    <script type="module" src="/static/index.js?v=4.4.2"></script>
 </body>
 </html>
