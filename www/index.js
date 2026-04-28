@@ -161,6 +161,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
 
         const target = { yaw: 0, pitch: 0 };
         const current = { yaw: 0, pitch: 0 };
+        const autoState = { yaw: 0, pitch: 0 };
         const autoDriftSeed = Math.random() * Math.PI * 2;
         const gyroVelocity = { yaw: 0, pitch: 0 };
         const motion = createMotionController(gyroVelocity);
@@ -211,16 +212,19 @@ import * as THREE from "/static/vendor/three.module.min.js";
             const time = now * 0.001;
             const isMobileLike = !matchMedia("(pointer:fine)").matches;
             if (isMobileLike) {
-                const autoYaw = Math.sin(time * 0.2 + autoDriftSeed) * 0.048;
-                const autoPitch = Math.cos(time * 0.15 + autoDriftSeed) * 0.042;
-                const driftYaw = Math.sin(time * 0.21 + autoDriftSeed * 0.7) * 0.032;
-                const driftPitch = Math.cos(time * 0.16 + autoDriftSeed * 0.5) * 0.025;
+                const autoYaw = Math.sin(time * 0.2 + autoDriftSeed) * 0.048
+                    + Math.sin(time * 0.21 + autoDriftSeed * 0.7) * 0.032;
+                const autoPitch = Math.cos(time * 0.15 + autoDriftSeed) * 0.042
+                    + Math.cos(time * 0.16 + autoDriftSeed * 0.5) * 0.025;
 
-                gyroVelocity.yaw *= 0.982;
-                gyroVelocity.pitch *= 0.98;
+                autoState.yaw += (autoYaw - autoState.yaw) * 0.026;
+                autoState.pitch += (autoPitch - autoState.pitch) * 0.03;
 
-                target.yaw = autoYaw + driftYaw + gyroVelocity.yaw;
-                target.pitch = autoPitch + driftPitch + gyroVelocity.pitch;
+                gyroVelocity.yaw *= 0.94;
+                gyroVelocity.pitch *= 0.935;
+
+                target.yaw = autoState.yaw + gyroVelocity.yaw;
+                target.pitch = autoState.pitch + gyroVelocity.pitch;
             }
 
             const desiredYaw = target.yaw;
@@ -235,8 +239,8 @@ import * as THREE from "/static/vendor/three.module.min.js";
             const skyPitch = isMobileLike ? 0.42 : 0.42;
             const starYaw = isMobileLike ? 1.18 : 1.18;
             const starPitch = isMobileLike ? 1.3 : 1.3;
-            const moonYaw = isMobileLike ? 0.4 : 0.46;
-            const moonPitch = isMobileLike ? 0.5 : 0.56;
+            const moonYaw = isMobileLike ? 0.24 : 0.46;
+            const moonPitch = isMobileLike ? 0.3 : 0.56;
 
             skyGroup.rotation.y = current.yaw * skyYaw;
             skyGroup.rotation.x = current.pitch * skyPitch;
@@ -502,10 +506,10 @@ import * as THREE from "/static/vendor/three.module.min.js";
     function positionMoon(moon, width, height) {
         const aspect = width / Math.max(height, 1);
         const narrowness = THREE.MathUtils.clamp((1.82 - aspect) / 1.08, 0, 1);
-        const moonX = THREE.MathUtils.lerp(164, 66, narrowness);
-        const moonY = THREE.MathUtils.lerp(118, 92, narrowness);
-        const moonScale = THREE.MathUtils.lerp(58, 48, narrowness);
-        const glowScale = THREE.MathUtils.lerp(148, 118, narrowness);
+        const moonX = THREE.MathUtils.lerp(160, 54, narrowness);
+        const moonY = THREE.MathUtils.lerp(116, 86, narrowness);
+        const moonScale = THREE.MathUtils.lerp(58, 46, narrowness);
+        const glowScale = THREE.MathUtils.lerp(148, 112, narrowness);
 
         moon.sprite.position.set(moonX, moonY, -312);
         moon.glow.position.copy(moon.sprite.position);
@@ -515,6 +519,8 @@ import * as THREE from "/static/vendor/three.module.min.js";
 
     function createMotionController(gyroVelocity) {
         const controller = { active: false, lastEventAt: 0, cleanup() {} };
+        let lastSampleYaw = null;
+        let lastSamplePitch = null;
 
         if (matchMedia("(pointer:fine)").matches || typeof window.DeviceOrientationEvent === "undefined") {
             return controller;
@@ -526,12 +532,24 @@ import * as THREE from "/static/vendor/three.module.min.js";
             }
             controller.active = true;
             controller.lastEventAt = performance.now();
-            const nextYaw = THREE.MathUtils.clamp(event.gamma / 18, -1, 1) * 0.034;
-            const nextPitch = THREE.MathUtils.clamp((event.beta - 45) / 24, -1, 1) * 0.028;
-            gyroVelocity.yaw += nextYaw;
-            gyroVelocity.pitch += nextPitch;
-            gyroVelocity.yaw = THREE.MathUtils.clamp(gyroVelocity.yaw, -0.22, 0.22);
-            gyroVelocity.pitch = THREE.MathUtils.clamp(gyroVelocity.pitch, -0.18, 0.18);
+            const sampleYaw = THREE.MathUtils.clamp(event.gamma / 32, -1, 1);
+            const samplePitch = THREE.MathUtils.clamp((event.beta - 45) / 40, -1, 1);
+
+            if (lastSampleYaw !== null && lastSamplePitch !== null) {
+                let deltaYaw = sampleYaw - lastSampleYaw;
+                let deltaPitch = samplePitch - lastSamplePitch;
+
+                if (Math.abs(deltaYaw) < 0.012) deltaYaw = 0;
+                if (Math.abs(deltaPitch) < 0.012) deltaPitch = 0;
+
+                gyroVelocity.yaw += deltaYaw * 0.9;
+                gyroVelocity.pitch += deltaPitch * 0.78;
+                gyroVelocity.yaw = THREE.MathUtils.clamp(gyroVelocity.yaw, -0.12, 0.12);
+                gyroVelocity.pitch = THREE.MathUtils.clamp(gyroVelocity.pitch, -0.1, 0.1);
+            }
+
+            lastSampleYaw = sampleYaw;
+            lastSamplePitch = samplePitch;
         };
 
         const bindOrientation = () => {
