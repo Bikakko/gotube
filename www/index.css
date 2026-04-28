@@ -211,18 +211,18 @@ body {
     bottom: 18px;
     z-index: 6;
     display: inline-flex;
-    opacity: 0.24;
+    opacity: 0.2;
     transition: opacity 0.18s ease, transform 0.18s ease;
 }
 
 .secret-entry:hover {
-    opacity: 0.68;
+    opacity: 0.58;
     transform: translateY(-2px) rotate(-2deg);
 }
 
 .secret-entry img {
-    width: 52px;
-    height: 52px;
+    width: 48px;
+    height: 48px;
     border-radius: 18px;
     object-fit: cover;
     border: 1px solid rgba(147, 197, 253, 0.18);
@@ -297,12 +297,12 @@ body {
     .secret-entry {
         right: 16px;
         bottom: 14px;
-        opacity: 0.2;
+        opacity: 0.16;
     }
 
     .secret-entry img {
-        width: 44px;
-        height: 44px;
-        border-radius: 15px;
+        width: 38px;
+        height: 38px;
+        border-radius: 13px;
     }
 }
