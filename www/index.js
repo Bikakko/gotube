@@ -27,14 +27,16 @@ import * as THREE from "/static/vendor/three.module.min.js";
         }
     });
 
-    if (sceneHost) {
-        disposeScene = createNightSky(sceneHost);
-        window.addEventListener("beforeunload", () => {
-            if (disposeScene) {
-                disposeScene();
-            }
-        }, { once: true });
-    }
+    ensureScene();
+    window.addEventListener("pageshow", () => {
+        ensureScene();
+    });
+    window.addEventListener("beforeunload", () => {
+        if (disposeScene) {
+            disposeScene();
+            disposeScene = null;
+        }
+    }, { once: true });
 
     modalClose?.addEventListener("click", closeModal);
     modalBackdrop?.addEventListener("click", closeModal);
@@ -127,6 +129,13 @@ import * as THREE from "/static/vendor/three.module.min.js";
         document.body.style.overflow = "";
     }
 
+    function ensureScene() {
+        if (!sceneHost || disposeScene || sceneHost.querySelector("canvas")) {
+            return;
+        }
+        disposeScene = createNightSky(sceneHost);
+    }
+
     function createNightSky(host) {
         const scene = new THREE.Scene();
 
@@ -153,6 +162,10 @@ import * as THREE from "/static/vendor/three.module.min.js";
         const current = { yaw: 0, pitch: 0 };
         const autoDriftSeed = Math.random() * Math.PI * 2;
         const motion = createMotionController(target);
+        let lastManualInputAt = 0;
+        motion.markInput = () => {
+            lastManualInputAt = performance.now();
+        };
 
         const sky = createSkyDome();
         skyGroup.add(sky);
@@ -185,11 +198,13 @@ import * as THREE from "/static/vendor/three.module.min.js";
             const pointerY = event.clientY / height * 2 - 1;
             target.yaw = pointerX * 0.075;
             target.pitch = pointerY * 0.068;
+            lastManualInputAt = performance.now();
         }
 
         function onPointerLeave() {
             target.yaw = 0;
             target.pitch = 0;
+            lastManualInputAt = 0;
         }
 
         function animate(now) {
@@ -200,6 +215,17 @@ import * as THREE from "/static/vendor/three.module.min.js";
             if (isMobileLike && !motion.active) {
                 target.yaw = Math.sin(time * 0.18 + autoDriftSeed) * 0.036;
                 target.pitch = Math.cos(time * 0.13 + autoDriftSeed) * 0.032;
+            }
+
+            const shouldRecenter = lastManualInputAt > 0 && now - lastManualInputAt > 220;
+            if (shouldRecenter) {
+                target.yaw *= 0.92;
+                target.pitch *= 0.9;
+                if (Math.abs(target.yaw) < 0.0015) target.yaw = 0;
+                if (Math.abs(target.pitch) < 0.0015) target.pitch = 0;
+                if (target.yaw === 0 && target.pitch === 0) {
+                    lastManualInputAt = 0;
+                }
             }
 
             const driftYaw = isMobileLike ? Math.sin(time * 0.11 + autoDriftSeed * 0.7) * 0.012 : 0;
@@ -478,7 +504,8 @@ import * as THREE from "/static/vendor/three.module.min.js";
     }
 
     function createMotionController(target) {
-        const controller = { active: false, cleanup() {} };
+        const controller = { active: false, cleanup() {}, markInput() {} };
+        let lastOrientationMagnitude = 0;
 
         if (matchMedia("(pointer:fine)").matches || typeof window.DeviceOrientationEvent === "undefined") {
             return controller;
@@ -489,8 +516,15 @@ import * as THREE from "/static/vendor/three.module.min.js";
                 return;
             }
             controller.active = true;
-            target.yaw = THREE.MathUtils.clamp(event.gamma / 16, -1, 1) * 0.18;
-            target.pitch = THREE.MathUtils.clamp((event.beta - 45) / 22, -1, 1) * 0.16;
+            const nextYaw = THREE.MathUtils.clamp(event.gamma / 16, -1, 1) * 0.18;
+            const nextPitch = THREE.MathUtils.clamp((event.beta - 45) / 22, -1, 1) * 0.16;
+            const magnitude = Math.abs(nextYaw) + Math.abs(nextPitch);
+            if (Math.abs(magnitude - lastOrientationMagnitude) > 0.0035 || magnitude > 0.012) {
+                controller.markInput();
+            }
+            lastOrientationMagnitude = magnitude;
+            target.yaw = nextYaw;
+            target.pitch = nextPitch;
         };
 
         const bindOrientation = () => {
@@ -521,6 +555,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
             requestPermission();
         }
 
+        controller.markInput = () => {};
         controller.cleanup = () => {
             window.removeEventListener("deviceorientation", onOrientation);
             window.removeEventListener("touchstart", requestPermission);
