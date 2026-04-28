@@ -162,8 +162,8 @@ import * as THREE from "/static/vendor/three.module.min.js";
         const target = { yaw: 0, pitch: 0 };
         const current = { yaw: 0, pitch: 0 };
         const autoDriftSeed = Math.random() * Math.PI * 2;
-        const motion = createMotionController(target);
         const gyroVelocity = { yaw: 0, pitch: 0 };
+        const motion = createMotionController(gyroVelocity);
 
         const sky = createSkyDome();
         skyGroup.add(sky);
@@ -513,7 +513,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
         moon.glow.scale.set(glowScale, glowScale, 1);
     }
 
-    function createMotionController(target) {
+    function createMotionController(gyroVelocity) {
         const controller = { active: false, lastEventAt: 0, cleanup() {} };
 
         if (matchMedia("(pointer:fine)").matches || typeof window.DeviceOrientationEvent === "undefined") {
