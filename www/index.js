@@ -201,17 +201,24 @@ import * as THREE from "/static/vendor/three.module.min.js";
                 target.pitch = Math.cos(time * 0.13 + autoDriftSeed) * 0.024;
             }
 
-            const yawEase = motion.active ? 0.09 : 0.035;
-            const pitchEase = motion.active ? 0.1 : 0.04;
+            const yawEase = motion.active ? 0.14 : 0.035;
+            const pitchEase = motion.active ? 0.15 : 0.04;
             current.yaw += (target.yaw - current.yaw) * yawEase;
             current.pitch += (target.pitch - current.pitch) * pitchEase;
 
-            skyGroup.rotation.y = current.yaw * 0.28;
-            skyGroup.rotation.x = current.pitch * 0.34;
-            starGroup.rotation.y = current.yaw * 0.96;
-            starGroup.rotation.x = current.pitch * 1.06;
-            moonGroup.rotation.y = current.yaw * 0.58;
-            moonGroup.rotation.x = current.pitch * 0.72;
+            const skyYaw = motion.active ? 0.36 : 0.28;
+            const skyPitch = motion.active ? 0.46 : 0.34;
+            const starYaw = motion.active ? 1.32 : 0.96;
+            const starPitch = motion.active ? 1.48 : 1.06;
+            const moonYaw = motion.active ? 0.82 : 0.58;
+            const moonPitch = motion.active ? 1.02 : 0.72;
+
+            skyGroup.rotation.y = current.yaw * skyYaw;
+            skyGroup.rotation.x = current.pitch * skyPitch;
+            starGroup.rotation.y = current.yaw * starYaw;
+            starGroup.rotation.x = current.pitch * starPitch;
+            moonGroup.rotation.y = current.yaw * moonYaw;
+            moonGroup.rotation.x = current.pitch * moonPitch;
 
             stars.material.uniforms.uTime.value = time;
 
@@ -476,8 +483,8 @@ import * as THREE from "/static/vendor/three.module.min.js";
                 return;
             }
             controller.active = true;
-            target.yaw = THREE.MathUtils.clamp(event.gamma / 24, -1, 1) * 0.128;
-            target.pitch = THREE.MathUtils.clamp((event.beta - 45) / 34, -1, 1) * 0.118;
+            target.yaw = THREE.MathUtils.clamp(event.gamma / 16, -1, 1) * 0.18;
+            target.pitch = THREE.MathUtils.clamp((event.beta - 45) / 22, -1, 1) * 0.16;
         };
 
         const bindOrientation = () => {

@@ -250,17 +250,20 @@ body {
     }
 
     .home-preview {
+        position: fixed;
         left: 10px;
         right: auto;
         bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
         width: min(calc(100vw - 20px), 332px);
         transform: none;
+        z-index: 4;
     }
 
     .home-grid {
         grid-template-columns: repeat(2, minmax(0, 158px));
         gap: 14px;
         justify-content: center;
+        width: 100%;
     }
 
     .album-card {
