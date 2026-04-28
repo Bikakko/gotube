@@ -196,22 +196,28 @@ import * as THREE from "/static/vendor/three.module.min.js";
             if (disposed) return;
 
             const time = now * 0.001;
-            if (!matchMedia("(pointer:fine)").matches && !motion.active) {
-                target.yaw = Math.sin(time * 0.18 + autoDriftSeed) * 0.024;
-                target.pitch = Math.cos(time * 0.13 + autoDriftSeed) * 0.024;
+            const isMobileLike = !matchMedia("(pointer:fine)").matches;
+            if (isMobileLike && !motion.active) {
+                target.yaw = Math.sin(time * 0.18 + autoDriftSeed) * 0.036;
+                target.pitch = Math.cos(time * 0.13 + autoDriftSeed) * 0.032;
             }
+
+            const driftYaw = isMobileLike ? Math.sin(time * 0.11 + autoDriftSeed * 0.7) * 0.012 : 0;
+            const driftPitch = isMobileLike ? Math.cos(time * 0.09 + autoDriftSeed * 0.5) * 0.01 : 0;
+            const desiredYaw = target.yaw + driftYaw;
+            const desiredPitch = target.pitch + driftPitch;
 
             const yawEase = motion.active ? 0.14 : 0.035;
             const pitchEase = motion.active ? 0.15 : 0.04;
-            current.yaw += (target.yaw - current.yaw) * yawEase;
-            current.pitch += (target.pitch - current.pitch) * pitchEase;
+            current.yaw += (desiredYaw - current.yaw) * yawEase;
+            current.pitch += (desiredPitch - current.pitch) * pitchEase;
 
             const skyYaw = motion.active ? 0.36 : 0.28;
             const skyPitch = motion.active ? 0.46 : 0.34;
             const starYaw = motion.active ? 1.32 : 0.96;
             const starPitch = motion.active ? 1.48 : 1.06;
-            const moonYaw = motion.active ? 0.82 : 0.58;
-            const moonPitch = motion.active ? 1.02 : 0.72;
+            const moonYaw = motion.active ? 0.46 : 0.58;
+            const moonPitch = motion.active ? 0.56 : 0.72;
 
             skyGroup.rotation.y = current.yaw * skyYaw;
             skyGroup.rotation.x = current.pitch * skyPitch;
@@ -508,8 +514,12 @@ import * as THREE from "/static/vendor/three.module.min.js";
             window.removeEventListener("pointerdown", requestPermission);
         };
 
-        window.addEventListener("touchstart", requestPermission, { once: true });
-        window.addEventListener("pointerdown", requestPermission, { once: true });
+        if (typeof window.DeviceOrientationEvent?.requestPermission === "function") {
+            window.addEventListener("touchstart", requestPermission, { once: true });
+            window.addEventListener("pointerdown", requestPermission, { once: true });
+        } else {
+            requestPermission();
+        }
 
         controller.cleanup = () => {
             window.removeEventListener("deviceorientation", onOrientation);
