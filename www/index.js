@@ -16,6 +16,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
     const modalBackdrop = document.querySelector("[data-modal-close]");
     const prevButton = document.getElementById("gallery-prev");
     const nextButton = document.getElementById("gallery-next");
+    const secretEntry = document.getElementById("secret-entry");
     const secretEntryImage = document.getElementById("secret-entry-image");
 
     let disposeScene = null;
@@ -173,6 +174,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
         const moon = createMoon();
         moonGroup.add(moon.glow);
         moonGroup.add(moon.sprite);
+        const moonScreenPosition = new THREE.Vector3();
 
         let rafId = 0;
         let disposed = false;
@@ -186,6 +188,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
             renderer.setSize(width, height, false);
             sky.material.uniforms.uResolution.value.set(width, height);
             positionMoon(moon, width, height);
+            updateSecretEntryPosition(width, height);
         }
 
         function onPointerMove(event) {
@@ -213,8 +216,8 @@ import * as THREE from "/static/vendor/three.module.min.js";
                 const driftYaw = Math.sin(time * 0.21 + autoDriftSeed * 0.7) * 0.032;
                 const driftPitch = Math.cos(time * 0.16 + autoDriftSeed * 0.5) * 0.025;
 
-                gyroVelocity.yaw *= 0.92;
-                gyroVelocity.pitch *= 0.9;
+                gyroVelocity.yaw *= 0.982;
+                gyroVelocity.pitch *= 0.98;
 
                 target.yaw = autoYaw + driftYaw + gyroVelocity.yaw;
                 target.pitch = autoPitch + driftPitch + gyroVelocity.pitch;
@@ -243,9 +246,26 @@ import * as THREE from "/static/vendor/three.module.min.js";
             moonGroup.rotation.x = current.pitch * moonPitch;
 
             stars.material.uniforms.uTime.value = time;
+            updateSecretEntryPosition(window.innerWidth || 1, window.innerHeight || 1);
 
             renderer.render(scene, camera);
             rafId = window.requestAnimationFrame(animate);
+        }
+
+        function updateSecretEntryPosition(width, height) {
+            if (!secretEntry) {
+                return;
+            }
+            moon.sprite.getWorldPosition(moonScreenPosition);
+            moonScreenPosition.project(camera);
+            const x = (moonScreenPosition.x * 0.5 + 0.5) * width;
+            const y = (-moonScreenPosition.y * 0.5 + 0.5) * height;
+            const isMobileLike = !matchMedia("(pointer:fine)").matches;
+            const size = isMobileLike ? 58 : 70;
+            secretEntry.style.left = `${x}px`;
+            secretEntry.style.top = `${y}px`;
+            secretEntry.style.width = `${size}px`;
+            secretEntry.style.height = `${size}px`;
         }
 
         resize();
@@ -506,12 +526,12 @@ import * as THREE from "/static/vendor/three.module.min.js";
             }
             controller.active = true;
             controller.lastEventAt = performance.now();
-            const nextYaw = THREE.MathUtils.clamp(event.gamma / 22, -1, 1) * 0.022;
-            const nextPitch = THREE.MathUtils.clamp((event.beta - 45) / 30, -1, 1) * 0.018;
+            const nextYaw = THREE.MathUtils.clamp(event.gamma / 18, -1, 1) * 0.034;
+            const nextPitch = THREE.MathUtils.clamp((event.beta - 45) / 24, -1, 1) * 0.028;
             gyroVelocity.yaw += nextYaw;
             gyroVelocity.pitch += nextPitch;
-            gyroVelocity.yaw = THREE.MathUtils.clamp(gyroVelocity.yaw, -0.13, 0.13);
-            gyroVelocity.pitch = THREE.MathUtils.clamp(gyroVelocity.pitch, -0.11, 0.11);
+            gyroVelocity.yaw = THREE.MathUtils.clamp(gyroVelocity.yaw, -0.22, 0.22);
+            gyroVelocity.pitch = THREE.MathUtils.clamp(gyroVelocity.pitch, -0.18, 0.18);
         };
 
         const bindOrientation = () => {
