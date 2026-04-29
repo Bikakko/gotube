@@ -600,8 +600,18 @@
         window.location.href = `/${hiddenPath}/admin`;
     };
 
+    function applyStableDownloadPageLabels() {
+        const profileBtn = $('#profile-btn');
+        const passwordBtn = $('#password-btn');
+        const displayNameInput = $('#register-display-name');
+        if (profileBtn) profileBtn.textContent = '\u4fee\u6539\u6635\u79f0';
+        if (passwordBtn) passwordBtn.textContent = '\u4fee\u6539\u5bc6\u7801';
+        if (displayNameInput) displayNameInput.placeholder = '\u6635\u79f0';
+    }
+
     // 初始化
     async function init() {
+        applyStableDownloadPageLabels();
         await checkLoginStatus();
         await loadTasks();
         connectWS();
