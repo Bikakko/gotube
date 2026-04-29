@@ -14,7 +14,7 @@ class AdminUsersFrontendTests(unittest.TestCase):
         source = read_text("www/admin/js/users.js")
 
         self.assertIn("className: 'user-management-shell'", source)
-        self.assertIn("className: 'user-name-cell'", source)
+        self.assertIn("className: `user-identity-card ${(user.role || 'user')}`", source)
         self.assertIn("className: 'user-search-summary user-summary-pill'", source)
         self.assertIn(r"textContent: '\u7528\u6237'", source)
         self.assertIn(r"textContent: '\u65b0\u589e\u7528\u6237'", source)
@@ -29,7 +29,8 @@ class AdminUsersFrontendTests(unittest.TestCase):
 
         self.assertIn(".user-management-shell {", css)
         self.assertIn(".users-table-shell {", css)
-        self.assertIn(".user-name-cell {", css)
+        self.assertIn(".user-identity-card {", css)
+        self.assertIn(".user-note-badge {", css)
         self.assertIn(".user-summary-pill {", css)
         self.assertIn(".user-actions-compact {", css)
         self.assertIn(".user-toolbar-main {", css)
@@ -44,8 +45,8 @@ class AdminUsersFrontendTests(unittest.TestCase):
         self.assertIn("display_name: displayName", source)
         self.assertIn(r"textContent: `\u8d26\u53f7\uff1a${user.username}", source)
         self.assertIn("function formatUserIdentityText(user)", render_source)
-        self.assertIn(r"textContent: '\u8d26\u53f7'", source)
-        self.assertIn(r"textContent: '\u6635\u79f0'", source)
+        self.assertIn("className: 'users-col-identity'", source)
+        self.assertIn(r"textContent: '\u7528\u6237'", source)
 
 
 if __name__ == "__main__":

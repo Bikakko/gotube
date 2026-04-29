@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# GoTube 鐢熶骇鐜鍚姩鑴氭湰 (v4.5.1)
-# 浣跨敤 gunicorn + uvicorn workers 妯″紡
+# GoTube 生产环境启动脚本 (v4.5.2)
+# 使用 gunicorn + uvicorn workers 模式
 
 set -e
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$SCRIPT_DIR"
 
-# 棰滆壊杈撳嚭
+# 颜色输出
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
@@ -18,14 +18,14 @@ source "$PROJECT_DIR/scripts/gotube_runtime.sh"
 runtime_load_common_config
 
 usage() {
-    echo -e "${YELLOW}鐢ㄦ硶:${NC}"
-    echo "  $0          鍚姩鐢熶骇鏈嶅姟鍣?
-    echo "  $0 init     鍒濆鍖栬櫄鎷熺幆澧冦€佷緷璧栧拰鍓嶇鏋勫缓"
-    echo "  $0 doctor   妫€鏌ュ綋鍓嶅惎鍔ㄧ幆澧?
-    echo "  $0 stop     鍋滄鏈嶅姟鍣?
-    echo "  $0 restart  閲嶅惎鏈嶅姟鍣?
-    echo "  $0 status   鏌ョ湅鏈嶅姟鍣ㄧ姸鎬?
-    echo "  $0 update   鏇存柊 yt-dlp 鍒版渶鏂扮増鏈?
+    echo -e "${YELLOW}用法:${NC}"
+    echo "  $0          启动生产服务器"
+    echo "  $0 init     初始化虚拟环境、依赖和前端构建"
+    echo "  $0 doctor   检查当前启动环境"
+    echo "  $0 stop     停止服务器"
+    echo "  $0 restart  重启服务器"
+    echo "  $0 status   查看服务器状态"
+    echo "  $0 update   更新 yt-dlp 到最新版本"
     exit 1
 }
 
@@ -42,7 +42,7 @@ is_running() {
     return 1
 }
 
-# 妫€鏌ョ鍙ｆ槸鍚﹁鍗犵敤
+# 检查端口是否被占用
 check_port() {
     local port=$1
     if command -v lsof &>/dev/null; then
@@ -58,7 +58,7 @@ check_port() {
     return 1
 }
 
-# 鑾峰彇鍗犵敤绔彛鐨勬墍鏈?PID
+# 获取占用端口的所有 PID
 get_port_pids() {
     local port=$1
     if command -v lsof &>/dev/null; then
@@ -70,26 +70,26 @@ get_port_pids() {
     fi
 }
 
-# 寮哄埗娓呯悊鍗犵敤绔彛鐨勬墍鏈夎繘绋?
+# 强制清理占用端口的所有进程
 force_kill_port() {
     local port=$1
     local pids
     pids=$(get_port_pids "$port")
     if [ -n "$pids" ]; then
-        echo -e "${YELLOW}鍙戠幇杩涚▼鍗犵敤绔彛 $port锛屾鍦ㄥ己鍒剁粓姝?..${NC}"
+        echo -e "${YELLOW}发现进程占用端口 $port，正在强制终止...${NC}"
         echo "$pids" | while read -r pid; do
             if [ -n "$pid" ]; then
-                echo -e "  缁堟 PID: $pid"
+                echo -e "  终止 PID: $pid"
                 kill -9 "$pid" 2>/dev/null || true
             fi
         done
         sleep 1
-        # 楠岃瘉鏄惁宸叉竻鐞?
+        # 验证是否已清理
         if check_port "$port"; then
-            echo -e "${RED}鉁?绔彛 $port 浠嶈鍗犵敤锛岃鎵嬪姩澶勭悊${NC}"
+            echo -e "${RED}✗ 端口 $port 仍被占用，请手动处理${NC}"
             return 1
         fi
-        echo -e "${GREEN}鉁?绔彛 $port 宸查噴鏀?{NC}"
+        echo -e "${GREEN}✓ 端口 $port 已释放${NC}"
         return 0
     fi
     return 1
@@ -101,19 +101,19 @@ start() {
     local WORKERS="$GOTUBE_WORKERS"
     local ACCESS_LOG_FORMAT='time="%(t)s" remote="%(h)s" method="%(m)s" path="%(U)s" query="%(q)s" status=%(s)s bytes=%(B)s referer="%(f)s" agent="%(a)s"'
 
-    # 绔彛棰勬
+    # 端口预检
     if check_port "$PORT"; then
-        echo -e "${YELLOW}鈿?绔彛 $PORT 宸茶鍗犵敤${NC}"
+        echo -e "${YELLOW}⚠ 端口 $PORT 已被占用${NC}"
         if force_kill_port "$PORT"; then
-            echo -e "${GREEN}鉁?绔彛宸查噴鏀撅紝缁х画鍚姩...${NC}"
+            echo -e "${GREEN}✓ 端口已释放，继续启动...${NC}"
         else
-            echo -e "${RED}鉁?鏃犳硶閲婃斁绔彛 $PORT锛岃鎵嬪姩澶勭悊鍚庨噸璇?{NC}"
-            echo -e "${YELLOW}鎻愮ず: lsof -i :$PORT 鎴?fuser -k $PORT/tcp${NC}"
+            echo -e "${RED}✗ 无法释放端口 $PORT，请手动处理后重试${NC}"
+            echo -e "${YELLOW}提示: lsof -i :$PORT 或 fuser -k $PORT/tcp${NC}"
             exit 1
         fi
     fi
 
-    # 娓呯悊鍙兘鐨勬畫鐣?PID 鏂囦欢
+    # 清理可能的残留 PID 文件
     if [ -f "$GOTUBE_PID_FILE" ]; then
         rm -f "$GOTUBE_PID_FILE"
     fi
@@ -122,26 +122,26 @@ start() {
     runtime_ensure_python_deps prod || exit 1
     runtime_build_frontend || exit 1
 
-    echo -e "${GREEN}姝ｅ湪鍚姩 GoTube 鐢熶骇鏈嶅姟鍣?(v4.5.1)...${NC}"
+    echo -e "${GREEN}正在启动 GoTube 生产服务器 (v4.5.2)...${NC}"
     runtime_print_summary
-    echo -e "  绔彛:    ${YELLOW}$PORT${NC}"
+    echo -e "  端口:    ${YELLOW}$PORT${NC}"
     echo -e "  Workers: ${YELLOW}$WORKERS${NC}"
 
     runtime_activate_venv || exit 1
     cd "$PROJECT_DIR"
 
-    # 濡傛灉閰嶇疆浜?GOTUBE_AUTO_UPDATE_YTDLP=1锛屽垯鍚姩鏃惰嚜鍔ㄦ洿鏂?yt-dlp
+    # 如果配置了 GOTUBE_AUTO_UPDATE_YTDLP=1，则启动时自动更新 yt-dlp
     if [ "$GOTUBE_AUTO_UPDATE_YTDLP" = "1" ]; then
         update_ytdlp
         echo ""
     fi
 
-    # 娓呴櫎鍙兘鍐茬獊鐨勭郴缁熺幆澧冨彉閲忥紝纭繚浣跨敤 .env 鏂囦欢閰嶇疆
+    # 清除可能冲突的系统环境变量，确保使用 .env 文件配置
     unset GOTUBE_PORT GOTUBE_HIDDEN_PATH GOTUBE_MAX_CONCURRENT
     unset GOTUBE_DOWNLOAD_DIR GOTUBE_COOKIES_FILE GOTUBE_WARP_PROXY
     unset GOTUBE_DEBUG GOTUBE_ADMINS GOTUBE_LOG_LEVEL GOTUBE_DB_FILE
 
-    # 浣跨敤 gunicorn + uvicorn workers 鍚姩
+    # 使用 gunicorn + uvicorn workers 启动
     gunicorn server.main:app \
         --workers "$WORKERS" \
         --worker-class uvicorn.workers.UvicornWorker \
@@ -153,17 +153,17 @@ start() {
         --capture-output \
         --daemon
 
-    # 绛夊緟鏈嶅姟鍚姩
+    # 等待服务启动
     sleep 2
 
     if [ -f "$GOTUBE_PID_FILE" ]; then
         local pid=$(cat "$GOTUBE_PID_FILE")
-        echo -e "${GREEN}鉁?鏈嶅姟鍣ㄥ凡鍚姩!${NC}"
+        echo -e "${GREEN}✓ 服务器已启动!${NC}"
         echo -e "  PID:      ${YELLOW}$pid${NC}"
-        echo -e "  璁块棶鍦板潃: ${GREEN}http://$GOTUBE_HOST:$PORT${NC}"
-        echo -e "  鏃ュ織鏂囦欢: ${YELLOW}$GOTUBE_LOG_FILE${NC}"
+        echo -e "  访问地址: ${GREEN}http://$GOTUBE_HOST:$PORT${NC}"
+        echo -e "  日志文件: ${YELLOW}$GOTUBE_LOG_FILE${NC}"
     else
-        echo -e "${RED}鉁?鏈嶅姟鍣ㄥ惎鍔ㄥけ璐ワ紝璇锋鏌ユ棩蹇? $GOTUBE_LOG_FILE${NC}"
+        echo -e "${RED}✗ 服务器启动失败，请检查日志: $GOTUBE_LOG_FILE${NC}"
         exit 1
     fi
 }
@@ -172,16 +172,16 @@ stop() {
     runtime_load_common_config
     local PORT="$GOTUBE_PORT"
 
-    # 濡傛灉鏈?PID 鏂囦欢锛屽厛灏濊瘯姝ｅ父鍏抽棴
+    # 如果有 PID 文件，先尝试正常关闭
     if is_running; then
         local pid
         pid=$(cat "$GOTUBE_PID_FILE")
-        echo -e "${YELLOW}姝ｅ湪鍋滄鏈嶅姟鍣?(PID: $pid)...${NC}"
+        echo -e "${YELLOW}正在停止服务器 (PID: $pid)...${NC}"
 
-        # 鍙戦€?SIGTERM锛岀粰杩涚▼浼橀泤閫€鍑虹殑鏈轰細
+        # 发送 SIGTERM，给进程优雅退出的机会
         kill -TERM "$pid" 2>/dev/null || true
 
-        # 绛夊緟鏈€澶?0绉?
+        # 等待最多10秒
         for i in $(seq 1 10); do
             if ! kill -0 "$pid" 2>/dev/null; then
                 break
@@ -189,9 +189,9 @@ stop() {
             sleep 1
         done
 
-        # 濡傛灉杩涚▼杩樺湪锛屽己鍒舵潃姝?
+        # 如果进程还在，强制杀死
         if kill -0 "$pid" 2>/dev/null; then
-            echo -e "${YELLOW}杩涚▼鏈搷搴旓紝寮哄埗缁堟...${NC}"
+            echo -e "${YELLOW}进程未响应，强制终止...${NC}"
             kill -9 "$pid" 2>/dev/null || true
             sleep 1
         fi
@@ -199,14 +199,14 @@ stop() {
         rm -f "$GOTUBE_PID_FILE"
     fi
 
-    # 濡傛灉绔彛浠嶈鍗犵敤锛屽己鍒舵竻鐞嗘畫鐣欏瓙杩涚▼
+    # 如果端口仍被占用，强制清理残留子进程
     if check_port "$PORT"; then
-        echo -e "${YELLOW}绔彛 $PORT 浠嶈鍗犵敤锛屽皾璇曟竻鐞嗘畫鐣欒繘绋?..${NC}"
+        echo -e "${YELLOW}端口 $PORT 仍被占用，尝试清理残留进程...${NC}"
         force_kill_port "$PORT" || true
     fi
 
     rm -f "$GOTUBE_PID_FILE"
-    echo -e "${GREEN}鉁?鏈嶅姟鍣ㄥ凡鍋滄${NC}"
+    echo -e "${GREEN}✓ 服务器已停止${NC}"
 }
 
 status() {
@@ -215,45 +215,45 @@ status() {
 
     if is_running; then
         local pid=$(cat "$GOTUBE_PID_FILE")
-        echo -e "${GREEN}鈼?鏈嶅姟鍣ㄨ繍琛屼腑 (v4.5.1)${NC}"
+        echo -e "${GREEN}● 服务器运行中 (v4.5.2)${NC}"
         echo -e "  PID:      $pid"
-        echo -e "  璁块棶鍦板潃: http://$GOTUBE_HOST:$PORT"
+        echo -e "  访问地址: http://$GOTUBE_HOST:$PORT"
     elif check_port "$PORT"; then
         local pids
         pids=$(get_port_pids "$PORT")
-        echo -e "${YELLOW}鈿?绔彛 $PORT 琚崰鐢紝浣嗘棤 PID 璁板綍${NC}"
-        echo -e "  鍗犵敤 PID: ${pids:-鏈煡}"
-        echo -e "  ${YELLOW}鍙兘鏄畫鐣欒繘绋嬶紝寤鸿鎵ц $0 stop${NC}"
+        echo -e "${YELLOW}⚠ 端口 $PORT 被占用，但无 PID 记录${NC}"
+        echo -e "  占用 PID: ${pids:-未知}"
+        echo -e "  ${YELLOW}可能是残留进程，建议执行 $0 stop${NC}"
     else
-        echo -e "${RED}鈼?鏈嶅姟鍣ㄦ湭杩愯${NC}"
+        echo -e "${RED}○ 服务器未运行${NC}"
     fi
 }
 
 update_ytdlp() {
     runtime_load_common_config
     runtime_activate_venv || exit 1
-    echo -e "${YELLOW}姝ｅ湪鏇存柊 yt-dlp...${NC}"
+    echo -e "${YELLOW}正在更新 yt-dlp...${NC}"
 
-    # 璁板綍褰撳墠鐗堟湰
+    # 记录当前版本
     local old_ver
-    old_ver=$(yt-dlp --version 2>/dev/null || echo "鏈煡")
+    old_ver=$(yt-dlp --version 2>/dev/null || echo "未知")
 
     pip install --upgrade yt-dlp >/dev/null 2>&1
 
     local new_ver
-    new_ver=$(yt-dlp --version 2>/dev/null || echo "鏈煡")
+    new_ver=$(yt-dlp --version 2>/dev/null || echo "未知")
 
-    echo -e "${GREEN}鉁?yt-dlp 鏇存柊瀹屾垚${NC}"
-    echo -e "  鏃х増鏈? $old_ver"
-    echo -e "  鏂扮増鏈? $new_ver"
+    echo -e "${GREEN}✓ yt-dlp 更新完成${NC}"
+    echo -e "  旧版本: $old_ver"
+    echo -e "  新版本: $new_ver"
 
-    # 濡傛灉鏈嶅姟姝ｅ湪杩愯锛屾彁绀洪噸鍚?
+    # 如果服务正在运行，提示重启
     if is_running; then
-        echo -e "${YELLOW}鈿?鏈嶅姟姝ｅ湪杩愯锛岃鎵ц $0 restart 浣挎洿鏂扮敓鏁?{NC}"
+        echo -e "${YELLOW}⚠ 服务正在运行，请执行 $0 restart 使更新生效${NC}"
     fi
 }
 
-# 涓婚€昏緫
+# 主逻辑
 case "${1:-start}" in
     init)
         runtime_init prod

@@ -241,13 +241,20 @@ function renderUsersTable(users) {
         return;
     }
 
-    const table = el('table', { className: 'users-table' }, [
+    const table = el('table', { className: 'users-table users-table-fixed users-table-users-v2' }, [
+        el('colgroup', {}, [
+            el('col', { className: 'users-col-id' }),
+            el('col', { className: 'users-col-identity' }),
+            el('col', { className: 'users-col-status' }),
+            el('col', { className: 'users-col-video-count' }),
+            el('col', { className: 'users-col-capacity' }),
+            el('col', { className: 'users-col-last-login' }),
+            el('col', { className: 'users-col-actions' }),
+        ]),
         el('thead', {}, [
             el('tr', {}, [
                 el('th', { textContent: 'ID' }),
-                el('th', { textContent: '\u8d26\u53f7' }),
-                el('th', { textContent: '\u6635\u79f0' }),
-                el('th', { textContent: '\u89d2\u8272' }),
+                el('th', { textContent: '\u7528\u6237' }),
                 el('th', { textContent: '\u72b6\u6001' }),
                 el('th', { textContent: '\u89c6\u9891\u6570' }),
                 el('th', { textContent: '\u5bb9\u91cf' }),
@@ -260,35 +267,39 @@ function renderUsersTable(users) {
             const isSystemAccount = user.is_system_account || user.role === 'admin';
             const accountNote = isSystemAccount
                 ? '\u7cfb\u7edf\u8d26\u53f7'
-                : (isSelf ? '\u5f53\u524d\u767b\u5f55\u7528\u6237' : '\u666e\u901a\u8d26\u53f7');
+                : (isSelf ? '\u5f53\u524d\u767b\u5f55\u7528\u6237' : '');
 
             return el('tr', { className: user.is_active ? '' : 'inactive' }, [
-                el('td', { textContent: user.id }),
-                el('td', {}, [
-                    el('div', { className: 'user-name-cell' }, [
-                        el('div', { className: 'user-name-main', textContent: user.username }),
-                        el('div', { className: 'user-name-sub', textContent: accountNote }),
+                el('td', { className: 'user-id-cell', textContent: user.id }),
+                el('td', { className: 'user-identity-cell' }, [
+                    el('div', { className: `user-identity-card ${(user.role || 'user')}` }, [
+                        el('div', {
+                            className: 'user-name-main',
+                            textContent: `\u6635\u79f0\uff1a${user.display_name || user.username}`,
+                        }),
+                        el('div', {
+                            className: 'user-name-sub',
+                            textContent: `\u8d26\u53f7\uff1a${user.username}`,
+                        }),
+                        el('div', { className: 'user-identity-meta' }, [
+                            el('span', {
+                                className: `role-badge ${user.role || 'user'}`,
+                                textContent: formatRole(user.role),
+                            }),
+                            accountNote ? el('span', {
+                                className: 'user-note-badge',
+                                textContent: accountNote,
+                            }) : null,
+                        ].filter(Boolean)),
                     ]),
                 ]),
-                el('td', {}, [
-                    el('div', { className: 'user-name-cell' }, [
-                        el('div', { className: 'user-name-main', textContent: user.display_name || user.username }),
-                        el('div', { className: 'user-name-sub', textContent: `ID ${user.id}` }),
-                    ]),
-                ]),
-                el('td', {}, [
-                    el('span', {
-                        className: `role-badge ${user.role || 'user'}`,
-                        textContent: formatRole(user.role),
-                    }),
-                ]),
-                el('td', {}, [
+                el('td', { className: 'user-status-cell' }, [
                     el('span', {
                         className: `status-badge ${user.is_active ? 'active' : 'inactive'}`,
                         textContent: user.is_active ? '\u542f\u7528' : '\u7981\u7528',
                     }),
                 ]),
-                el('td', { textContent: String(user.video_count || 0) }),
+                el('td', { className: 'user-count-cell', textContent: String(user.video_count || 0) }),
                 el('td', { className: 'user-capacity-cell' }, [
                     el('span', {
                         className: 'user-capacity-value',
@@ -298,6 +309,7 @@ function renderUsersTable(users) {
                     }),
                 ]),
                 el('td', {
+                    className: 'user-last-login-cell',
                     textContent: user.last_login
                         ? new Date(user.last_login).toLocaleString('zh-CN')
                         : '\u4ece\u672a\u767b\u5f55',
