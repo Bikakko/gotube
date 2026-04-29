@@ -164,7 +164,7 @@ python -m unittest tests.test_gallery_unittest
 **文件：**
 
 - 修改：`操作说明.md`
-- 可选新增：`docs/ops/gallery-home.md`
+- 可选新增：`GALLERY-HOME.md`
 - 测试：相关 unittest + `node --check`
 
 - [ ] **步骤 1：补充运维说明**

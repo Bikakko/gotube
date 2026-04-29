@@ -1,9 +1,4 @@
-README-Windows.md
-st.bat
-操作说明.md
 docs/*
-!docs/ops/
-!docs/ops/**
 !docs/superpowers/
 !docs/superpowers/**
 
