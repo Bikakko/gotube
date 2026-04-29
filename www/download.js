@@ -594,6 +594,8 @@
     $('#register-invite').onkeypress = (e) => { if (e.key === 'Enter') handleRegister(); };
     $('#refresh-library-btn').onclick = () => loadMyLibrary();
     $('#logout-btn').onclick = logout;
+    $('#profile-btn').onclick = promptUpdateDisplayName;
+    $('#password-btn').onclick = promptChangePassword;
     $('#admin-link-btn').onclick = () => {
         window.location.href = `/${hiddenPath}/admin`;
     };
@@ -984,6 +986,64 @@
         }
     }
 
+    function formatIdentityText(user) {
+        if (!user) return '';
+        return `账号：${user.username} | 昵称：${user.display_name || user.username} | ID：${user.id}`;
+    }
+
+    async function promptUpdateDisplayName() {
+        if (!isLoggedIn || !currentUser) return;
+        const nextName = window.prompt('请输入新的昵称', currentUser.display_name || currentUser.username);
+        if (nextName === null) return;
+        try {
+            const response = await fetch('/api/me/profile', {
+                method: 'PATCH',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ display_name: nextName }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.detail || '修改昵称失败');
+            currentUser = data.user || currentUser;
+            updateLogoStyle();
+            showToast('昵称已更新', '#3fb950');
+        } catch (err) {
+            showToast(err.message || '修改昵称失败', '#f85149');
+        }
+    }
+
+    async function promptChangePassword() {
+        if (!isRegularUser()) return;
+        const oldPassword = window.prompt('请输入当前密码');
+        if (oldPassword === null || !oldPassword.trim()) return;
+        const newPassword = window.prompt('请输入新密码（至少 6 位）');
+        if (newPassword === null || !newPassword.trim()) return;
+        const confirmPassword = window.prompt('请再次输入新密码');
+        if (confirmPassword !== newPassword) {
+            showToast('两次输入的新密码不一致', '#f85149');
+            return;
+        }
+        try {
+            const response = await fetch('/api/me/password', {
+                method: 'POST',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(data.detail || '修改密码失败');
+            showToast('密码已修改，请重新登录', '#3fb950');
+            session.clearAuthState();
+            isLoggedIn = false;
+            currentUser = null;
+            myVideos = [];
+            myQuota = null;
+            updateLogoStyle();
+            renderMyLibrary();
+            rotateClientSession();
+        } catch (err) {
+            showToast(err.message || '修改密码失败', '#f85149');
+        }
+    }
+
     function updateLogoStyle() {
         const logoLink = $('#logo-link');
         if (isLibraryUser()) {
@@ -999,11 +1059,15 @@
         const sessionBar = $('#session-bar');
         const sessionUser = $('#session-user');
         const adminLink = $('#admin-link-btn');
+        const profileBtn = $('#profile-btn');
+        const passwordBtn = $('#password-btn');
         if (sessionBar && sessionUser && adminLink) {
             sessionBar.classList.toggle('active', isLoggedIn);
-            sessionUser.textContent = currentUser ? `已登录：${currentUser.username}` : '';
+            sessionUser.textContent = currentUser ? formatIdentityText(currentUser) : '';
             adminLink.style.display = currentUser && currentUser.role === 'admin' ? 'inline-flex' : 'none';
         }
+        if (profileBtn) profileBtn.style.display = isLoggedIn ? 'inline-flex' : 'none';
+        if (passwordBtn) passwordBtn.style.display = isRegularUser() ? 'inline-flex' : 'none';
     }
 
     function handleLogoClick() {
@@ -1156,6 +1220,7 @@
         $('#login-password').value = '';
         $('#login-error').textContent = '';
         $('#register-username').value = '';
+        $('#register-display-name').value = '';
         $('#register-password').value = '';
         $('#register-invite').value = '';
         $('#register-error').textContent = '';
@@ -1240,6 +1305,7 @@
 
     async function handleRegister() {
         const username = $('#register-username').value.trim();
+        const displayName = $('#register-display-name').value.trim();
         const password = $('#register-password').value.trim();
         const inviteCode = $('#register-invite').value.trim();
         const errorEl = $('#register-error');
@@ -1248,6 +1314,11 @@
         if (!/^[A-Za-z0-9_-]{3,32}$/.test(username)) {
             errorEl.textContent = '用户名需为 3-32 位字母、数字、下划线或短横线';
             $('#register-username').focus();
+            return;
+        }
+        if (!displayName) {
+            errorEl.textContent = '?????';
+            $('#register-display-name').focus();
             return;
         }
         if (password.length < 6) {
@@ -1271,6 +1342,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     username,
+                    display_name: displayName,
                     password,
                     invite_code: inviteCode
                 }),

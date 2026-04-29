@@ -23,6 +23,22 @@ function formatDurationLabel(duration) {
     return [minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
 }
 
+function formatUserIdentityText(user) {
+    if (!user) return '未知用户';
+    const displayName = user.display_name || user.username || '';
+    return `账号：${user.username || '-'} | 昵称：${displayName} | ID：${user.id ?? '-'}`;
+}
+
+function findUserById(userId) {
+    return (state.users || []).find((user) => Number(user.id) === Number(userId)) || null;
+}
+
+function getOwnerSummaryLabel(video) {
+    if (video.is_legacy) return 'Legacy';
+    const owner = findUserById(video.owner_user_id);
+    return owner ? formatUserIdentityText(owner) : (video.owner_username || '未归属');
+}
+
 function ensureViewContainerVisible(view) {
     const containers = {
         overview: $('#overview-view-container'),
@@ -61,7 +77,7 @@ function renderNavbar() {
     brief.innerHTML = '';
     brief.appendChild(el('span', {
         className: 'admin-user-name',
-        textContent: user.username,
+        textContent: formatUserIdentityText(user),
     }));
     brief.appendChild(el('span', {
         className: `role-badge ${user.role || 'user'}`,
@@ -754,11 +770,15 @@ function updateOwnerDropdownOptions() {
     const keyword = (state.filters.ownerSearchKeyword || '').trim().toLowerCase();
     const filteredUsers = state.users.filter(user => {
         if (!keyword) return true;
-        return String(user.username || '').toLowerCase().includes(keyword);
+        return [
+            String(user.username || '').toLowerCase(),
+            String(user.display_name || '').toLowerCase(),
+            String(user.id || ''),
+        ].some((value) => value.includes(keyword));
     });
 
     filteredUsers.slice(0, 100).forEach(user => {
-        itemsContainer.appendChild(_createDropdownItem(`user:${user.id}`, user.username, 'owner'));
+        itemsContainer.appendChild(_createDropdownItem(`user:${user.id}`, formatUserIdentityText(user), 'owner'));
     });
 
     if (filteredUsers.length === 0) {

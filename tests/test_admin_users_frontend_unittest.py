@@ -16,11 +16,11 @@ class AdminUsersFrontendTests(unittest.TestCase):
         self.assertIn("className: 'user-management-shell'", source)
         self.assertIn("className: 'user-name-cell'", source)
         self.assertIn("className: 'user-search-summary user-summary-pill'", source)
-        self.assertIn("textContent: '用户'", source)
-        self.assertIn("textContent: '新增用户'", source)
-        self.assertIn("'输入用户名或用户 ID'", source)
-        self.assertIn("textContent: '全部状态'", source)
-        self.assertIn("textContent: '全部角色'", source)
+        self.assertIn(r"textContent: '\u7528\u6237'", source)
+        self.assertIn(r"textContent: '\u65b0\u589e\u7528\u6237'", source)
+        self.assertIn(r"\u8f93\u5165\u8d26\u53f7\u3001\u6635\u79f0\u6216\u7528\u6237 ID", source)
+        self.assertIn(r"textContent: '\u5168\u90e8\u72b6\u6001'", source)
+        self.assertIn(r"textContent: '\u5168\u90e8\u89d2\u8272'", source)
         self.assertIn("state.userStatusFilter", source)
         self.assertIn("state.userRoleFilter", source)
 
@@ -34,6 +34,18 @@ class AdminUsersFrontendTests(unittest.TestCase):
         self.assertIn(".user-actions-compact {", css)
         self.assertIn(".user-toolbar-main {", css)
         self.assertIn(".user-filter-select {", css)
+
+    def test_users_js_supports_account_nickname_and_id_display(self):
+        source = read_text("www/admin/js/users.js")
+        render_source = read_text("www/admin/js/render.js")
+
+        self.assertIn(r"placeholder: '\u8f93\u5165\u8d26\u53f7\u3001\u6635\u79f0\u6216\u7528\u6237 ID'", source)
+        self.assertIn("id: 'edit-display-name'", source)
+        self.assertIn("display_name: displayName", source)
+        self.assertIn(r"textContent: `\u8d26\u53f7\uff1a${user.username}", source)
+        self.assertIn("function formatUserIdentityText(user)", render_source)
+        self.assertIn(r"textContent: '\u8d26\u53f7'", source)
+        self.assertIn(r"textContent: '\u6635\u79f0'", source)
 
 
 if __name__ == "__main__":

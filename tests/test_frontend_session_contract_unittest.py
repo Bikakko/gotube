@@ -98,6 +98,20 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("confirmLogoutWithActiveDownloads", source)
         self.assertIn("logoutAction === 'stay'", source)
 
+    def test_download_page_exposes_profile_and_password_controls(self):
+        html = read_text("www/download.html")
+        source = read_text("www/download.js")
+
+        self.assertIn('id="profile-btn"', html)
+        self.assertIn('id="password-btn"', html)
+        self.assertIn('id="register-display-name"', html)
+        self.assertIn("function formatIdentityText(user)", source)
+        self.assertIn("display_name: displayName", source)
+        self.assertIn("formatIdentityText(currentUser)", source)
+        self.assertIn("promptUpdateDisplayName", source)
+        self.assertIn("promptChangePassword", source)
+
+
 
 if __name__ == "__main__":
     unittest.main()

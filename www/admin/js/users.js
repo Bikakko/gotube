@@ -1,6 +1,6 @@
 /**
- * GoTube Admin - 用户管理模块
- * 用户列表加载、编辑、状态切换与用户视频库查看。
+ * GoTube Admin - user management module
+ * Load users, edit profiles, toggle status, and inspect user libraries.
  */
 
 function refreshNavTabs() {
@@ -47,17 +47,17 @@ function switchAdminView(view) {
 
 async function showUserManagement() {
     if (state.currentUser && state.currentUser.role !== 'admin') {
-        showToast('权限不足', 'error');
+        showToast('\u6743\u9650\u4e0d\u8db3', 'error');
         return;
     }
 
-    document.title = 'GoTube Admin - 用户';
+    document.title = 'GoTube Admin - \u7528\u6237';
     switchAdminView('users');
     await loadUsers(state.usersLoaded);
 }
 
 async function showVideoManagement() {
-    document.title = 'GoTube Admin - 全局媒体';
+    document.title = 'GoTube Admin - \u5168\u5c40\u5a92\u4f53';
     switchAdminView('media');
     await window.loadStats();
     await window.loadVideos();
@@ -77,7 +77,7 @@ async function loadUsers(forceReload = false) {
 
     const slot = $('#users-table-slot');
     if (slot) {
-        slot.innerHTML = '<div class="loading">加载中</div>';
+        slot.innerHTML = '<div class="loading">\u52a0\u8f7d\u4e2d</div>';
     }
 
     try {
@@ -86,9 +86,9 @@ async function loadUsers(forceReload = false) {
         state.usersLoaded = true;
         renderUsersTable(filterUsers(users));
     } catch (err) {
-        console.error('加载用户列表失败:', err);
+        console.error('\u52a0\u8f7d\u7528\u6237\u5217\u8868\u5931\u8d25:', err);
         if (slot) {
-            slot.innerHTML = `<div class="error">加载失败: ${err.message}</div>`;
+            slot.innerHTML = `<div class="error">\u52a0\u8f7d\u5931\u8d25: ${err.message}</div>`;
         }
     }
 }
@@ -118,12 +118,15 @@ function filterUsers(users) {
         if (!keyword) return true;
 
         const username = String(user.username || '').toLowerCase();
+        const displayName = String(user.display_name || '').toLowerCase();
         const idText = String(user.id || '');
+        const roleText = String(user.role || '').toLowerCase();
+        const statusText = user.is_active ? '\u542f\u7528 active' : '\u7981\u7528 inactive';
 
         if (/^\d+$/.test(keyword)) {
-            return idText === keyword || username.includes(keyword);
+            return idText === keyword || username.includes(keyword) || displayName.includes(keyword);
         }
-        return username.includes(keyword);
+        return [username, displayName, idText, roleText, statusText].some((value) => value.includes(keyword));
     });
 
     if (!keyword || !/^\d+$/.test(keyword)) {
@@ -164,11 +167,11 @@ function renderUsersTable(users) {
     const container = el('div', { className: 'user-management-shell' });
     container.appendChild(el('div', { className: 'admin-section-header' }, [
         el('div', {}, [
-            el('h2', { textContent: '用户' }),
+            el('h2', { textContent: '\u7528\u6237' }),
         ]),
         el('button', {
             className: 'btn btn-primary',
-            textContent: '新增用户',
+            textContent: '\u65b0\u589e\u7528\u6237',
             onClick: () => showUserEditModal(),
         }),
     ]));
@@ -179,29 +182,29 @@ function renderUsersTable(users) {
                 id: 'user-search-input',
                 className: 'search-input user-search-input',
                 type: 'search',
-                placeholder: '输入用户名或用户 ID',
+                placeholder: '\u8f93\u5165\u8d26\u53f7\u3001\u6635\u79f0\u6216\u7528\u6237 ID',
                 value: state.userSearchKeyword || '',
             }),
             el('select', {
                 id: 'user-status-filter',
                 className: 'filter-select user-filter-select',
             }, [
-                el('option', { value: 'all', textContent: '全部状态' }),
-                el('option', { value: 'active', textContent: '启用' }),
-                el('option', { value: 'inactive', textContent: '禁用' }),
+                el('option', { value: 'all', textContent: '\u5168\u90e8\u72b6\u6001' }),
+                el('option', { value: 'active', textContent: '\u542f\u7528' }),
+                el('option', { value: 'inactive', textContent: '\u7981\u7528' }),
             ]),
             el('select', {
                 id: 'user-role-filter',
                 className: 'filter-select user-filter-select',
             }, [
-                el('option', { value: 'all', textContent: '全部角色' }),
-                el('option', { value: 'admin', textContent: '管理员' }),
-                el('option', { value: 'user', textContent: '普通用户' }),
+                el('option', { value: 'all', textContent: '\u5168\u90e8\u89d2\u8272' }),
+                el('option', { value: 'admin', textContent: '\u7ba1\u7406\u5458' }),
+                el('option', { value: 'user', textContent: '\u666e\u901a\u7528\u6237' }),
             ]),
         ]),
         el('div', {
             className: 'user-search-summary user-summary-pill',
-            textContent: `显示 ${users.length} / ${state.users.length} 个用户`,
+            textContent: `\u663e\u793a ${users.length} / ${state.users.length} \u4e2a\u7528\u6237`,
         }),
     ]));
 
@@ -233,7 +236,7 @@ function renderUsersTable(users) {
 
     if (users.length === 0) {
         slot.innerHTML = '';
-        container.appendChild(el('div', { className: 'empty-state empty-state-card', textContent: '没有匹配的用户' }));
+        container.appendChild(el('div', { className: 'empty-state empty-state-card', textContent: '\u6ca1\u6709\u5339\u914d\u7684\u7528\u6237' }));
         slot.appendChild(container);
         return;
     }
@@ -242,28 +245,35 @@ function renderUsersTable(users) {
         el('thead', {}, [
             el('tr', {}, [
                 el('th', { textContent: 'ID' }),
-                el('th', { textContent: '用户名' }),
-                el('th', { textContent: '角色' }),
-                el('th', { textContent: '状态' }),
-                el('th', { textContent: '视频数' }),
-                el('th', { textContent: '容量' }),
-                el('th', { textContent: '最后登录' }),
-                el('th', { textContent: '操作' }),
+                el('th', { textContent: '\u8d26\u53f7' }),
+                el('th', { textContent: '\u6635\u79f0' }),
+                el('th', { textContent: '\u89d2\u8272' }),
+                el('th', { textContent: '\u72b6\u6001' }),
+                el('th', { textContent: '\u89c6\u9891\u6570' }),
+                el('th', { textContent: '\u5bb9\u91cf' }),
+                el('th', { textContent: '\u6700\u540e\u767b\u5f55' }),
+                el('th', { textContent: '\u64cd\u4f5c' }),
             ]),
         ]),
         el('tbody', {}, users.map((user) => {
             const isSelf = state.currentUser && state.currentUser.id === user.id;
             const isSystemAccount = user.is_system_account || user.role === 'admin';
-            const usernameNote = isSystemAccount
-                ? '系统账号'
-                : (isSelf ? '当前登录用户' : '普通账号');
+            const accountNote = isSystemAccount
+                ? '\u7cfb\u7edf\u8d26\u53f7'
+                : (isSelf ? '\u5f53\u524d\u767b\u5f55\u7528\u6237' : '\u666e\u901a\u8d26\u53f7');
 
             return el('tr', { className: user.is_active ? '' : 'inactive' }, [
                 el('td', { textContent: user.id }),
                 el('td', {}, [
                     el('div', { className: 'user-name-cell' }, [
                         el('div', { className: 'user-name-main', textContent: user.username }),
-                        el('div', { className: 'user-name-sub', textContent: usernameNote }),
+                        el('div', { className: 'user-name-sub', textContent: accountNote }),
+                    ]),
+                ]),
+                el('td', {}, [
+                    el('div', { className: 'user-name-cell' }, [
+                        el('div', { className: 'user-name-main', textContent: user.display_name || user.username }),
+                        el('div', { className: 'user-name-sub', textContent: `ID ${user.id}` }),
                     ]),
                 ]),
                 el('td', {}, [
@@ -275,7 +285,7 @@ function renderUsersTable(users) {
                 el('td', {}, [
                     el('span', {
                         className: `status-badge ${user.is_active ? 'active' : 'inactive'}`,
-                        textContent: user.is_active ? '启用' : '禁用',
+                        textContent: user.is_active ? '\u542f\u7528' : '\u7981\u7528',
                     }),
                 ]),
                 el('td', { textContent: String(user.video_count || 0) }),
@@ -283,27 +293,27 @@ function renderUsersTable(users) {
                     el('span', {
                         className: 'user-capacity-value',
                         textContent: user.role === 'admin'
-                            ? '不限'
+                            ? '\u4e0d\u9650'
                             : `${formatBytes(user.storage_used_bytes || 0)} / ${formatUserQuota(user.storage_quota_mb)}`,
                     }),
                 ]),
                 el('td', {
                     textContent: user.last_login
                         ? new Date(user.last_login).toLocaleString('zh-CN')
-                        : '从未登录',
+                        : '\u4ece\u672a\u767b\u5f55',
                 }),
                 el('td', { className: 'user-actions user-actions-compact' }, [
                     el('button', {
                         className: 'action-btn-sm',
-                        textContent: '视频库',
+                        textContent: '\u89c6\u9891\u5e93',
                         onClick: (e) => {
                             e.stopPropagation();
                             showUserLibraryModal(user);
                         },
                     }),
-                    isSystemAccount ? null : el('button', {
+                    el('button', {
                         className: 'action-btn-sm',
-                        textContent: '编辑',
+                        textContent: '\u7f16\u8f91',
                         onClick: (e) => {
                             e.stopPropagation();
                             showUserEditModal(user);
@@ -311,7 +321,7 @@ function renderUsersTable(users) {
                     }),
                     isSystemAccount ? null : el('button', {
                         className: 'action-btn-sm',
-                        textContent: '密码',
+                        textContent: '\u5bc6\u7801',
                         onClick: (e) => {
                             e.stopPropagation();
                             showChangePasswordModal(user);
@@ -319,7 +329,7 @@ function renderUsersTable(users) {
                     }),
                     !isSelf && !isSystemAccount ? el('button', {
                         className: `action-btn-sm ${user.is_active ? 'danger' : 'success'}`,
-                        textContent: user.is_active ? '禁用' : '启用',
+                        textContent: user.is_active ? '\u7981\u7528' : '\u542f\u7528',
                         onClick: (e) => {
                             e.stopPropagation();
                             toggleUserActive(user);
@@ -327,7 +337,7 @@ function renderUsersTable(users) {
                     }) : null,
                     !isSelf && !isSystemAccount ? el('button', {
                         className: 'action-btn-sm danger',
-                        textContent: '删除',
+                        textContent: '\u5220\u9664',
                         onClick: (e) => {
                             e.stopPropagation();
                             handleDeleteUser(user);
@@ -353,16 +363,16 @@ async function showUserLibraryModal(user) {
             el('div', { className: 'modal-header' }, [
                 el('div', {
                     className: 'modal-title',
-                    textContent: `${user.username} 的视频库`,
+                    textContent: `\u8d26\u53f7\uff1a${user.username} | \u6635\u79f0\uff1a${user.display_name || user.username} | ID\uff1a${user.id} \u7684\u89c6\u9891\u5e93`,
                 }),
                 el('button', {
                     className: 'modal-close',
-                    textContent: '×',
+                    textContent: '\u00d7',
                     onClick: () => closeModal('user-library-modal'),
                 }),
             ]),
             el('div', { className: 'modal-body', id: 'user-library-body' }, [
-                el('div', { className: 'loading', textContent: '加载中' }),
+                el('div', { className: 'loading', textContent: '\u52a0\u8f7d\u4e2d' }),
             ]),
         ]),
     ]);
@@ -388,7 +398,7 @@ async function fetchUserLibraryAndRender(userId) {
         state.userLibrary.loading = false;
         const body = $('#user-library-body');
         if (body) {
-            body.innerHTML = `<div class="error">加载失败: ${err.message}</div>`;
+            body.innerHTML = `<div class="error">\u52a0\u8f7d\u5931\u8d25: ${err.message}</div>`;
         }
     }
 }
@@ -401,7 +411,7 @@ function renderUserLibraryModal() {
     body.innerHTML = '';
 
     if (items.length === 0) {
-        body.appendChild(el('div', { className: 'empty-state empty-state-card', textContent: '该用户暂无视频' }));
+        body.appendChild(el('div', { className: 'empty-state empty-state-card', textContent: '\u8be5\u7528\u6237\u6682\u65e0\u89c6\u9891' }));
         return;
     }
 
@@ -411,32 +421,32 @@ function renderUserLibraryModal() {
             el('div', { className: 'user-library-thumb' }, [
                 item.thumbnail_url
                     ? el('img', { src: item.thumbnail_url, alt: item.title, loading: 'lazy' })
-                    : el('div', { className: 'preview-thumb-empty', textContent: '🎬' }),
+                    : el('div', { className: 'preview-thumb-empty', textContent: '\ud83c\udf9e' }),
             ]),
             el('div', { className: 'user-library-main' }, [
-                el('div', { className: 'preview-title', textContent: item.title || '未命名视频' }),
+                el('div', { className: 'preview-title', textContent: item.title || '\u672a\u547d\u540d\u89c6\u9891' }),
                 el('div', { className: 'user-library-meta' }, [
                     el('span', { textContent: formatBytes(item.size || 0) }),
-                    el('span', { textContent: item.source || '未知来源' }),
+                    el('span', { textContent: item.source || '\u672a\u77e5\u6765\u6e90' }),
                     el('span', {
                         textContent: item.saved_at
                             ? new Date(item.saved_at).toLocaleString('zh-CN')
-                            : '无保存时间',
+                            : '\u65e0\u4fdd\u5b58\u65f6\u95f4',
                     }),
                 ]),
                 el('div', { className: 'video-asset-stats' }, [
-                    el('span', { textContent: item.share_enabled ? '分享已开启' : '分享未开启' }),
+                    el('span', { textContent: item.share_enabled ? '\u5206\u4eab\u5df2\u5f00\u542f' : '\u5206\u4eab\u672a\u5f00\u542f' }),
                 ]),
             ]),
             el('div', { className: 'user-library-actions' }, [
                 el('button', {
                     className: 'action-btn',
-                    textContent: '播放',
+                    textContent: '\u64ad\u653e',
                     onClick: () => window.showPlayerModal(item),
                 }),
                 el('button', {
                     className: 'action-btn share',
-                    textContent: '分享',
+                    textContent: '\u5206\u4eab',
                     ...(!item.share_token ? { disabled: true } : {}),
                     onClick: () => window.showShareModal(item),
                 }),
@@ -449,15 +459,15 @@ function renderUserLibraryModal() {
 
 function formatRole(role) {
     const map = {
-        admin: '管理员',
-        user: '普通用户',
+        admin: '\u7ba1\u7406\u5458',
+        user: '\u666e\u901a\u7528\u6237',
     };
     return map[role] || role;
 }
 
 function formatUserQuota(quotaMb) {
-    if (quotaMb === 0) return '不限';
-    if (quotaMb === null || quotaMb === undefined) return '默认';
+    if (quotaMb === 0) return '\u4e0d\u9650';
+    if (quotaMb === null || quotaMb === undefined) return '\u9ed8\u8ba4';
     return `${quotaMb} MB`;
 }
 
@@ -467,30 +477,31 @@ async function toggleUserActive(user) {
             method: 'PUT',
             body: JSON.stringify({ is_active: !user.is_active }),
         });
-        showToast(`用户已${user.is_active ? '禁用' : '启用'}`, 'success');
+        showToast(`\u7528\u6237\u5df2${user.is_active ? '\u7981\u7528' : '\u542f\u7528'}`, 'success');
         invalidateUserCache();
         await loadUsers(true);
     } catch (err) {
-        showToast('操作失败: ' + err.message, 'error');
+        showToast('\u64cd\u4f5c\u5931\u8d25: ' + err.message, 'error');
     }
 }
 
 async function handleDeleteUser(user) {
-    if (!confirm(`确定要删除用户“${user.username}”吗？此操作不可恢复。`)) return;
+    if (!confirm(`\u786e\u5b9a\u8981\u5220\u9664\u7528\u6237\u201c${user.username}\u201d\u5417\uff1f\u6b64\u64cd\u4f5c\u4e0d\u53ef\u6062\u590d\u3002`)) return;
 
     try {
         await apiFetch(`/users/${user.id}`, { method: 'DELETE' });
-        showToast('用户已删除', 'success');
+        showToast('\u7528\u6237\u5df2\u5220\u9664', 'success');
         invalidateUserCache();
         await loadUsers(true);
     } catch (err) {
-        showToast('删除失败: ' + err.message, 'error');
+        showToast('\u5220\u9664\u5931\u8d25: ' + err.message, 'error');
     }
 }
 
 function showUserEditModal(user = null) {
     const isEdit = !!user;
-    const title = isEdit ? '编辑用户' : '新增用户';
+    const title = isEdit ? '\u7f16\u8f91\u7528\u6237' : '\u65b0\u589e\u7528\u6237';
+    const isAdminAccount = Boolean(user && (user.is_system_account || user.role === 'admin'));
 
     const overlay = el('div', { className: 'modal active', id: 'user-edit-modal' }, [
         el('div', { className: 'modal-content modal-sm' }, [
@@ -498,41 +509,50 @@ function showUserEditModal(user = null) {
                 el('div', { className: 'modal-title', textContent: title }),
                 el('button', {
                     className: 'modal-close',
-                    textContent: '×',
+                    textContent: '\u00d7',
                     onClick: () => closeModal('user-edit-modal'),
                 }),
             ]),
             el('div', { className: 'modal-body' }, [
                 el('div', { className: 'form-group' }, [
-                    el('label', { textContent: '用户名' }),
+                    el('label', { textContent: '\u8d26\u53f7' }),
                     el('input', {
                         type: 'text',
                         id: 'edit-username',
                         value: user ? user.username : '',
-                        placeholder: '请输入用户名',
+                        placeholder: '\u8bf7\u8f93\u5165\u8d26\u53f7',
                         ...(isEdit ? { disabled: true } : {}),
                     }),
                 ]),
+                el('div', { className: 'form-group' }, [
+                    el('label', { textContent: '\u6635\u79f0' }),
+                    el('input', {
+                        type: 'text',
+                        id: 'edit-display-name',
+                        value: user ? (user.display_name || user.username) : '',
+                        placeholder: '\u8bf7\u8f93\u5165\u6635\u79f0',
+                    }),
+                ]),
                 !isEdit ? el('div', { className: 'form-group' }, [
-                    el('label', { textContent: '密码' }),
+                    el('label', { textContent: '\u5bc6\u7801' }),
                     el('input', {
                         type: 'password',
                         id: 'edit-password',
-                        placeholder: '请输入密码',
+                        placeholder: '\u8bf7\u8f93\u5165\u5bc6\u7801',
                     }),
                 ]) : null,
-                el('div', { className: 'form-group' }, [
-                    el('label', { textContent: '角色' }),
+                isAdminAccount ? null : el('div', { className: 'form-group' }, [
+                    el('label', { textContent: '\u89d2\u8272' }),
                     el('select', { id: 'edit-role' }, [
                         el('option', {
                             value: 'user',
-                            textContent: '普通用户',
+                            textContent: '\u666e\u901a\u7528\u6237',
                             selected: user ? user.role === 'user' : true,
                         }),
                     ]),
                 ]),
-                el('div', { className: 'form-group' }, [
-                    el('label', { textContent: '视频库容量 MB' }),
+                !isAdminAccount ? el('div', { className: 'form-group' }, [
+                    el('label', { textContent: '\u89c6\u9891\u5e93\u5bb9\u91cf MB' }),
                     el('input', {
                         type: 'number',
                         id: 'edit-storage-quota',
@@ -540,19 +560,19 @@ function showUserEditModal(user = null) {
                         value: user && user.storage_quota_mb !== null && user.storage_quota_mb !== undefined
                             ? String(user.storage_quota_mb)
                             : '',
-                        placeholder: '留空使用默认值，0 表示不限',
+                        placeholder: '\u7559\u7a7a\u4f7f\u7528\u9ed8\u8ba4\u503c\uff0c0 \u8868\u793a\u4e0d\u9650',
                     }),
-                ]),
-            ]),
+                ]) : null,
+            ].filter(Boolean)),
             el('div', { className: 'modal-footer' }, [
                 el('button', {
                     className: 'btn btn-secondary',
-                    textContent: '取消',
+                    textContent: '\u53d6\u6d88',
                     onClick: () => closeModal('user-edit-modal'),
                 }),
                 el('button', {
                     className: 'btn btn-primary',
-                    textContent: '保存',
+                    textContent: '\u4fdd\u5b58',
                     onClick: () => handleSaveUser(user),
                 }),
             ]),
@@ -565,53 +585,61 @@ function showUserEditModal(user = null) {
 async function handleSaveUser(user) {
     const isEdit = !!user;
     const username = $('#edit-username').value.trim();
-    const role = $('#edit-role').value;
+    const displayName = $('#edit-display-name').value.trim();
+    const roleEl = $('#edit-role');
+    const role = roleEl ? roleEl.value : (user ? user.role : 'user');
     const quotaInput = $('#edit-storage-quota');
     const quotaRaw = quotaInput ? quotaInput.value.trim() : '';
 
     if (!username) {
-        showToast('请输入用户名', 'warning');
+        showToast('\u8bf7\u8f93\u5165\u8d26\u53f7', 'warning');
+        return;
+    }
+    if (!displayName) {
+        showToast('\u8bf7\u8f93\u5165\u6635\u79f0', 'warning');
         return;
     }
 
     try {
         if (isEdit) {
-            const payload = { username, role };
-            if (quotaRaw === '') {
-                payload.storage_quota_mb = null;
-            } else {
-                const quotaMb = Number.parseInt(quotaRaw, 10);
-                if (!Number.isInteger(quotaMb) || quotaMb < 0) {
-                    showToast('容量必须为空、0 或正整数', 'warning');
-                    return;
+            const payload = { username, display_name: displayName, role };
+            if (quotaInput) {
+                if (quotaRaw === '') {
+                    payload.storage_quota_mb = null;
+                } else {
+                    const quotaMb = Number.parseInt(quotaRaw, 10);
+                    if (!Number.isInteger(quotaMb) || quotaMb < 0) {
+                        showToast('\u5bb9\u91cf\u5fc5\u987b\u4e3a\u7a7a\u3001 0 \u6216\u6b63\u6574\u6570', 'warning');
+                        return;
+                    }
+                    payload.storage_quota_mb = quotaMb;
                 }
-                payload.storage_quota_mb = quotaMb;
             }
 
             await apiFetch(`/users/${user.id}`, {
                 method: 'PUT',
                 body: JSON.stringify(payload),
             });
-            showToast('更新成功', 'success');
+            showToast('\u66f4\u65b0\u6210\u529f', 'success');
             closeModal('user-edit-modal');
         } else {
             const password = $('#edit-password').value;
             if (!password) {
-                showToast('请输入密码', 'warning');
+                showToast('\u8bf7\u8f93\u5165\u5bc6\u7801', 'warning');
                 return;
             }
             await apiFetch('/users', {
                 method: 'POST',
-                body: JSON.stringify({ username, password, role }),
+                body: JSON.stringify({ username, display_name: displayName, password, role }),
             });
-            showToast('创建成功', 'success');
+            showToast('\u521b\u5efa\u6210\u529f', 'success');
             closeModal('user-edit-modal');
         }
 
         invalidateUserCache();
         await loadUsers(true);
     } catch (err) {
-        showToast(err.message || '操作失败', 'error');
+        showToast(err.message || '\u64cd\u4f5c\u5931\u8d25', 'error');
     }
 }
 
@@ -621,36 +649,36 @@ function showChangePasswordModal(user) {
     const overlay = el('div', { className: 'modal active', id: 'password-modal' }, [
         el('div', { className: 'modal-content modal-sm' }, [
             el('div', { className: 'modal-header' }, [
-                el('div', { className: 'modal-title', textContent: `修改密码 - ${user.username}` }),
+                el('div', { className: 'modal-title', textContent: `\u4fee\u6539\u5bc6\u7801 - ${user.username}` }),
                 el('button', {
                     className: 'modal-close',
-                    textContent: '×',
+                    textContent: '\u00d7',
                     onClick: () => closeModal('password-modal'),
                 }),
             ]),
             el('div', { className: 'modal-body' }, [
                 isSelf ? el('div', { className: 'form-group' }, [
-                    el('label', { textContent: '旧密码' }),
-                    el('input', { type: 'password', id: 'old-password', placeholder: '请输入旧密码' }),
-                ]) : el('p', { className: 'info-text', textContent: '管理员正在重置此用户的密码。' }),
+                    el('label', { textContent: '\u65e7\u5bc6\u7801' }),
+                    el('input', { type: 'password', id: 'old-password', placeholder: '\u8bf7\u8f93\u5165\u65e7\u5bc6\u7801' }),
+                ]) : el('p', { className: 'info-text', textContent: '\u7ba1\u7406\u5458\u6b63\u5728\u91cd\u7f6e\u6b64\u7528\u6237\u7684\u5bc6\u7801\u3002' }),
                 el('div', { className: 'form-group' }, [
-                    el('label', { textContent: '新密码' }),
-                    el('input', { type: 'password', id: 'new-password', placeholder: '请输入新密码' }),
+                    el('label', { textContent: '\u65b0\u5bc6\u7801' }),
+                    el('input', { type: 'password', id: 'new-password', placeholder: '\u8bf7\u8f93\u5165\u65b0\u5bc6\u7801' }),
                 ]),
                 el('div', { className: 'form-group' }, [
-                    el('label', { textContent: '确认新密码' }),
-                    el('input', { type: 'password', id: 'confirm-password', placeholder: '请再次输入新密码' }),
+                    el('label', { textContent: '\u786e\u8ba4\u65b0\u5bc6\u7801' }),
+                    el('input', { type: 'password', id: 'confirm-password', placeholder: '\u8bf7\u518d\u6b21\u8f93\u5165\u65b0\u5bc6\u7801' }),
                 ]),
             ]),
             el('div', { className: 'modal-footer' }, [
                 el('button', {
                     className: 'btn btn-secondary',
-                    textContent: '取消',
+                    textContent: '\u53d6\u6d88',
                     onClick: () => closeModal('password-modal'),
                 }),
                 el('button', {
                     className: 'btn btn-primary',
-                    textContent: '确认修改',
+                    textContent: '\u786e\u8ba4\u4fee\u6539',
                     onClick: () => handleChangePassword(user),
                 }),
             ]),
@@ -667,15 +695,15 @@ async function handleChangePassword(user) {
     const confirm_password = $('#confirm-password').value;
 
     if (isSelf && !old_password) {
-        showToast('请输入旧密码', 'warning');
+        showToast('\u8bf7\u8f93\u5165\u65e7\u5bc6\u7801', 'warning');
         return;
     }
     if (!new_password) {
-        showToast('请输入新密码', 'warning');
+        showToast('\u8bf7\u8f93\u5165\u65b0\u5bc6\u7801', 'warning');
         return;
     }
     if (new_password !== confirm_password) {
-        showToast('两次输入的密码不一致', 'warning');
+        showToast('\u4e24\u6b21\u8f93\u5165\u7684\u5bc6\u7801\u4e0d\u4e00\u81f4', 'warning');
         return;
     }
 
@@ -684,7 +712,7 @@ async function handleChangePassword(user) {
             method: 'PUT',
             body: JSON.stringify({ old_password, new_password }),
         });
-        showToast(`密码修改成功${isSelf ? '，请重新登录' : ''}`, 'success');
+        showToast(`\u5bc6\u7801\u4fee\u6539\u6210\u529f${isSelf ? '\uff0c\u8bf7\u91cd\u65b0\u767b\u5f55' : ''}`, 'success');
         closeModal('password-modal');
 
         if (isSelf) {
@@ -694,7 +722,7 @@ async function handleChangePassword(user) {
             }, 1500);
         }
     } catch (err) {
-        showToast('修改失败: ' + err.message, 'error');
+        showToast('\u4fee\u6539\u5931\u8d25: ' + err.message, 'error');
     }
 }
 
