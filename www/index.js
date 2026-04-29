@@ -154,10 +154,18 @@ import * as THREE from "/static/vendor/three.module.min.js";
 
         const skyGroup = new THREE.Group();
         const starGroup = new THREE.Group();
+        const moonNearStarGroup = new THREE.Group();
+        const nearStarGroup = new THREE.Group();
+        const midStarGroup = new THREE.Group();
+        const farStarGroup = new THREE.Group();
         const moonGroup = new THREE.Group();
         scene.add(skyGroup);
         scene.add(starGroup);
         scene.add(moonGroup);
+        starGroup.add(moonNearStarGroup);
+        starGroup.add(nearStarGroup);
+        starGroup.add(midStarGroup);
+        starGroup.add(farStarGroup);
 
         const target = { yaw: 0, pitch: 0 };
         const current = { yaw: 0, pitch: 0 };
@@ -170,9 +178,13 @@ import * as THREE from "/static/vendor/three.module.min.js";
         skyGroup.add(sky);
 
         const stars = createStarField();
-        starGroup.add(stars.points);
+        moonNearStarGroup.add(stars.moonNear.points);
+        nearStarGroup.add(stars.near.points);
+        midStarGroup.add(stars.mid.points);
+        farStarGroup.add(stars.far.points);
 
         const moon = createMoon();
+        moonGroup.add(moon.occluder);
         moonGroup.add(moon.glow);
         moonGroup.add(moon.sprite);
         const moonScreenPosition = new THREE.Vector3();
@@ -237,19 +249,34 @@ import * as THREE from "/static/vendor/three.module.min.js";
 
             const skyYaw = isMobileLike ? 0.34 : 0.34;
             const skyPitch = isMobileLike ? 0.42 : 0.42;
-            const starYaw = isMobileLike ? 1.18 : 1.18;
-            const starPitch = isMobileLike ? 1.3 : 1.3;
-            const moonYaw = isMobileLike ? 0.28 : 0.46;
-            const moonPitch = isMobileLike ? 0.34 : 0.56;
+            const moonNearYaw = isMobileLike ? 0.92 : 0.92;
+            const moonNearPitch = isMobileLike ? 1.04 : 1.04;
+            const nearYaw = isMobileLike ? 1.14 : 1.14;
+            const nearPitch = isMobileLike ? 1.26 : 1.26;
+            const midYaw = isMobileLike ? 1.42 : 1.42;
+            const midPitch = isMobileLike ? 1.58 : 1.58;
+            const farYaw = isMobileLike ? 1.78 : 1.78;
+            const farPitch = isMobileLike ? 1.96 : 1.96;
+            const moonYaw = isMobileLike ? 0.64 : 0.64;
+            const moonPitch = isMobileLike ? 0.76 : 0.76;
 
             skyGroup.rotation.y = current.yaw * skyYaw;
             skyGroup.rotation.x = current.pitch * skyPitch;
-            starGroup.rotation.y = current.yaw * starYaw;
-            starGroup.rotation.x = current.pitch * starPitch;
+            moonNearStarGroup.rotation.y = current.yaw * moonNearYaw;
+            moonNearStarGroup.rotation.x = current.pitch * moonNearPitch;
+            nearStarGroup.rotation.y = current.yaw * nearYaw;
+            nearStarGroup.rotation.x = current.pitch * nearPitch;
+            midStarGroup.rotation.y = current.yaw * midYaw;
+            midStarGroup.rotation.x = current.pitch * midPitch;
+            farStarGroup.rotation.y = current.yaw * farYaw;
+            farStarGroup.rotation.x = current.pitch * farPitch;
             moonGroup.rotation.y = current.yaw * moonYaw;
             moonGroup.rotation.x = current.pitch * moonPitch;
 
-            stars.material.uniforms.uTime.value = time;
+            stars.moonNear.material.uniforms.uTime.value = time;
+            stars.near.material.uniforms.uTime.value = time;
+            stars.mid.material.uniforms.uTime.value = time;
+            stars.far.material.uniforms.uTime.value = time;
             updateSecretEntryPosition(window.innerWidth || 1, window.innerHeight || 1);
 
             renderer.render(scene, camera);
@@ -286,8 +313,11 @@ import * as THREE from "/static/vendor/three.module.min.js";
             window.removeEventListener("pointerleave", onPointerLeave);
             motion.cleanup();
             renderer.dispose();
-            stars.geometry.dispose();
-            stars.material.dispose();
+            for (const layer of Object.values(stars)) {
+                layer.geometry.dispose();
+                layer.material.dispose();
+            }
+            moon.occluder.material.dispose();
             moon.sprite.material.map.dispose();
             moon.sprite.material.dispose();
             moon.glow.material.map.dispose();
@@ -341,15 +371,15 @@ import * as THREE from "/static/vendor/three.module.min.js";
                     float horizon = smoothstep(0.0, 0.075, y) * (1.0 - smoothstep(0.075, 0.2, y));
                     float centeredX = abs(screenUv.x - 0.5) * 2.0;
                     float edgeBias = 1.04 + 0.16 * smoothstep(0.0, 0.94, centeredX);
-                    float cityCore = exp(-screenUv.y * 11.5);
-                    float cityGlow = exp(-screenUv.y * 5.4);
-                    float cityMist = exp(-screenUv.y * 3.2);
+                    float cityCore = exp(-screenUv.y * 10.4);
+                    float cityGlow = exp(-screenUv.y * 4.8);
+                    float cityMist = exp(-screenUv.y * 2.85);
 
                     sky += uHazeColor * lowGlow * 0.44;
                     sky += uHorizonColor * horizon * 0.065;
-                    sky += uCityGlowColor * cityCore * 0.13 * edgeBias;
-                    sky += uCityGlowColor * cityGlow * 0.06 * edgeBias;
-                    sky += uHazeColor * cityMist * 0.05 * edgeBias;
+                    sky += uCityGlowColor * cityCore * 0.136 * edgeBias;
+                    sky += uCityGlowColor * cityGlow * 0.066 * edgeBias;
+                    sky += uHazeColor * cityMist * 0.056 * edgeBias;
 
                     gl_FragColor = vec4(sky, 1.0);
                 }
@@ -359,20 +389,184 @@ import * as THREE from "/static/vendor/three.module.min.js";
     }
 
     function createStarField() {
-        const starCount = matchMedia("(max-width: 768px)").matches ? 680 : 1180;
-        const positions = new Float32Array(starCount * 3);
-        const scales = new Float32Array(starCount);
-        const alphas = new Float32Array(starCount);
-        const phases = new Float32Array(starCount);
-        const twinkles = new Float32Array(starCount);
-        const depths = new Float32Array(starCount);
-
+        const isMobile = matchMedia("(max-width: 768px)").matches;
+        const layerConfigs = isMobile
+            ? [
+                {
+                    key: "moonNear",
+                    count: 28,
+                    radiusMin: 304,
+                    radiusMax: 342,
+                    scaleMin: 2.28,
+                    scaleMax: 3.54,
+                    alphaMin: 0.84,
+                    alphaMax: 1.0,
+                    depthMin: 1.34,
+                    depthMax: 1.86,
+                    yBias: 24,
+                    yScale: 0.68,
+                    brightChance: 0.5,
+                    midChance: 0.94,
+                    twinkleChance: 0.56,
+                    twinkleMin: 0.46,
+                    twinkleMax: 0.88,
+                },
+                {
+                    key: "near",
+                    count: 78,
+                    radiusMin: 346,
+                    radiusMax: 392,
+                    scaleMin: 1.54,
+                    scaleMax: 2.42,
+                    alphaMin: 0.66,
+                    alphaMax: 0.9,
+                    depthMin: 1.12,
+                    depthMax: 1.58,
+                    yBias: 21,
+                    yScale: 0.65,
+                    brightChance: 0.36,
+                    midChance: 0.88,
+                    twinkleChance: 0.48,
+                    twinkleMin: 0.42,
+                    twinkleMax: 0.82,
+                },
+                {
+                    key: "mid",
+                    count: 226,
+                    radiusMin: 402,
+                    radiusMax: 458,
+                    scaleMin: 0.92,
+                    scaleMax: 1.58,
+                    alphaMin: 0.34,
+                    alphaMax: 0.56,
+                    depthMin: 0.94,
+                    depthMax: 1.34,
+                    yBias: 18,
+                    yScale: 0.62,
+                    brightChance: 0.08,
+                    midChance: 0.28,
+                    twinkleChance: 0.34,
+                    twinkleMin: 0.34,
+                    twinkleMax: 0.7,
+                },
+                {
+                    key: "far",
+                    count: 316,
+                    radiusMin: 466,
+                    radiusMax: 522,
+                    scaleMin: 0.5,
+                    scaleMax: 0.9,
+                    alphaMin: 0.15,
+                    alphaMax: 0.28,
+                    depthMin: 0.72,
+                    depthMax: 1.0,
+                    yBias: 14,
+                    yScale: 0.58,
+                    brightChance: 0.0,
+                    midChance: 0.0,
+                    twinkleChance: 0.24,
+                    twinkleMin: 0.24,
+                    twinkleMax: 0.52,
+                },
+            ]
+            : [
+                {
+                    key: "moonNear",
+                    count: 58,
+                    radiusMin: 308,
+                    radiusMax: 348,
+                    scaleMin: 2.32,
+                    scaleMax: 3.68,
+                    alphaMin: 0.84,
+                    alphaMax: 1.0,
+                    depthMin: 1.36,
+                    depthMax: 1.9,
+                    yBias: 24,
+                    yScale: 0.68,
+                    brightChance: 0.52,
+                    midChance: 0.94,
+                    twinkleChance: 0.54,
+                    twinkleMin: 0.44,
+                    twinkleMax: 0.88,
+                },
+                {
+                    key: "near",
+                    count: 154,
+                    radiusMin: 344,
+                    radiusMax: 394,
+                    scaleMin: 1.56,
+                    scaleMax: 2.46,
+                    alphaMin: 0.66,
+                    alphaMax: 0.92,
+                    depthMin: 1.12,
+                    depthMax: 1.6,
+                    yBias: 21,
+                    yScale: 0.65,
+                    brightChance: 0.36,
+                    midChance: 0.88,
+                    twinkleChance: 0.48,
+                    twinkleMin: 0.42,
+                    twinkleMax: 0.84,
+                },
+                {
+                    key: "mid",
+                    count: 378,
+                    radiusMin: 406,
+                    radiusMax: 462,
+                    scaleMin: 0.92,
+                    scaleMax: 1.62,
+                    alphaMin: 0.32,
+                    alphaMax: 0.56,
+                    depthMin: 0.96,
+                    depthMax: 1.36,
+                    yBias: 18,
+                    yScale: 0.62,
+                    brightChance: 0.08,
+                    midChance: 0.28,
+                    twinkleChance: 0.32,
+                    twinkleMin: 0.32,
+                    twinkleMax: 0.68,
+                },
+                {
+                    key: "far",
+                    count: 520,
+                    radiusMin: 468,
+                    radiusMax: 528,
+                    scaleMin: 0.5,
+                    scaleMax: 0.92,
+                    alphaMin: 0.15,
+                    alphaMax: 0.28,
+                    depthMin: 0.72,
+                    depthMax: 1.0,
+                    yBias: 14,
+                    yScale: 0.58,
+                    brightChance: 0.0,
+                    midChance: 0.0,
+                    twinkleChance: 0.22,
+                    twinkleMin: 0.22,
+                    twinkleMax: 0.48,
+                },
+            ];
         const moonDirection = new THREE.Vector3(168, 120, -312).normalize();
-        const moonMaskDot = Math.cos(0.026);
+        const moonMaskDot = Math.cos(0.018);
 
-        for (let i = 0; i < starCount; i += 1) {
-            const depthBand = Math.random();
-            const radius = depthBand > 0.72 ? 470 + Math.random() * 40 : 360 + Math.random() * 78;
+        const layers = {};
+        for (const config of layerConfigs) {
+            layers[config.key] = buildStarLayer(config, moonDirection, moonMaskDot);
+        }
+        return layers;
+    }
+
+    function buildStarLayer(config, moonDirection, moonMaskDot) {
+        const positions = new Float32Array(config.count * 3);
+        const scales = new Float32Array(config.count);
+        const alphas = new Float32Array(config.count);
+        const phases = new Float32Array(config.count);
+        const twinkles = new Float32Array(config.count);
+        const depths = new Float32Array(config.count);
+
+        for (let i = 0; i < config.count; i += 1) {
+            const radius = config.radiusMin + Math.random() * (config.radiusMax - config.radiusMin);
             let x = 0;
             let y = 0;
             let z = 0;
@@ -384,31 +578,33 @@ import * as THREE from "/static/vendor/three.module.min.js";
                 x = radius * sinPhi * Math.cos(azimuth);
                 z = -Math.abs(radius * Math.cos(elevation));
                 y = radius * sinPhi * Math.sin(azimuth);
-                const direction = new THREE.Vector3(x, y * 0.62 + 18, z).normalize();
+                const direction = new THREE.Vector3(x, y * config.yScale + config.yBias, z).normalize();
                 if (direction.dot(moonDirection) < moonMaskDot) {
                     break;
                 }
             }
 
             positions[i * 3] = x;
-            positions[i * 3 + 1] = y * 0.62 + 18;
+            positions[i * 3 + 1] = y * config.yScale + config.yBias;
             positions[i * 3 + 2] = z;
-            depths[i] = depthBand > 0.72 ? 0.7 + Math.random() * 0.4 : 1.05 + Math.random() * 0.75;
+            depths[i] = config.depthMin + Math.random() * (config.depthMax - config.depthMin);
 
             const brightRoll = Math.random();
-            if (brightRoll > 0.994) {
-                scales[i] = 3.2 + Math.random() * 1.9;
-                alphas[i] = 0.98;
-            } else if (brightRoll > 0.9) {
-                scales[i] = 1.9 + Math.random() * 1.4;
-                alphas[i] = 0.72 + Math.random() * 0.18;
+            if (brightRoll > config.midChance) {
+                scales[i] = config.scaleMin + (config.scaleMax - config.scaleMin) * (0.74 + Math.random() * 0.26);
+                alphas[i] = config.alphaMin + (config.alphaMax - config.alphaMin) * (0.76 + Math.random() * 0.24);
+            } else if (brightRoll > config.brightChance) {
+                scales[i] = config.scaleMin + (config.scaleMax - config.scaleMin) * (0.34 + Math.random() * 0.36);
+                alphas[i] = config.alphaMin + (config.alphaMax - config.alphaMin) * (0.4 + Math.random() * 0.28);
             } else {
-                scales[i] = 0.9 + Math.random() * 1.02;
-                alphas[i] = 0.30 + Math.random() * 0.24;
+                scales[i] = config.scaleMin + Math.random() * (config.scaleMax - config.scaleMin) * 0.24;
+                alphas[i] = config.alphaMin + Math.random() * (config.alphaMax - config.alphaMin) * 0.18;
             }
 
             phases[i] = Math.random() * Math.PI * 2;
-            twinkles[i] = Math.random() > 0.78 ? 0.55 + Math.random() * 0.9 : 0.0;
+            twinkles[i] = Math.random() > (1 - config.twinkleChance)
+                ? config.twinkleMin + Math.random() * (config.twinkleMax - config.twinkleMin)
+                : 0.0;
         }
 
         const geometry = new THREE.BufferGeometry();
@@ -421,6 +617,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
 
         const material = new THREE.ShaderMaterial({
             transparent: true,
+            depthTest: true,
             depthWrite: false,
             blending: THREE.AdditiveBlending,
             uniforms: {
@@ -472,10 +669,24 @@ import * as THREE from "/static/vendor/three.module.min.js";
         const moonTexture = new THREE.TextureLoader().load("/static/moon.png");
         moonTexture.colorSpace = THREE.SRGBColorSpace;
 
+        const occluderMaterial = new THREE.SpriteMaterial({
+            transparent: false,
+            depthWrite: true,
+            depthTest: false,
+            opacity: 1,
+            color: 0xffffff,
+        });
+        occluderMaterial.colorWrite = false;
+        const occluderSprite = new THREE.Sprite(occluderMaterial);
+        occluderSprite.position.set(168, 120, -312);
+        occluderSprite.scale.set(60, 60, 1);
+        occluderSprite.renderOrder = 9;
+
         const moonMaterial = new THREE.SpriteMaterial({
             map: moonTexture,
             transparent: true,
             depthWrite: false,
+            depthTest: false,
             opacity: 0.95,
             color: 0xf5f4ef,
         });
@@ -489,6 +700,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
             map: glowTexture,
             transparent: true,
             depthWrite: false,
+            depthTest: false,
             opacity: 0.42,
             color: 0xe7eef9,
         });
@@ -498,6 +710,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
         glowSprite.renderOrder = 29;
 
         return {
+            occluder: occluderSprite,
             sprite: moonSprite,
             glow: glowSprite,
         };
@@ -510,7 +723,10 @@ import * as THREE from "/static/vendor/three.module.min.js";
         const moonY = THREE.MathUtils.lerp(116, 86, narrowness);
         const moonScale = THREE.MathUtils.lerp(58, 46, narrowness);
         const glowScale = THREE.MathUtils.lerp(148, 112, narrowness);
+        const occluderScale = moonScale * 1.08;
 
+        moon.occluder.position.set(moonX, moonY, -312);
+        moon.occluder.scale.set(occluderScale, occluderScale, 1);
         moon.sprite.position.set(moonX, moonY, -312);
         moon.glow.position.copy(moon.sprite.position);
         moon.sprite.scale.set(moonScale, moonScale, 1);
