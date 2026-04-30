@@ -47,6 +47,7 @@ GOTUBE_ADMINS=admin:请改成你自己的密码
 
 - `GOTUBE_WORKERS` 建议保持 `1`，当前下载队列和会话状态不适合多 worker 并行。
 - `GOTUBE_ADMINS` 必须替换默认值。
+- `GOTUBE_HIDDEN_PATH` 只是弱隐藏入口，不是认证措施；不要把它当作后台安全边界。
 
 3. 启动前自检
 
@@ -100,3 +101,9 @@ git pull --ff-only
 
 - [systemd 部署](SYSTEMD-SERVICE.md)
 - [安全加固](SECURITY-HARDENING.md)
+
+## 生产入口要求
+
+- 公网部署时必须让反向代理优先提供 HTTPS。
+- HTTP 只用于跳转到 HTTPS，或直接关闭。
+- Bearer Token、权限校验和代理层限流才是后台接口的真实安全边界。

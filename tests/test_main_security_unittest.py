@@ -1,6 +1,9 @@
 import asyncio
+import os
 import unittest
 
+from server.config import settings
+from server.db import get_session, init_db, sync_admins_from_env
 from server.downloader import DownloadTask
 from server.main import app
 from server.main import _on_progress
@@ -37,6 +40,12 @@ async def asgi_get(path: str, headers: list[tuple[bytes, bytes]] | None = None):
 
 
 class MainSecurityRoutesTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        init_db(str(settings.db_file))
+        with get_session() as session:
+            sync_admins_from_env(session, settings.admins)
+
     def test_sensitive_probe_paths_return_not_found(self):
         for path in [
             '/.git/config',
@@ -67,6 +76,13 @@ class MainSecurityRoutesTests(unittest.TestCase):
         self.assertEqual(headers.get('x-frame-options'), 'DENY')
         self.assertIn('default-src', headers.get('content-security-policy', ''))
 
+    def test_hidden_path_page_does_not_bypass_admin_auth(self):
+        status, _headers, _body = asyncio.run(asgi_get(f'/{settings.hidden_path}/admin'))
+        self.assertEqual(status, 200)
+
+        api_status, _api_headers, _api_body = asyncio.run(asgi_get(f'/{settings.hidden_path}/admin/api/stats'))
+        self.assertIn(api_status, (401, 403))
+
     def test_progress_payload_includes_library_fields_for_logged_in_downloads(self):
         task = DownloadTask("task-1", "https://example.com/video", "client-1")
         task.status = "completed"
@@ -92,6 +108,13 @@ class MainSecurityRoutesTests(unittest.TestCase):
         self.assertEqual(payload["user_video_item_id"], 42)
         self.assertEqual(payload["media_asset_id"], 7)
         self.assertEqual(payload["share_token"], "share_abc123")
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            os.remove(settings.db_file)
+        except OSError:
+            pass
 
 
 if __name__ == '__main__':

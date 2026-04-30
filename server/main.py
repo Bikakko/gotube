@@ -210,7 +210,7 @@ async def hidden_entry_redirect() -> RedirectResponse:
 
 @app.get(f"/{settings.hidden_path}", response_model=None)
 async def download_page() -> FileResponse | HTMLResponse:
-    """下载页（隐藏路径，只有知道地址的人才能访问）"""
+    """下载页入口；隐藏路径只用于弱隐藏，访问控制仍依赖后端鉴权。"""
     return _serve_html("download.html")
 
 
