@@ -99,6 +99,7 @@ _allow_guest_download: bool = _b("GOTUBE_ALLOW_GUEST_DOWNLOAD", True)
 _allow_playlist_download: bool = _b("GOTUBE_ALLOW_PLAYLIST_DOWNLOAD", False)
 _max_video_size_mb: int = _i("GOTUBE_MAX_VIDEO_SIZE_MB", required=False, default=0, min_val=0)
 _user_storage_quota_mb: int = _i("GOTUBE_USER_STORAGE_QUOTA_MB", required=False, default=0, min_val=0)
+_version: str = (_project_root / "VERSION").read_text(encoding="utf-8").strip() or "0.0.0"
 
 _china_domains: list[str] = [
     "bilibili.com", "b23.tv", "acfun.cn", "iqiyi.com",
@@ -194,6 +195,10 @@ class _Settings:
     @property
     def china_domains(self) -> list[str]:
         return _china_domains
+
+    @property
+    def version(self) -> str:
+        return _version
 
     def get_download_dir(self) -> Path:
         """获取下载目录的绝对路径"""

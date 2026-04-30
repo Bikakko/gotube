@@ -8,6 +8,8 @@ ENV_EXAMPLE = ROOT / '.env.example'
 WK_SCRIPT = ROOT / 'wk.sh'
 PACKAGE_JSON = ROOT / 'package.json'
 BUILD_SCRIPT = ROOT / 'build.js'
+ADMIN_HTML = ROOT / 'www' / 'admin' / 'admin.html'
+DOWNLOAD_HTML = ROOT / 'www' / 'download.html'
 
 
 class FrontendBuildSetupTests(unittest.TestCase):
@@ -37,6 +39,18 @@ class FrontendBuildSetupTests(unittest.TestCase):
         self.assertIn('html-minifier-terser', content)
         self.assertIn('terser', content)
         self.assertIn('new CleanCSS', content)
+
+    def test_admin_html_uses_runtime_asset_version_placeholder(self):
+        html = ADMIN_HTML.read_text(encoding='utf-8')
+        self.assertIn('{{ASSET_VERSION}}', html)
+        self.assertNotIn('?v=2.5.0', html)
+        self.assertNotIn('?v=2.8.0', html)
+        self.assertNotIn('?v=4.1.0', html)
+
+    def test_download_html_uses_runtime_asset_version_placeholder(self):
+        html = DOWNLOAD_HTML.read_text(encoding='utf-8')
+        self.assertIn('/static/common.js?v={{ASSET_VERSION}}', html)
+        self.assertIn('/static/download.js?v={{ASSET_VERSION}}', html)
 
 
 if __name__ == '__main__':

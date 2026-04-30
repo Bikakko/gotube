@@ -121,7 +121,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="GoTube",
     description="自托管多平台视频下载工具",
-    version="4.5.2",
+    version=settings.version,
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
     redoc_url="/redoc" if settings.debug else None,
@@ -171,6 +171,7 @@ def _serve_html(filename: str) -> HTMLResponse:
         content = filepath.read_text(encoding="utf-8")
         # 注入配置变量，供前端 JS 使用
         content = content.replace("{{HIDDEN_PATH}}", settings.hidden_path)
+        content = content.replace("{{ASSET_VERSION}}", settings.version)
         return HTMLResponse(content)
     except Exception as e:
         logger.error("读取 HTML 失败: %s, 错误: %s", filepath, e)
