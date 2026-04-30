@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Lab C</title>
+    <link rel="icon" href="/static/favicon.jpg" type="image/jpeg">
+    <link rel="stylesheet" href="/static/visual-lab-c.css?v=4.4.2">
+</head>
+<body>
+    <div id="lab-scene" class="lab-scene" aria-hidden="true"></div>
+
+    <main class="lab-shell">
+        <header class="lab-topbar">
+            <a class="lab-back" href="/">返回</a>
+            <div class="lab-tag">C / 仰望星空</div>
+        </header>
+
+        <section class="lab-hero" aria-hidden="true"></section>
+
+        <section class="lab-preview" aria-label="Album preview">
+            <div id="lab-grid" class="lab-grid"></div>
+        </section>
+    </main>
+
+    <div id="lab-modal" class="lab-modal" hidden>
+        <div class="lab-modal-backdrop" data-modal-close></div>
+        <div class="lab-modal-panel" role="dialog" aria-modal="true" aria-label="Image preview">
+            <button type="button" class="lab-modal-close" id="lab-modal-close" aria-label="Close">&times;</button>
+            <div class="lab-modal-stage">
+                <img id="lab-modal-image" class="lab-modal-image" alt="">
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="/static/visual-lab-c.js?v=4.4.2"></script>
+</body>
+</html>
