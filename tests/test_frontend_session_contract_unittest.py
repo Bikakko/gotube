@@ -111,6 +111,27 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("promptUpdateDisplayName", source)
         self.assertIn("promptChangePassword", source)
 
+    def test_download_page_exposes_actionable_error_model(self):
+        html = read_text("www/download.html")
+        source = read_text("www/download.js")
+
+        self.assertIn('id="actionable-error"', html)
+        self.assertIn('id="actionable-error-actions"', html)
+        self.assertIn("function showActionableError(", source)
+        self.assertIn("function clearActionableError()", source)
+        self.assertIn("renderActionableErrorActions(", source)
+
+    def test_download_page_routes_key_failures_to_actionable_error_model(self):
+        source = read_text("www/download.js")
+
+        self.assertIn("showLoginError(err.message ||", source)
+        self.assertIn("showActionableError({", source)
+        self.assertIn("context: 'submit'", source)
+        self.assertIn("context: 'library'", source)
+        self.assertIn("onClick: handleLogin", source)
+        self.assertIn("onClick: submit", source)
+        self.assertIn("onClick: loadMyLibrary", source)
+
 
 
 if __name__ == "__main__":

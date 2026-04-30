@@ -54,6 +54,54 @@
         el.style.color = color;
     }
 
+    function renderActionableErrorActions(container, actions = []) {
+        if (!container) return;
+        container.replaceChildren();
+        actions.forEach((action) => {
+            if (!action || typeof action.onClick !== 'function') return;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = `task-btn ${action.className || 'secondary'}`;
+            button.textContent = action.label || '';
+            button.addEventListener('click', action.onClick);
+            container.appendChild(button);
+        });
+    }
+
+    function clearActionableError() {
+        const panel = $('#actionable-error');
+        const messageEl = $('#actionable-error-message');
+        const actionsEl = $('#actionable-error-actions');
+        if (messageEl) messageEl.textContent = '';
+        if (actionsEl) actionsEl.replaceChildren();
+        if (panel) panel.classList.remove('active');
+    }
+
+    function showActionableError({ message, actions = [], context = '' }) {
+        const panel = $('#actionable-error');
+        const messageEl = $('#actionable-error-message');
+        const actionsEl = $('#actionable-error-actions');
+        if (!panel || !messageEl || !actionsEl) return;
+        messageEl.textContent = message || '';
+        panel.dataset.context = context || '';
+        renderActionableErrorActions(actionsEl, actions);
+        panel.classList.add('active');
+    }
+
+    function showLoginError(message, actions = []) {
+        const errorEl = $('#login-error');
+        const actionsEl = $('#login-error-actions');
+        if (errorEl) errorEl.textContent = message || '';
+        renderActionableErrorActions(actionsEl, actions);
+    }
+
+    function clearLoginError() {
+        const errorEl = $('#login-error');
+        const actionsEl = $('#login-error-actions');
+        if (errorEl) errorEl.textContent = '';
+        if (actionsEl) actionsEl.replaceChildren();
+    }
+
     function fmtBytes(b) {
         if (!b) return '';
         const u = ['B', 'KB', 'MB', 'GB'];
@@ -378,6 +426,7 @@
 
     async function submit() {
         const url = $('#url-input').value.trim();
+        clearActionableError();
         if (!url) {
             setStatus('⚠️ 请输入视频链接', '#d29922');
             return;
@@ -428,20 +477,45 @@
             if (!res.ok) {
                 const e = await res.json();
                 if (res.status === 409) {
-                    setStatus('⚠️ ' + (e.detail || '该链接已在下载中或已完成'), '#d29922');
+                    setStatus('\u26a0\ufe0f ' + (e.detail || '\u8be5\u94fe\u63a5\u5df2\u5728\u4e0b\u8f7d\u4e2d\u6216\u5df2\u5b8c\u6210'), '#d29922');
                 } else {
-                    setStatus('❌ ' + (e.detail || '失败'), '#f85149');
+                    const detail = e.detail || '\u5931\u8d25';
+                    setStatus('\u274c ' + detail, '#f85149');
+                    showActionableError({
+                        message: detail,
+                        context: 'submit',
+                        actions: [
+                            { label: '\u91cd\u8bd5\u63d0\u4ea4', className: 'retry', onClick: submit },
+                            {
+                                label: '\u6e05\u7a7a\u8f93\u5165',
+                                className: 'secondary',
+                                onClick: () => {
+                                    $('#url-input').value = '';
+                                    clearActionableError();
+                                    $('#url-input').focus();
+                                },
+                            },
+                        ],
+                    });
                 }
                 return;
             }
 
             const data = await res.json();
             storeTask(data);
-            setStatus('✅ 已添加', '#3fb950');
+            clearActionableError();
+            setStatus('\u2705 \u5df2\u6dfb\u52a0', '#3fb950');
             renderTasks();
             if (isLibraryUser()) loadMyLibrary();
         } catch (e) {
-            setStatus('❌ ' + e.message, '#f85149');
+            setStatus('\u274c ' + e.message, '#f85149');
+            showActionableError({
+                message: e.message || '\u4e0b\u8f7d\u63d0\u4ea4\u5931\u8d25',
+                context: 'submit',
+                actions: [
+                    { label: '\u91cd\u8bd5\u63d0\u4ea4', className: 'retry', onClick: submit },
+                ],
+            });
         } finally {
             $('#dl-btn').disabled = false;
             $('#dl-btn').textContent = '下载';
@@ -658,6 +732,7 @@
             myQuota = null;
             libraryPage = 1;
             renderMyLibrary();
+            clearActionableError();
             return;
         }
 
@@ -673,10 +748,19 @@
             const videosData = await videosRes.json();
             myVideos = videosData.videos || [];
             libraryPage = Math.min(libraryPage, Math.max(1, Math.ceil(myVideos.length / libraryPageSize)));
+            clearActionableError();
             renderMyLibrary();
         } catch (err) {
             console.error(err);
-            showToast('⚠️ 加载我的视频库失败: ' + err.message, '#d29922');
+            showToast('\u26a0\ufe0f \u52a0\u8f7d\u6211\u7684\u89c6\u9891\u5e93\u5931\u8d25: ' + err.message, '#d29922');
+            showActionableError({
+                message: err.message || '\u52a0\u8f7d\u89c6\u9891\u5e93\u5931\u8d25',
+                context: 'library',
+                actions: [
+                    { label: '\u91cd\u65b0\u52a0\u8f7d', className: 'retry', onClick: loadMyLibrary },
+                    { label: '\u5237\u65b0\u9875\u9762', className: 'secondary', onClick: () => window.location.reload() },
+                ],
+            });
         }
     }
 
@@ -1205,7 +1289,7 @@
         $('#login-modal').classList.add('active');
         switchAuthMode('login');
         $('#login-username').focus();
-        $('#login-error').textContent = '';
+        clearLoginError();
     }
 
     function switchAuthMode(mode) {
@@ -1215,7 +1299,7 @@
         $('#register-panel').style.display = isRegister ? 'block' : 'none';
         $('#show-login-btn').classList.toggle('active', !isRegister);
         $('#show-register-btn').classList.toggle('active', isRegister);
-        $('#login-error').textContent = '';
+        clearLoginError();
         $('#register-error').textContent = '';
         if (isRegister) {
             $('#register-username').focus();
@@ -1228,7 +1312,7 @@
         $('#login-modal').classList.remove('active');
         $('#login-username').value = '';
         $('#login-password').value = '';
-        $('#login-error').textContent = '';
+        clearLoginError();
         $('#register-username').value = '';
         $('#register-display-name').value = '';
         $('#register-password').value = '';
@@ -1243,19 +1327,19 @@
         const btn = $('#login-submit-btn');
 
         if (!user) {
-            errorEl.textContent = '请输入用户名';
+            showLoginError('\u8bf7\u8f93\u5165\u7528\u6237\u540d');
             $('#login-username').focus();
             return;
         }
         if (!pass) {
-            errorEl.textContent = '请输入密码';
+            showLoginError('\u8bf7\u8f93\u5165\u5bc6\u7801');
             $('#login-password').focus();
             return;
         }
 
         btn.disabled = true;
-        btn.textContent = '登录中...';
-        errorEl.textContent = '';
+        btn.textContent = '\u767b\u5f55\u4e2d...';
+        clearLoginError();
 
         try {
             const apiBase = `/${hiddenPath}/admin/api`;
@@ -1306,7 +1390,10 @@
                 connectWS();
             }
         } catch (err) {
-            errorEl.textContent = err.message || '登录失败，请重试';
+            showLoginError(err.message || '\u767b\u5f55\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5', [
+                { label: '\u91cd\u8bd5\u767b\u5f55', className: 'retry', onClick: handleLogin },
+                { label: '\u6e05\u7a7a\u5bc6\u7801', className: 'secondary', onClick: () => { $('#login-password').value = ''; $('#login-password').focus(); } },
+            ]);
         } finally {
             btn.disabled = false;
             btn.textContent = '登录';
@@ -1327,7 +1414,7 @@
             return;
         }
         if (!displayName) {
-            errorEl.textContent = '?????';
+            errorEl.textContent = '\u8bf7\u8f93\u5165\u6635\u79f0';
             $('#register-display-name').focus();
             return;
         }

@@ -58,6 +58,27 @@
         #dl-btn:hover { background: #ff3325; }
         #dl-btn:disabled { background: #333; cursor: not-allowed; }
         #status { text-align: center; font-size: 14px; color: #8b949e; min-height: 20px; margin-bottom: 20px; }
+        .actionable-error {
+            display: none;
+            margin: -8px 0 18px;
+            padding: 12px 14px;
+            border: 1px solid rgba(248, 81, 73, 0.45);
+            border-radius: 8px;
+            background: rgba(248, 81, 73, 0.08);
+            color: #f85149;
+        }
+        .actionable-error.active { display: block; }
+        .actionable-error-message {
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        .actionable-error-actions {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
         .task {
             background: #161b22; border: 1px solid #30363d;
             border-radius: 8px; padding: 16px; margin-bottom: 10px;
@@ -245,6 +266,14 @@
             min-height: 20px;
             margin-bottom: 10px;
         }
+        .auth-error-actions {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            min-height: 34px;
+            margin-bottom: 12px;
+        }
         .auth-submit {
             width: 100%;
             padding: 12px;
@@ -296,6 +325,10 @@
             <button id="dl-btn" type="button">下载</button>
         </form>
         <div id="status"></div>
+        <div id="actionable-error" class="actionable-error" role="alert" aria-live="polite">
+            <div id="actionable-error-message" class="actionable-error-message"></div>
+            <div id="actionable-error-actions" class="actionable-error-actions"></div>
+        </div>
         <div id="task-list"></div>
         <section id="library-section" class="library-section" style="display:none;">
             <div class="library-header">
@@ -343,6 +376,7 @@
                         <input class="auth-input" type="password" id="login-password" name="password" placeholder="密码" autocomplete="current-password">
                     </div>
                     <div id="login-error" class="auth-error"></div>
+                    <div id="login-error-actions" class="auth-error-actions"></div>
                     <button id="login-submit-btn" type="button" class="auth-submit login">登录</button>
                 </form>
                 <form id="register-panel" style="display: none;" autocomplete="off" onsubmit="return false;">
