@@ -55,6 +55,12 @@ class FrontendBuildSetupTests(unittest.TestCase):
         self.assertIn('/static/common.js?v={{ASSET_VERSION}}', html)
         self.assertIn('/static/download.js?v={{ASSET_VERSION}}', html)
 
+    def test_download_html_avoids_inline_behavior_handlers(self):
+        html = DOWNLOAD_HTML.read_text(encoding='utf-8')
+        self.assertNotIn('onclick=', html)
+        self.assertNotIn('onsubmit=', html)
+        self.assertNotIn('onkeypress=', html)
+
     def test_frontend_scripts_use_gotube_namespace_boundary(self):
         common = COMMON_JS.read_text(encoding='utf-8')
         download = DOWNLOAD_JS.read_text(encoding='utf-8')
@@ -64,6 +70,11 @@ class FrontendBuildSetupTests(unittest.TestCase):
         self.assertIn('window.GoTube.session = window.GoTubeSession;', common)
         self.assertIn('const goTube = window.GoTube = window.GoTube || {};', download)
         self.assertIn('const goTube = window.GoTube = window.GoTube || {};', index)
+
+    def test_download_script_centralizes_page_event_binding(self):
+        download = DOWNLOAD_JS.read_text(encoding='utf-8')
+        self.assertIn('function bindEventHandlers()', download)
+        self.assertIn("document.addEventListener('keydown'", download)
 
 
 if __name__ == '__main__':

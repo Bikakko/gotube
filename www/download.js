@@ -652,30 +652,78 @@
         }, 30000);
     }
 
-    // 绑定事件
-    $('#dl-btn').onclick = submit;
-    $('#url-input').onkeypress = (e) => { if (e.key === 'Enter') submit(); };
-    document.onkeydown = (e) => { if (e.key === 'Escape') { closeModal(); closeLoginModal(); } };
+    function bindEnterShortcut(selector, handler) {
+        const target = $(selector);
+        if (!target) return;
+        target.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            handler();
+        });
+    }
 
-    // 登录相关
-    $('#logo-link').onclick = (e) => {
-        e.preventDefault();
-        handleLogoClick();
-    };
-    $('#login-submit-btn').onclick = handleLogin;
-    $('#login-password').onkeypress = (e) => { if (e.key === 'Enter') handleLogin(); };
-    $('#show-login-btn').onclick = () => switchAuthMode('login');
-    $('#show-register-btn').onclick = () => switchAuthMode('register');
-    $('#register-submit-btn').onclick = handleRegister;
-    $('#register-password').onkeypress = (e) => { if (e.key === 'Enter') handleRegister(); };
-    $('#register-invite').onkeypress = (e) => { if (e.key === 'Enter') handleRegister(); };
-    $('#refresh-library-btn').onclick = () => loadMyLibrary();
-    $('#logout-btn').onclick = logout;
-    $('#profile-btn').onclick = promptUpdateDisplayName;
-    $('#password-btn').onclick = promptChangePassword;
-    $('#admin-link-btn').onclick = () => {
-        window.location.href = `/${hiddenPath}/admin`;
-    };
+    function bindModalDismiss(modalSelector, closeHandler) {
+        const modal = $(modalSelector);
+        if (!modal) return;
+        modal.addEventListener('click', (event) => {
+            if (event.target === modal) {
+                closeHandler();
+            }
+        });
+    }
+
+    function bindEventHandlers() {
+        $('#download-form')?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            submit();
+        });
+        $('#dl-btn')?.addEventListener('click', submit);
+        bindEnterShortcut('#url-input', submit);
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeModal();
+                closeLoginModal();
+            }
+        });
+
+        $('#logo-link')?.addEventListener('click', (event) => {
+            event.preventDefault();
+            handleLogoClick();
+        });
+
+        $('#login-panel')?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            handleLogin();
+        });
+        $('#login-submit-btn')?.addEventListener('click', handleLogin);
+        bindEnterShortcut('#login-password', handleLogin);
+
+        $('#show-login-btn')?.addEventListener('click', () => switchAuthMode('login'));
+        $('#show-register-btn')?.addEventListener('click', () => switchAuthMode('register'));
+
+        $('#register-panel')?.addEventListener('submit', (event) => {
+            event.preventDefault();
+            handleRegister();
+        });
+        $('#register-submit-btn')?.addEventListener('click', handleRegister);
+        bindEnterShortcut('#register-password', handleRegister);
+        bindEnterShortcut('#register-invite', handleRegister);
+
+        $('#refresh-library-btn')?.addEventListener('click', loadMyLibrary);
+        $('#logout-btn')?.addEventListener('click', logout);
+        $('#profile-btn')?.addEventListener('click', promptUpdateDisplayName);
+        $('#password-btn')?.addEventListener('click', promptChangePassword);
+        $('#admin-link-btn')?.addEventListener('click', () => {
+            window.location.href = `/${hiddenPath}/admin`;
+        });
+
+        $('#modal-close-btn')?.addEventListener('click', closeModal);
+        $('#copy-btn')?.addEventListener('click', copyShare);
+        $('#login-modal-close-btn')?.addEventListener('click', closeLoginModal);
+        bindModalDismiss('#modal', closeModal);
+        bindModalDismiss('#login-modal', closeLoginModal);
+    }
 
     function applyStableDownloadPageLabels() {
         const profileBtn = $('#profile-btn');
@@ -689,6 +737,7 @@
     // 初始化
     async function init() {
         applyStableDownloadPageLabels();
+        bindEventHandlers();
         await checkLoginStatus();
         await loadTasks();
         connectWS();
