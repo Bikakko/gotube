@@ -76,6 +76,13 @@ class FrontendBuildSetupTests(unittest.TestCase):
         self.assertIn('function bindEventHandlers()', download)
         self.assertIn("document.addEventListener('keydown'", download)
 
+    def test_home_script_uses_explicit_bootstrap_and_lifecycle_helpers(self):
+        index = INDEX_JS.read_text(encoding='utf-8')
+        self.assertIn('function bootstrapHomePage()', index)
+        self.assertIn('function bindModalEvents()', index)
+        self.assertIn('function bindSceneLifecycle()', index)
+        self.assertIn('goTube.home.bootstrap = bootstrapHomePage;', index)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -24,41 +24,6 @@ import * as THREE from "/static/vendor/three.module.min.js";
 
     let disposeScene = null;
 
-    secretEntryImage?.addEventListener("error", () => {
-        const fallback = secretEntryImage.dataset.fallbackSrc;
-        if (fallback && secretEntryImage.src !== fallback) {
-            secretEntryImage.src = fallback;
-        }
-    });
-
-    ensureScene();
-    window.addEventListener("pageshow", () => {
-        ensureScene();
-    });
-    window.addEventListener("beforeunload", () => {
-        if (disposeScene) {
-            disposeScene();
-            disposeScene = null;
-        }
-    }, { once: true });
-
-    modalClose?.addEventListener("click", closeModal);
-    modalBackdrop?.addEventListener("click", closeModal);
-    prevButton?.addEventListener("click", showPrevImage);
-    nextButton?.addEventListener("click", showNextImage);
-    document.addEventListener("keydown", (event) => {
-        if (!modal || modal.hidden) return;
-        if (event.key === "Escape") closeModal();
-        if (event.key === "ArrowLeft") showPrevImage();
-        if (event.key === "ArrowRight") showNextImage();
-    });
-
-    loadAlbums().catch(() => {
-        if (albumsEmpty) {
-            albumsEmpty.hidden = false;
-        }
-    });
-
     async function loadAlbums() {
         const response = await fetch("/api/gallery/albums");
         if (!response.ok) {
@@ -135,6 +100,51 @@ import * as THREE from "/static/vendor/three.module.min.js";
 
     goTube.home.ensureScene = ensureScene;
     goTube.home.closeGalleryModal = closeModal;
+    goTube.home.bootstrap = bootstrapHomePage;
+
+    function bindSecretEntryImage() {
+        secretEntryImage?.addEventListener("error", () => {
+            const fallback = secretEntryImage.dataset.fallbackSrc;
+            if (fallback && secretEntryImage.src !== fallback) {
+                secretEntryImage.src = fallback;
+            }
+        });
+    }
+
+    function bindModalEvents() {
+        modalClose?.addEventListener("click", closeModal);
+        modalBackdrop?.addEventListener("click", closeModal);
+        prevButton?.addEventListener("click", showPrevImage);
+        nextButton?.addEventListener("click", showNextImage);
+        document.addEventListener("keydown", (event) => {
+            if (!modal || modal.hidden) return;
+            if (event.key === "Escape") closeModal();
+            if (event.key === "ArrowLeft") showPrevImage();
+            if (event.key === "ArrowRight") showNextImage();
+        });
+    }
+
+    function bindSceneLifecycle() {
+        ensureScene();
+        window.addEventListener("pageshow", ensureScene);
+        window.addEventListener("beforeunload", () => {
+            if (disposeScene) {
+                disposeScene();
+                disposeScene = null;
+            }
+        }, { once: true });
+    }
+
+    function bootstrapHomePage() {
+        bindSecretEntryImage();
+        bindModalEvents();
+        bindSceneLifecycle();
+        loadAlbums().catch(() => {
+            if (albumsEmpty) {
+                albumsEmpty.hidden = false;
+            }
+        });
+    }
 
     function ensureScene() {
         if (!sceneHost || disposeScene || sceneHost.querySelector("canvas")) {
@@ -333,6 +343,8 @@ import * as THREE from "/static/vendor/three.module.min.js";
             host.replaceChildren();
         };
     }
+
+    bootstrapHomePage();
 
     function createSkyDome() {
         const geometry = new THREE.SphereGeometry(520, 64, 64);
