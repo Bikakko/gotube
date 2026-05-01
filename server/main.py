@@ -250,7 +250,7 @@ async def watch_unified(
 
     if "text/html" in accept:
         logger.info("[/watch] returning HTML page")
-        return _serve_html("watch.html")
+        return _serve_html("watch/index.html")
 
     # 视频请求：优先按用户级 share_token 解析，兼容旧 8 位 hash。
     if v:
@@ -305,9 +305,9 @@ async def catch_all(
     """
     捕获其他静态文件请求。
 
-    保护敏感页面：直接访问 index.html / admin.html / download.html 返回 watch.html。
+    保护敏感页面：直接访问 index.html / admin.html / download.html 返回播放页。
     如果是 www 目录中存在的静态文件，直接返回。
-    否则返回 watch.html（分享链接进入）。
+    否则返回 404。
     """
     # 保护敏感页面
     if filename in ("index.html", "home/index.html", "admin.html", "admin/admin.html", "download.html", "download/index.html"):

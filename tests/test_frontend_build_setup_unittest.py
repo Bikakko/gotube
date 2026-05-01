@@ -15,6 +15,8 @@ COMMON_JS = ROOT / 'www' / 'shared' / 'common.js'
 DOWNLOAD_JS = ROOT / 'www' / 'download' / 'page.js'
 INDEX_HTML = ROOT / 'www' / 'home' / 'index.html'
 INDEX_JS = ROOT / 'www' / 'home' / 'page.js'
+WATCH_HTML = ROOT / 'www' / 'watch' / 'index.html'
+LAB_HTML = ROOT / 'www' / 'labs' / 'visual-lab-c.html'
 
 
 class FrontendBuildSetupTests(unittest.TestCase):
@@ -101,6 +103,16 @@ class FrontendBuildSetupTests(unittest.TestCase):
     def test_server_download_page_reads_download_index_html(self):
         main_py = MAIN_PY.read_text(encoding='utf-8')
         self.assertIn('return _serve_html("download/index.html")', main_py)
+
+    def test_server_watch_page_reads_watch_index_html(self):
+        main_py = MAIN_PY.read_text(encoding='utf-8')
+        self.assertIn('return _serve_html("watch/index.html")', main_py)
+
+    def test_lab_page_uses_labs_asset_paths(self):
+        html = LAB_HTML.read_text(encoding='utf-8')
+        self.assertIn('/static/labs/visual-lab-c.css?v={{ASSET_VERSION}}', html)
+        self.assertIn('/static/labs/visual-lab-c.js?v={{ASSET_VERSION}}', html)
+        self.assertIn('/static/shared/images/favicon.jpg', html)
 
 
 if __name__ == '__main__':

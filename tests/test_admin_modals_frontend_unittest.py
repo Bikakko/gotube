@@ -50,7 +50,7 @@ class AdminModalsFrontendTests(unittest.TestCase):
         self.assertIn(".video-duration-badge", css)
 
     def test_watch_page_defaults_to_loop_playback(self):
-        watch_html = read_text("www/watch.html")
+        watch_html = read_text("www/watch/index.html")
 
         self.assertIn("controls autoplay loop", watch_html)
 
