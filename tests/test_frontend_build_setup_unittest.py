@@ -9,7 +9,7 @@ WK_SCRIPT = ROOT / 'wk.sh'
 PACKAGE_JSON = ROOT / 'package.json'
 BUILD_SCRIPT = ROOT / 'build.js'
 MAIN_PY = ROOT / 'server' / 'main.py'
-ADMIN_HTML = ROOT / 'www' / 'admin' / 'admin.html'
+ADMIN_HTML = ROOT / 'www' / 'admin' / 'index.html'
 DOWNLOAD_HTML = ROOT / 'www' / 'download' / 'index.html'
 COMMON_JS = ROOT / 'www' / 'shared' / 'common.js'
 DOWNLOAD_JS = ROOT / 'www' / 'download' / 'page.js'
@@ -107,6 +107,10 @@ class FrontendBuildSetupTests(unittest.TestCase):
     def test_server_watch_page_reads_watch_index_html(self):
         main_py = MAIN_PY.read_text(encoding='utf-8')
         self.assertIn('return _serve_html("watch/index.html")', main_py)
+
+    def test_server_admin_page_reads_admin_index_html(self):
+        main_py = MAIN_PY.read_text(encoding='utf-8')
+        self.assertIn('return _serve_html("admin/index.html")', main_py)
 
     def test_lab_page_uses_labs_asset_paths(self):
         html = LAB_HTML.read_text(encoding='utf-8')

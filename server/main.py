@@ -224,7 +224,7 @@ async def download_page_trailing_slash() -> RedirectResponse:
 @app.get(f"/{settings.hidden_path}/admin", response_model=None)
 async def admin_page() -> FileResponse | HTMLResponse:
     """管理页面入口"""
-    return _serve_html("admin/admin.html")
+    return _serve_html("admin/index.html")
 
 
 @app.get("/watch.html", response_model=None)
@@ -310,7 +310,7 @@ async def catch_all(
     否则返回 404。
     """
     # 保护敏感页面
-    if filename in ("index.html", "home/index.html", "admin.html", "admin/admin.html", "download.html", "download/index.html"):
+    if filename in ("index.html", "home/index.html", "admin.html", "admin/admin.html", "admin/index.html", "download.html", "download/index.html"):
         raise HTTPException(status_code=404, detail="Not Found")
 
     # 从 www 目录提供静态文件

@@ -308,7 +308,7 @@ class AdminManagementTests(unittest.TestCase):
             self.assertEqual([row["media_asset_id"] for row in today_result["videos"]], [today_asset.id])
 
     def test_admin_html_contains_top_navigation_slots(self):
-        html = (ROOT / "www/admin/admin.html").read_text(encoding="utf-8")
+        html = (ROOT / "www/admin/index.html").read_text(encoding="utf-8")
 
         for nav_key in ["overview", "media", "users", "invites", "system"]:
             self.assertIn(f'data-admin-nav="{nav_key}"', html)
@@ -401,7 +401,7 @@ class AdminManagementTests(unittest.TestCase):
         system_js = (ROOT / "www/admin/js/system.js").read_text(encoding="utf-8")
         data_js = (ROOT / "www/admin/js/data.js").read_text(encoding="utf-8")
         render_js = (ROOT / "www/admin/js/render.js").read_text(encoding="utf-8")
-        admin_html = (ROOT / "www/admin/admin.html").read_text(encoding="utf-8")
+        admin_html = (ROOT / "www/admin/index.html").read_text(encoding="utf-8")
 
         self.assertIn("loadSystemPage", system_js)
         self.assertIn("renderRuntimeHealth", system_js)
