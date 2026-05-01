@@ -7,12 +7,13 @@ import logging
 import secrets
 from collections import defaultdict
 from contextlib import suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import HTTPException
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from .db import MediaAsset, MediaSource, User, UserVideoItem
@@ -212,6 +213,43 @@ def list_user_video_items(session: Session, user: User, owner_user_id: int | Non
     return rows
 
 
+def list_user_video_items_page(
+    session: Session,
+    user: User,
+    *,
+    owner_user_id: int | None = None,
+    page: int = 1,
+    per_page: int = 50,
+) -> dict[str, Any]:
+    """List visible user library items with pagination metadata."""
+    query = (
+        session.query(UserVideoItem, MediaAsset, User)
+        .join(MediaAsset, MediaAsset.id == UserVideoItem.media_asset_id)
+        .join(User, User.id == UserVideoItem.owner_user_id)
+        .filter(UserVideoItem.deleted_at.is_(None))
+    )
+    if user.role != "admin":
+        query = query.filter(UserVideoItem.owner_user_id == user.id)
+    elif owner_user_id is not None:
+        query = query.filter(UserVideoItem.owner_user_id == owner_user_id)
+
+    per_page = max(1, min(int(per_page), 100))
+    page = max(1, int(page))
+    total = query.count()
+    offset = (page - 1) * per_page
+    rows = [
+        _item_to_dict(item, asset, owner)
+        for item, asset, owner in query.order_by(UserVideoItem.saved_at.desc()).offset(offset).limit(per_page).all()
+    ]
+    return {
+        "videos": rows,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page if per_page > 0 else 0,
+    }
+
+
 def list_admin_media_assets(
     session: Session,
     admin: User,
@@ -284,6 +322,147 @@ def list_admin_media_assets(
         )
         for asset in assets
     ]
+
+
+_SOURCE_PATTERNS: dict[str, tuple[str, ...]] = {
+    "YouTube": ("youtube.com", "youtu.be"),
+    "Bilibili": ("bilibili.com", "b23.tv"),
+    "Twitter/X": ("twitter.com", "x.com"),
+    "Douyin": ("douyin.com",),
+    "AcFun": ("acfun.cn",),
+    "爱奇艺": ("iqiyi.com",),
+    "优酷": ("youku.com",),
+    "腾讯视频": ("qq.com",),
+    "快手": ("kuaishou.com",),
+}
+
+
+def list_admin_media_assets_page(
+    session: Session,
+    admin: User,
+    *,
+    owner_user_id: int | None = None,
+    owner: str | None = None,
+    keyword: str | None = None,
+    source: str | None = None,
+    time_filter: str | None = "all",
+    page: int = 1,
+    per_page: int = 20,
+) -> dict[str, Any]:
+    """List admin media assets from the database with filters and pagination."""
+    if admin.role != "admin":
+        raise HTTPException(status_code=403, detail="权限不足")
+
+    owner = (owner or "").strip().lower() or None
+    keyword = (keyword or "").strip()
+    source = (source or "").strip()
+    time_filter = (time_filter or "all").strip().lower()
+    page = max(1, int(page))
+    per_page = max(1, min(int(per_page), 100))
+
+    query = session.query(MediaAsset)
+    if owner_user_id is not None:
+        query = (
+            query.join(UserVideoItem, UserVideoItem.media_asset_id == MediaAsset.id)
+            .filter(
+                UserVideoItem.owner_user_id == owner_user_id,
+                UserVideoItem.deleted_at.is_(None),
+            )
+            .distinct()
+        )
+    elif owner == "legacy":
+        query = (
+            query.outerjoin(
+                UserVideoItem,
+                (UserVideoItem.media_asset_id == MediaAsset.id) & (UserVideoItem.deleted_at.is_(None)),
+            )
+            .filter(UserVideoItem.id.is_(None))
+            .distinct()
+        )
+
+    if keyword:
+        query = query.filter(MediaAsset.title.ilike(f"%{keyword}%"))
+
+    if source:
+        patterns = _SOURCE_PATTERNS.get(source)
+        if patterns:
+            query = query.filter(or_(*[MediaAsset.source_url.ilike(f"%{pattern}%") for pattern in patterns]))
+        else:
+            query = query.filter(MediaAsset.source_url.ilike(f"%{source}%"))
+
+    local_tz = UTC
+    now = datetime.now(local_tz)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if time_filter == "today":
+        query = query.filter(MediaAsset.created_at >= today_start)
+    elif time_filter == "week":
+        query = query.filter(MediaAsset.created_at >= week_start)
+    elif time_filter == "month":
+        query = query.filter(MediaAsset.created_at >= month_start)
+    elif time_filter == "earlier":
+        query = query.filter(MediaAsset.created_at < month_start)
+
+    total = query.count()
+    asset_query = query.order_by(MediaAsset.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
+    assets = asset_query.all()
+    if not assets:
+        return {
+            "videos": [],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "total_pages": (total + per_page - 1) // per_page if per_page > 0 else 0,
+            "all_sources": [],
+        }
+
+    asset_ids = [asset.id for asset in assets]
+    owner_rows_by_asset: dict[int, list[tuple[UserVideoItem, User]]] = defaultdict(list)
+    for item, owner_user in (
+        session.query(UserVideoItem, User)
+        .join(User, User.id == UserVideoItem.owner_user_id)
+        .filter(
+            UserVideoItem.media_asset_id.in_(asset_ids),
+            UserVideoItem.deleted_at.is_(None),
+        )
+        .order_by(
+            UserVideoItem.media_asset_id.asc(),
+            UserVideoItem.saved_at.desc(),
+            UserVideoItem.id.desc(),
+        )
+        .all()
+    ):
+        owner_rows_by_asset[item.media_asset_id].append((item, owner_user))
+
+    source_rows_by_asset: dict[int, list[MediaSource]] = defaultdict(list)
+    for source_row in (
+        session.query(MediaSource)
+        .filter(MediaSource.media_asset_id.in_(asset_ids))
+        .order_by(MediaSource.media_asset_id.asc(), MediaSource.created_at.asc(), MediaSource.id.asc())
+        .all()
+    ):
+        source_rows_by_asset[source_row.media_asset_id].append(source_row)
+
+    source_urls = [row[0] for row in query.with_entities(MediaAsset.source_url).all() if row[0]]
+    all_sources = sorted({source_platform(url) for url in source_urls if source_platform(url)})
+
+    videos = [
+        _admin_media_asset_to_dict(
+            asset,
+            owner_rows_by_asset.get(asset.id, []),
+            source_rows_by_asset.get(asset.id, []),
+        )
+        for asset in assets
+    ]
+    return {
+        "videos": videos,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page if per_page > 0 else 0,
+        "all_sources": all_sources,
+    }
 
 
 def delete_user_video_item(

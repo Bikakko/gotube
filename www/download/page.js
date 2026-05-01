@@ -555,7 +555,9 @@ function isQuotaError(message = '') {
         try {
             const res = await fetch(`/api/tasks?client_id=${clientId}`);
             if (res.ok) {
-                (await res.json()).forEach(storeTask);
+                const payload = await res.json();
+                const taskRows = Array.isArray(payload) ? payload : (payload.tasks || []);
+                taskRows.forEach(storeTask);
                 renderTasks();
             }
         } catch (e) {

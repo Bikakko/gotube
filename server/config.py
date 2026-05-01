@@ -76,6 +76,19 @@ def validate_hidden_path(value: str) -> str:
     return candidate
 
 
+def _split_csv(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part and part.strip()]
+
+
+def validate_cors_origin(value: str) -> str:
+    candidate = value.strip()
+    if not (candidate.startswith("http://") or candidate.startswith("https://")):
+        raise ValueError("CORS 来源必须以 http:// 或 https:// 开头")
+    if "*" in candidate:
+        raise ValueError("CORS 来源不允许使用通配符")
+    return candidate.rstrip("/")
+
+
 # ── 读取所有配置项 ──
 
 _project_root: Path = Path(__file__).parent.parent
@@ -116,6 +129,13 @@ _allow_guest_download: bool = _b("GOTUBE_ALLOW_GUEST_DOWNLOAD", True)
 _allow_playlist_download: bool = _b("GOTUBE_ALLOW_PLAYLIST_DOWNLOAD", False)
 _max_video_size_mb: int = _i("GOTUBE_MAX_VIDEO_SIZE_MB", required=False, default=0, min_val=0)
 _user_storage_quota_mb: int = _i("GOTUBE_USER_STORAGE_QUOTA_MB", required=False, default=0, min_val=0)
+_raw_cors_allow_origins: str = _s("GOTUBE_CORS_ALLOW_ORIGINS", default="")
+_cors_allow_origins: list[str] = []
+for origin in _split_csv(_raw_cors_allow_origins):
+    try:
+        _cors_allow_origins.append(validate_cors_origin(origin))
+    except ValueError as exc:
+        _errors.append(f"  GOTUBE_CORS_ALLOW_ORIGINS = '{origin}' ({exc})")
 _version: str = (_project_root / "VERSION").read_text(encoding="utf-8").strip() or "0.0.0"
 
 _china_domains: list[str] = [
@@ -216,6 +236,10 @@ class _Settings:
     @property
     def version(self) -> str:
         return _version
+
+    @property
+    def cors_allow_origins(self) -> list[str]:
+        return list(_cors_allow_origins)
 
     def get_download_dir(self) -> Path:
         """获取下载目录的绝对路径"""

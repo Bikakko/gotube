@@ -284,6 +284,42 @@ class UserLibraryTests(unittest.TestCase):
             self.assertFalse(share["share_enabled"])
             self.assertEqual(Path(response.path), admin_file)
 
+    def test_get_my_videos_supports_pagination_metadata(self):
+        with self.Session() as session:
+            alice = self._user(session, "alice")
+            first_file = self._video_file("First_aaaaaaaa", "aaaaaaaa.mp4")
+            second_file = self._video_file("Second_bbbbbbbb", "bbbbbbbb.mp4", content=b"video-2")
+            register_completed_file(
+                session,
+                owner_user_id=alice.id,
+                filepath=first_file,
+                download_dir=self.download_dir,
+                source_url="https://example.test/first",
+                title="First Video",
+                file_hash="aaaaaaaa",
+            )
+            register_completed_file(
+                session,
+                owner_user_id=alice.id,
+                filepath=second_file,
+                download_dir=self.download_dir,
+                source_url="https://example.test/second",
+                title="Second Video",
+                file_hash="bbbbbbbb",
+            )
+            session.commit()
+
+            page_one = asyncio.run(get_my_videos(current_user=alice, db=session, page=1, per_page=1))
+            page_two = asyncio.run(get_my_videos(current_user=alice, db=session, page=2, per_page=1))
+
+            self.assertEqual(page_one["total"], 2)
+            self.assertEqual(page_one["page"], 1)
+            self.assertEqual(page_one["per_page"], 1)
+            self.assertEqual(page_one["total_pages"], 2)
+            self.assertEqual(len(page_one["videos"]), 1)
+            self.assertEqual(len(page_two["videos"]), 1)
+            self.assertNotEqual(page_one["videos"][0]["id"], page_two["videos"][0]["id"])
+
     def test_guest_transfer_registration_creates_user_video_item_and_updates_task(self):
         class FakeTask:
             def __init__(self):

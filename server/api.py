@@ -33,6 +33,7 @@ from .video_library import (
     get_user_video_asset_for_download,
     get_asset_from_existing_source,
     list_user_video_items,
+    list_user_video_items_page,
     register_completed_file,
     resolve_share_token,
     set_user_video_share_enabled,
@@ -41,6 +42,13 @@ from .video_library import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _normalize_route_value(value, default=None):
+    """Unwrap FastAPI Query defaults when route callables are invoked directly in tests."""
+    if hasattr(value, "default"):
+        return value.default
+    return value if value is not None else default
 
 
 @router.get("/gallery/albums")
@@ -426,14 +434,28 @@ async def get_guest_download_count(
     return {"session_id": session_id, "count": count}
 
 
-@router.get("/tasks", response_model=list[TaskResponse])
+@router.get("/tasks")
 async def get_tasks(
     client_id: str = Query(..., description="客户端标识"),
+    page: int = Query(1, ge=1, description="页码"),
+    per_page: int = Query(100, ge=1, le=200, description="每页数量"),
     qm: QueueManager = Depends(get_queue_manager),
 ):
-    """获取当前客户端的所有任务"""
+    """获取当前客户端的任务列表，支持分页。"""
+    page = int(_normalize_route_value(page, 1) or 1)
+    per_page = int(_normalize_route_value(per_page, 100) or 100)
     tasks = qm.get_client_tasks(client_id)
-    return [_task_to_response(t) for t in tasks]
+    total = len(tasks)
+    start = (page - 1) * per_page
+    end = start + per_page
+    page_tasks = tasks[start:end]
+    return {
+        "tasks": [_task_to_response(t) for t in page_tasks],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page if per_page > 0 else 0,
+    }
 
 
 @router.get("/tasks/active", response_model=list[TaskResponse])
@@ -546,10 +568,21 @@ async def get_my_quota(
 @router.get("/me/videos")
 async def get_my_videos(
     current_user: User = Depends(get_current_user),
+    page: int = Query(1, ge=1, description="页码"),
+    per_page: int = Query(50, ge=1, le=100, description="每页数量"),
     db: Session = Depends(get_db),
 ) -> dict:
     """返回当前登录用户的视频库。"""
-    return {"videos": list_user_video_items(db, current_user, owner_user_id=current_user.id)}
+    page = int(_normalize_route_value(page, 1) or 1)
+    per_page = int(_normalize_route_value(per_page, 50) or 50)
+    owner_user_id = current_user.id if current_user.role != "admin" else current_user.id
+    return list_user_video_items_page(
+        db,
+        current_user,
+        owner_user_id=owner_user_id,
+        page=page,
+        per_page=per_page,
+    )
 
 
 @router.delete("/me/videos/{item_id}")

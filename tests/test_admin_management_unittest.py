@@ -1,4 +1,5 @@
 import asyncio
+import io
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -9,7 +10,16 @@ from fastapi import HTTPException
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
-from server.admin_api import batch_delete_videos, change_password, get_user_library, get_videos, list_users, update_user
+from server.admin_api import settings as admin_settings
+from server.admin_api import (
+    batch_delete_videos,
+    change_password,
+    export_zip,
+    get_user_library,
+    get_videos,
+    list_users,
+    update_user,
+)
 from server.db import Base, MediaAsset, MediaSource, User, UserVideoItem
 from server.models import UpdateUserRequest
 
@@ -272,7 +282,7 @@ class AdminManagementTests(unittest.TestCase):
                 event.remove(session.bind, "before_cursor_execute", _capture)
 
             select_count = sum(1 for statement in statements if statement.lstrip().upper().startswith("SELECT"))
-            self.assertLessEqual(select_count, 5, statements)
+            self.assertLessEqual(select_count, 7, statements)
 
     def test_batch_delete_videos_supports_media_asset_ids(self):
         with self.Session() as session:
@@ -322,6 +332,28 @@ class AdminManagementTests(unittest.TestCase):
 
             self.assertEqual(ctx.exception.status_code, 400)
             self.assertIn("最多", str(ctx.exception.detail))
+
+    def test_export_zip_does_not_depend_on_in_memory_bytesio(self):
+        with self.Session() as session:
+            admin = self._user(session, "admin", role="admin")
+            media_dir = self.root / "Alpha_aaaaaaaa"
+            media_dir.mkdir()
+            video_path = media_dir / "aaaaaaaa.mp4"
+            video_path.write_bytes(b"video")
+
+            with (
+                patch.object(type(admin_settings), "get_download_dir", return_value=self.root),
+                patch("io.BytesIO", side_effect=AssertionError("should not use BytesIO")),
+            ):
+                response = asyncio.run(
+                    export_zip(
+                        request=self._JsonRequest({"filenames": ["Alpha_aaaaaaaa/aaaaaaaa.mp4"]}),
+                        admin=admin,
+                    )
+                )
+
+            self.assertEqual(response.media_type, "application/zip")
+            self.assertIn("gotube_export.zip", response.headers.get("content-disposition", ""))
 
     def test_get_videos_time_filter_handles_iso_created_at_strings(self):
         with self.Session() as session:

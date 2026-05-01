@@ -132,7 +132,7 @@ app = FastAPI(
 # CORS 中间件（明确来源，不使用 * + credentials）
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_allow_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

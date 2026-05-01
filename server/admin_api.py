@@ -9,6 +9,7 @@ import json
 import logging
 import secrets
 import shutil
+import tempfile
 import time
 import zipfile
 from collections import Counter
@@ -18,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from starlette.background import BackgroundTask
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -46,7 +48,12 @@ from .models import (
 )
 from .invites import create_invite, list_invites, revoke_invite
 from .user_profile import build_user_identity, display_name_key, validate_display_name, validate_new_password
-from .video_library import admin_delete_media_asset, list_admin_media_assets, list_user_video_items
+from .video_library import (
+    admin_delete_media_asset,
+    list_admin_media_assets,
+    list_admin_media_assets_page,
+    list_user_video_items,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -322,6 +329,13 @@ def _list_admin_media_videos(
     ]
     videos.sort(key=lambda row: row.get("created_at") or "", reverse=True)
     return videos
+
+
+def _cleanup_temp_file(path: str) -> None:
+    try:
+        Path(path).unlink(missing_ok=True)
+    except OSError:
+        logger.warning("删除临时文件失败: %s", path)
 
 
 def _update_meta_in_dir(dir_path: Path, updates: dict) -> None:
@@ -794,7 +808,17 @@ async def get_videos(
 
     has_media_assets = db.query(MediaAsset.id).first() is not None
     if has_media_assets:
-        videos = _list_admin_media_videos(db, admin, owner_user_id=owner_user_id, owner=owner)
+        return list_admin_media_assets_page(
+            db,
+            admin,
+            owner_user_id=owner_user_id,
+            owner=owner,
+            keyword=keyword,
+            source=source,
+            time_filter=time,
+            page=page,
+            per_page=per_page,
+        )
     else:
         download_dir = settings.get_download_dir()
         videos = _list_all_videos(download_dir)
@@ -1106,43 +1130,37 @@ async def export_zip(
             raise HTTPException(status_code=400, detail="缺少 filenames 参数")
     
     # 创建 ZIP 文件（流式）
-    import io
-    
-    def generate_zip():
-        buffer = io.BytesIO()
-        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-            for filename in filenames:
-                try:
-                    filepath = _validate_filename(filename, download_dir)
-                    if not filepath.is_file():
-                        logger.warning("导出 ZIP 时文件不存在: %s", filename)
-                        continue
-                    
-                    # 添加视频文件
-                    zf.write(filepath, filename)
-                    
-                    # 添加元数据
-                    meta_path = filepath.parent / "meta.json"
-                    if meta_path.exists():
-                        meta_name = f"{filepath.parent.name}/meta.json"
-                        zf.write(meta_path, meta_name)
-                    
-                    # 添加缩略图（如果存在）
-                    for f in filepath.parent.iterdir():
-                        if f.is_file() and f.name.startswith("thumbnail"):
-                            thumb_name = f"{filepath.parent.name}/{f.name}"
-                            zf.write(f, thumb_name)
-                
-                except Exception as e:
-                    logger.error("添加文件到 ZIP 失败 %s: %s", filename, e)
-        
-        buffer.seek(0)
-        yield buffer.read()
-    
-    return StreamingResponse(
-        generate_zip(),
+    temp_zip = tempfile.NamedTemporaryFile(prefix="gotube-export-", suffix=".zip", delete=False)
+    temp_zip_path = Path(temp_zip.name)
+    temp_zip.close()
+
+    with zipfile.ZipFile(temp_zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for filename in filenames:
+            try:
+                filepath = _validate_filename(filename, download_dir)
+                if not filepath.is_file():
+                    logger.warning("导出 ZIP 时文件不存在: %s", filename)
+                    continue
+
+                zf.write(filepath, filename)
+
+                meta_path = filepath.parent / "meta.json"
+                if meta_path.exists():
+                    meta_name = f"{filepath.parent.name}/meta.json"
+                    zf.write(meta_path, meta_name)
+
+                for f in filepath.parent.iterdir():
+                    if f.is_file() and f.name.startswith("thumbnail"):
+                        thumb_name = f"{filepath.parent.name}/{f.name}"
+                        zf.write(f, thumb_name)
+            except Exception as e:
+                logger.error("添加文件到 ZIP 失败 %s: %s", filename, e)
+
+    return FileResponse(
+        temp_zip_path,
         media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=\"gotube_export.zip\""},
+        filename="gotube_export.zip",
+        background=BackgroundTask(_cleanup_temp_file, str(temp_zip_path)),
     )
 
 

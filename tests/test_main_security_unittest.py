@@ -76,6 +76,11 @@ class MainSecurityRoutesTests(unittest.TestCase):
         self.assertEqual(headers.get('x-frame-options'), 'DENY')
         self.assertIn('default-src', headers.get('content-security-policy', ''))
 
+    def test_cors_configuration_does_not_use_wildcard_origins(self):
+        source = (settings.project_root / "server" / "main.py").read_text(encoding="utf-8")
+        self.assertNotIn('allow_origins=["*"]', source)
+        self.assertIn("allow_origins=settings.cors_allow_origins", source)
+
     def test_hidden_path_page_does_not_bypass_admin_auth(self):
         status, _headers, _body = asyncio.run(asgi_get(f'/{settings.hidden_path}/admin'))
         self.assertEqual(status, 200)
