@@ -52,6 +52,28 @@ window.GoTube.resolveHiddenPath(pathname, injectedHiddenPath)
 
 - `ensureScene`
 - `closeGalleryModal`
+- `bootstrap`
+
+### `window.GoTube.download`
+
+下载页模块统一收口到该对象下，当前允许暴露：
+
+- `bootstrap`
+- `retryTask`
+- `openModal`
+- `closeModal`
+- `copyShare`
+- `copyShareLink`
+- `downloadGuest`
+- `loadMyLibrary`
+- `logout`
+- `closeLoginModal`
+- `checkAndTransferGuestDownloads`
+
+说明：
+
+- 现阶段保留 `window.DownloadPage` 作为兼容别名。
+- 新 HTML 结构和新脚本不应继续直接依赖 `window.DownloadPage`，而应优先使用页面内部绑定或 `window.GoTube.download`。
 
 不要求把首页 Three.js 内部状态全部泄漏到全局。
 

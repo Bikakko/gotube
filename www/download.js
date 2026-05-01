@@ -7,6 +7,8 @@
     const $ = (s) => document.querySelector(s);
 
     const goTube = window.GoTube = window.GoTube || {};
+    goTube.download = goTube.download || {};
+    const downloadPage = goTube.download;
     const session = goTube.session || window.GoTubeSession;
     let clientId = session.getDownloadClientId();
     const hiddenPath = typeof goTube.resolveHiddenPath === 'function'
@@ -1073,8 +1075,8 @@
         });
     }
 
-    // 暴露全局 API
-    window.DownloadPage = {
+    downloadPage.bootstrap = init;
+    Object.assign(downloadPage, {
         retryTask,
         openModal,
         closeModal,
@@ -1085,7 +1087,9 @@
         logout,
         closeLoginModal,
         checkAndTransferGuestDownloads
-    };
+    });
+    // 兼容旧调试/外部调用入口；HTML 已不再依赖该全局别名。
+    window.DownloadPage = downloadPage;
 
     // ========== 登录相关功能 ==========
 

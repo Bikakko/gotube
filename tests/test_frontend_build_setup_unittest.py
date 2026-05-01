@@ -69,12 +69,15 @@ class FrontendBuildSetupTests(unittest.TestCase):
         self.assertIn('window.GoTube = window.GoTube || {};', common)
         self.assertIn('window.GoTube.session = window.GoTubeSession;', common)
         self.assertIn('const goTube = window.GoTube = window.GoTube || {};', download)
+        self.assertIn('goTube.download = goTube.download || {};', download)
         self.assertIn('const goTube = window.GoTube = window.GoTube || {};', index)
 
     def test_download_script_centralizes_page_event_binding(self):
         download = DOWNLOAD_JS.read_text(encoding='utf-8')
         self.assertIn('function bindEventHandlers()', download)
         self.assertIn("document.addEventListener('keydown'", download)
+        self.assertIn('downloadPage.bootstrap = init;', download)
+        self.assertIn('window.DownloadPage = downloadPage;', download)
 
     def test_home_script_uses_explicit_bootstrap_and_lifecycle_helpers(self):
         index = INDEX_JS.read_text(encoding='utf-8')
