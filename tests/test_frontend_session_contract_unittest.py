@@ -26,7 +26,7 @@ class FrontendSessionContractTests(unittest.TestCase):
 
     def test_pages_use_shared_session_helper_for_auth_client_cleanup(self):
         for path in [
-            "www/download.js",
+            "www/download/page.js",
             "www/admin/js/auth.js",
             "www/admin/js/users.js",
             "www/shared/common.js",
@@ -37,22 +37,22 @@ class FrontendSessionContractTests(unittest.TestCase):
                 self.assertNotIn("gotube_authenticated_client", source, path)
 
     def test_download_page_loads_common_helpers_before_download_script(self):
-        html = read_text("www/download.html")
+        html = read_text("www/download/index.html")
         common_idx = html.find("/static/shared/common.js")
-        download_idx = html.find("/static/download.js")
+        download_idx = html.find("/static/download/page.js")
 
         self.assertGreaterEqual(common_idx, 0)
         self.assertGreater(download_idx, common_idx)
 
     def test_guest_completed_task_can_play_without_share_hash(self):
-        source = read_text("www/download.js")
+        source = read_text("www/download/page.js")
 
         self.assertIn("const canPlayGuestFile", source)
         self.assertIn("if (!t || (!canPlayGuestFile && !canPlaySharedFile)) return;", source)
         self.assertIn("if (canPlayGuestFile)", source)
 
     def test_download_page_treats_admin_as_library_user(self):
-        source = read_text("www/download.js")
+        source = read_text("www/download/page.js")
 
         self.assertIn("function isLibraryUser()", source)
         self.assertIn("return isLoggedIn && currentUser && (currentUser.role === 'user' || currentUser.role === 'admin');", source)
@@ -60,7 +60,7 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("section.style.display = isLibraryUser() ? 'block' : 'none';", source)
 
     def test_download_page_archives_completed_library_tasks_but_keeps_guest_cards(self):
-        source = read_text("www/download.js")
+        source = read_text("www/download/page.js")
 
         self.assertIn("function shouldArchiveTaskCard(task)", source)
         self.assertIn("&& isLibraryUser()", source)
@@ -70,12 +70,12 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("tasks[task.task_id] = task;", source)
 
     def test_download_page_renders_cancelled_status(self):
-        source = read_text("www/download.js")
+        source = read_text("www/download/page.js")
 
         self.assertIn("status-cancelled", source)
 
     def test_download_input_is_marked_as_non_auth_field(self):
-        html = read_text("www/download.html")
+        html = read_text("www/download/index.html")
 
         self.assertIn('id="download-form"', html)
         self.assertIn('id="url-input"', html)
@@ -85,7 +85,7 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn('spellcheck="false"', html)
 
     def test_logout_checks_active_downloads_before_clearing_session(self):
-        source = read_text("www/download.js")
+        source = read_text("www/download/page.js")
 
         self.assertIn("getActiveDownloads", source)
         self.assertIn("/api/tasks/active", source)
@@ -93,14 +93,14 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("/api/tasks/cancel-active", source)
 
     def test_logout_active_download_prompt_allows_staying_logged_in(self):
-        source = read_text("www/download.js")
+        source = read_text("www/download/page.js")
 
         self.assertIn("confirmLogoutWithActiveDownloads", source)
         self.assertIn("logoutAction === 'stay'", source)
 
     def test_download_page_exposes_profile_and_password_controls(self):
-        html = read_text("www/download.html")
-        source = read_text("www/download.js")
+        html = read_text("www/download/index.html")
+        source = read_text("www/download/page.js")
 
         self.assertIn('id="profile-btn"', html)
         self.assertIn('id="password-btn"', html)
@@ -112,8 +112,8 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("promptChangePassword", source)
 
     def test_download_page_exposes_actionable_error_model(self):
-        html = read_text("www/download.html")
-        source = read_text("www/download.js")
+        html = read_text("www/download/index.html")
+        source = read_text("www/download/page.js")
 
         self.assertIn('id="actionable-error"', html)
         self.assertIn('id="actionable-error-actions"', html)
@@ -122,7 +122,7 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("renderActionableErrorActions(", source)
 
     def test_download_page_routes_key_failures_to_actionable_error_model(self):
-        source = read_text("www/download.js")
+        source = read_text("www/download/page.js")
 
         self.assertIn("showLoginError(err.message ||", source)
         self.assertIn("showActionableError({", source)

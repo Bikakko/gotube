@@ -212,7 +212,7 @@ async def hidden_entry_redirect() -> RedirectResponse:
 @app.get(f"/{settings.hidden_path}", response_model=None)
 async def download_page() -> FileResponse | HTMLResponse:
     """下载页入口；隐藏路径只用于弱隐藏，访问控制仍依赖后端鉴权。"""
-    return _serve_html("download.html")
+    return _serve_html("download/index.html")
 
 
 @app.get(f"/{settings.hidden_path}/", response_model=None)
@@ -310,7 +310,7 @@ async def catch_all(
     否则返回 watch.html（分享链接进入）。
     """
     # 保护敏感页面
-    if filename in ("index.html", "home/index.html", "admin.html", "admin/admin.html", "download.html"):
+    if filename in ("index.html", "home/index.html", "admin.html", "admin/admin.html", "download.html", "download/index.html"):
         raise HTTPException(status_code=404, detail="Not Found")
 
     # 从 www 目录提供静态文件

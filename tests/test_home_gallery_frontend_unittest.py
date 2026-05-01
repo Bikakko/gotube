@@ -64,7 +64,7 @@ class HomeGalleryFrontendTests(unittest.TestCase):
     def test_index_script_drives_gallery_and_modal_navigation(self):
         source = read_text("www/home/page.js")
         common = read_text("www/shared/common.js")
-        download = read_text("www/download.js")
+        download = read_text("www/download/page.js")
 
         for marker in [
             "loadAlbums",

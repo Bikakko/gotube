@@ -10,9 +10,9 @@ PACKAGE_JSON = ROOT / 'package.json'
 BUILD_SCRIPT = ROOT / 'build.js'
 MAIN_PY = ROOT / 'server' / 'main.py'
 ADMIN_HTML = ROOT / 'www' / 'admin' / 'admin.html'
-DOWNLOAD_HTML = ROOT / 'www' / 'download.html'
+DOWNLOAD_HTML = ROOT / 'www' / 'download' / 'index.html'
 COMMON_JS = ROOT / 'www' / 'shared' / 'common.js'
-DOWNLOAD_JS = ROOT / 'www' / 'download.js'
+DOWNLOAD_JS = ROOT / 'www' / 'download' / 'page.js'
 INDEX_HTML = ROOT / 'www' / 'home' / 'index.html'
 INDEX_JS = ROOT / 'www' / 'home' / 'page.js'
 
@@ -55,7 +55,7 @@ class FrontendBuildSetupTests(unittest.TestCase):
     def test_download_html_uses_runtime_asset_version_placeholder(self):
         html = DOWNLOAD_HTML.read_text(encoding='utf-8')
         self.assertIn('/static/shared/common.js?v={{ASSET_VERSION}}', html)
-        self.assertIn('/static/download.js?v={{ASSET_VERSION}}', html)
+        self.assertIn('/static/download/page.js?v={{ASSET_VERSION}}', html)
 
     def test_download_html_avoids_inline_behavior_handlers(self):
         html = DOWNLOAD_HTML.read_text(encoding='utf-8')
@@ -97,6 +97,10 @@ class FrontendBuildSetupTests(unittest.TestCase):
     def test_server_root_page_reads_home_index_html(self):
         main_py = MAIN_PY.read_text(encoding='utf-8')
         self.assertIn('return _serve_html("home/index.html")', main_py)
+
+    def test_server_download_page_reads_download_index_html(self):
+        main_py = MAIN_PY.read_text(encoding='utf-8')
+        self.assertIn('return _serve_html("download/index.html")', main_py)
 
 
 if __name__ == '__main__':
