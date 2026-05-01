@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import HTTPException
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
 from server.admin_api import batch_delete_videos, change_password, get_user_library, get_videos, list_users, update_user
@@ -248,6 +248,32 @@ class AdminManagementTests(unittest.TestCase):
                 ["https://example.test/shared/1", "https://example.test/shared/2"],
             )
 
+    def test_get_videos_uses_batched_queries_for_media_assets(self):
+        with self.Session() as session:
+            admin = self._user(session, "admin", role="admin")
+            alice = self._user(session, "alice")
+            bob = self._user(session, "bob")
+            first_asset = self._asset(session, "Alpha", "aaaaaaaa")
+            second_asset = self._asset(session, "Beta", "bbbbbbbb")
+            self._item(session, alice, first_asset)
+            self._item(session, bob, second_asset)
+            self._source(session, first_asset, "https://example.test/alpha/1")
+            self._source(session, second_asset, "https://example.test/beta/1")
+
+            statements: list[str] = []
+
+            def _capture(_conn, _cursor, statement, _parameters, _context, _executemany):
+                statements.append(statement)
+
+            event.listen(session.bind, "before_cursor_execute", _capture)
+            try:
+                asyncio.run(get_videos(page=1, per_page=20, admin=admin, db=session))
+            finally:
+                event.remove(session.bind, "before_cursor_execute", _capture)
+
+            select_count = sum(1 for statement in statements if statement.lstrip().upper().startswith("SELECT"))
+            self.assertLessEqual(select_count, 5, statements)
+
     def test_batch_delete_videos_supports_media_asset_ids(self):
         with self.Session() as session:
             admin = self._user(session, "admin", role="admin")
@@ -285,6 +311,17 @@ class AdminManagementTests(unittest.TestCase):
                 asyncio.run(batch_delete_videos(request=request, admin=admin, db=session))
 
             self.assertEqual(ctx.exception.status_code, 400)
+
+    def test_batch_delete_videos_rejects_oversized_payload(self):
+        with self.Session() as session:
+            admin = self._user(session, "admin", role="admin")
+            request = self._JsonRequest({"media_asset_ids": list(range(101))})
+
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(batch_delete_videos(request=request, admin=admin, db=session))
+
+            self.assertEqual(ctx.exception.status_code, 400)
+            self.assertIn("最多", str(ctx.exception.detail))
 
     def test_get_videos_time_filter_handles_iso_created_at_strings(self):
         with self.Session() as session:

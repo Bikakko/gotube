@@ -1,59 +1,48 @@
 /**
  * GoTube 下载页 - 客户端脚本
  */
-(function () {
-    'use strict';
+import { $, attachVideoKeyboardControls, resolveHiddenPath, session } from "/static/shared/common.module.js";
 
-    const $ = (s) => document.querySelector(s);
+const goTube = window.GoTube = window.GoTube || {};
+goTube.download = goTube.download || {};
+const downloadPage = goTube.download;
+let clientId = session.getDownloadClientId();
+const hiddenPath = resolveHiddenPath(window.location.pathname, window.GOTUBE_HIDDEN_PATH);
 
-    const goTube = window.GoTube = window.GoTube || {};
-    goTube.download = goTube.download || {};
-    const downloadPage = goTube.download;
-    const session = goTube.session || window.GoTubeSession;
-    const attachVideoKeyboardControls = goTube.attachVideoKeyboardControls;
-    let clientId = session.getDownloadClientId();
-    const hiddenPath = typeof goTube.resolveHiddenPath === 'function'
-        ? goTube.resolveHiddenPath(window.location.pathname, window.GOTUBE_HIDDEN_PATH)
-        : (() => {
-            if (window.GOTUBE_HIDDEN_PATH) return window.GOTUBE_HIDDEN_PATH;
-            const parts = window.location.pathname.split('/').filter(Boolean);
-            return parts[0] || '';
-        })();
+// ── 匿名用户 Session 管理 ──
+// 使用 sessionStorage：刷新页面复用，关闭标签页后失效，避免旧路人 session 被新登录用户转存。
+session.dropLegacyGuestLocalStorage();
+let guestSessionId = session.getGuestSessionId();
+console.log('[Session] 当前 session:', guestSessionId);
 
-    // ── 匿名用户 Session 管理 ──
-    // 使用 sessionStorage：刷新页面复用，关闭标签页后失效，避免旧路人 session 被新登录用户转存。
-    session.dropLegacyGuestLocalStorage();
-    let guestSessionId = session.getGuestSessionId();
-    console.log('[Session] 当前 session:', guestSessionId);
+const tasks = {};
+let ws = null;
+let reconnectTimer = null;
+let wsGeneration = 0;
+let isLoggedIn = false;
+let currentUser = null;
+let myVideos = [];
+let myQuota = null;
+let libraryPage = 1;
+const libraryPageSize = 8;
+let modalVideoKeyboardCleanup = null;
 
-    const tasks = {};
-    let ws = null;
-    let reconnectTimer = null;
-    let wsGeneration = 0;
-    let isLoggedIn = false;
-    let currentUser = null;
-    let myVideos = [];
-    let myQuota = null;
-    let libraryPage = 1;
-    const libraryPageSize = 8;
-    let modalVideoKeyboardCleanup = null;
+function authHeaders(extra = {}) {
+    const token = localStorage.getItem('gotube_admin_token');
+    return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
+}
 
-    function authHeaders(extra = {}) {
-        const token = localStorage.getItem('gotube_admin_token');
-        return token ? { ...extra, 'Authorization': `Bearer ${token}` } : extra;
-    }
+function isRegularUser() {
+    return isLoggedIn && currentUser && currentUser.role === 'user';
+}
 
-    function isRegularUser() {
-        return isLoggedIn && currentUser && currentUser.role === 'user';
-    }
+function isLibraryUser() {
+    return isLoggedIn && currentUser && (currentUser.role === 'user' || currentUser.role === 'admin');
+}
 
-    function isLibraryUser() {
-        return isLoggedIn && currentUser && (currentUser.role === 'user' || currentUser.role === 'admin');
-    }
-
-    function isQuotaError(message = '') {
-        return /容量不足|quota/i.test(String(message || ''));
-    }
+function isQuotaError(message = '') {
+    return /容量不足|quota/i.test(String(message || ''));
+}
 
     function setStatus(msg, color = '#8b949e') {
         const el = $('#status');
@@ -836,7 +825,7 @@
         const list = $('#library-list');
         if (!section || !quotaInfo || !list) return;
 
-        section.style.display = isLibraryUser() ? 'block' : 'none';
+        section.hidden = !isLibraryUser();
         list.replaceChildren();
         if (!isLibraryUser()) {
             myVideos = [];
@@ -1234,10 +1223,10 @@
         if (sessionBar && sessionUser && adminLink) {
             sessionBar.classList.toggle('active', isLoggedIn);
             sessionUser.textContent = currentUser ? formatIdentityText(currentUser) : '';
-            adminLink.style.display = currentUser && currentUser.role === 'admin' ? 'inline-flex' : 'none';
+            adminLink.hidden = !(currentUser && currentUser.role === 'admin');
         }
-        if (profileBtn) profileBtn.style.display = isLoggedIn ? 'inline-flex' : 'none';
-        if (passwordBtn) passwordBtn.style.display = isRegularUser() ? 'inline-flex' : 'none';
+        if (profileBtn) profileBtn.hidden = !isLoggedIn;
+        if (passwordBtn) passwordBtn.hidden = !isRegularUser();
     }
 
     function handleLogoClick() {
@@ -1371,8 +1360,8 @@
     function switchAuthMode(mode) {
         const isRegister = mode === 'register';
         $('#auth-modal-title').textContent = isRegister ? '注册' : '登录';
-        $('#login-panel').style.display = isRegister ? 'none' : 'block';
-        $('#register-panel').style.display = isRegister ? 'block' : 'none';
+        $('#login-panel').hidden = isRegister;
+        $('#register-panel').hidden = !isRegister;
         $('#show-login-btn').classList.toggle('active', !isRegister);
         $('#show-register-btn').classList.toggle('active', isRegister);
         clearLoginError();
@@ -1667,4 +1656,3 @@
         }, duration);
     }
 
-})();

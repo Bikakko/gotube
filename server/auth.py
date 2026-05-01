@@ -1,12 +1,17 @@
 """Shared authentication dependencies and token helpers."""
 
 from datetime import UTC, datetime
+import time
 
 from fastapi import Depends, HTTPException, Request
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from .db import AuthToken, User, get_session
 from .user_profile import build_user_identity
+
+_TOKEN_CLEANUP_INTERVAL_SECONDS = 60.0
+_last_expired_token_cleanup_at = 0.0
 
 
 async def get_db():
@@ -17,17 +22,24 @@ async def get_db():
 
 def cleanup_expired_tokens(db: Session) -> None:
     """Mark expired auth tokens as inactive."""
+    global _last_expired_token_cleanup_at
+    now_monotonic = time.monotonic()
+    if now_monotonic - _last_expired_token_cleanup_at < _TOKEN_CLEANUP_INTERVAL_SECONDS:
+        return
+
     now = datetime.now(UTC)
-    expired_tokens = db.query(AuthToken).filter(
-        AuthToken.expires_at < now,
-        AuthToken.is_active == True,
-    ).all()
+    result = db.execute(
+        update(AuthToken)
+        .where(
+            AuthToken.expires_at < now,
+            AuthToken.is_active == True,
+        )
+        .values(is_active=False)
+    )
 
-    for auth_token in expired_tokens:
-        auth_token.is_active = False
-
-    if expired_tokens:
+    if result.rowcount:
         db.commit()
+    _last_expired_token_cleanup_at = now_monotonic
 
 
 def verify_token(db: Session, token: str | None) -> dict | None:
@@ -35,12 +47,18 @@ def verify_token(db: Session, token: str | None) -> dict | None:
     if not token:
         return None
 
-    auth_token = db.query(AuthToken).filter(
-        AuthToken.token == token,
-        AuthToken.is_active == True,
-    ).first()
-    if not auth_token:
+    row = (
+        db.query(AuthToken, User)
+        .join(User, User.id == AuthToken.user_id)
+        .filter(
+            AuthToken.token == token,
+            AuthToken.is_active == True,
+        )
+        .first()
+    )
+    if not row:
         return None
+    auth_token, user = row
 
     now = datetime.now(UTC)
     expires_at = auth_token.expires_at
@@ -52,8 +70,7 @@ def verify_token(db: Session, token: str | None) -> dict | None:
         db.commit()
         return None
 
-    user = db.query(User).filter(User.id == auth_token.user_id).first()
-    if not user or not user.is_active:
+    if not user.is_active:
         auth_token.is_active = False
         db.commit()
         return None
@@ -65,6 +82,7 @@ def verify_token(db: Session, token: str | None) -> dict | None:
         **build_user_identity(user),
         "user_id": user.id,
         "expiry": auth_token.expires_at.timestamp(),
+        "_user": user,
     }
 
 
@@ -90,7 +108,7 @@ async def get_current_user(
     if not payload:
         raise HTTPException(status_code=401, detail="Token 无效或已过期")
 
-    user = db.query(User).filter(User.id == payload["user_id"]).first()
+    user = payload.get("_user") or db.query(User).filter(User.id == payload["user_id"]).first()
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Token 无效或已过期")
     return user
@@ -110,7 +128,7 @@ async def get_optional_current_user(
     if not payload:
         return None
 
-    user = db.query(User).filter(User.id == payload["user_id"]).first()
+    user = payload.get("_user") or db.query(User).filter(User.id == payload["user_id"]).first()
     if not user or not user.is_active:
         return None
     return user

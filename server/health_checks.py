@@ -7,6 +7,7 @@ import shutil
 import sqlite3
 import subprocess
 import uuid
+from collections import deque
 from pathlib import Path
 from typing import Any
 
@@ -99,7 +100,10 @@ def read_runtime_logs(
         }
 
     try:
-        lines = resolved_log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        lines = deque(maxlen=limit)
+        with resolved_log_path.open("r", encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                lines.append(line.rstrip("\r\n"))
     except OSError:
         return {
             "type": log_type,

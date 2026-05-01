@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from pathlib import Path
+from urllib.parse import quote
 
 import anyio
 from fastapi import Request
@@ -9,7 +10,15 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 
 
 def _content_disposition(disposition_type: str, filename: str) -> str:
-    return f'{disposition_type}; filename="{filename}"'
+    cleaned = "".join(ch for ch in str(filename or "download") if ch not in "\r\n")
+    fallback = "".join(
+        ch if 32 <= ord(ch) < 127 and ch not in {'"', "\\", ";"} else "_"
+        for ch in cleaned
+    ).strip(" .")
+    if not fallback:
+        fallback = "download"
+    encoded = quote(cleaned or fallback, safe="")
+    return f'{disposition_type}; filename="{fallback}"; filename*=UTF-8\'\'{encoded}'
 
 
 def _parse_range_header(range_header: str, file_size: int) -> tuple[int, int] | None:

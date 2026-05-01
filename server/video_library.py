@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+from collections import defaultdict
 from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
@@ -244,20 +245,45 @@ def list_admin_media_assets(
             .distinct()
         )
 
-    rows: list[dict[str, Any]] = []
-    for asset in query.order_by(MediaAsset.created_at.desc()).all():
-        owner_rows = (
-            session.query(UserVideoItem, User)
-            .join(User, User.id == UserVideoItem.owner_user_id)
-            .filter(
-                UserVideoItem.media_asset_id == asset.id,
-                UserVideoItem.deleted_at.is_(None),
-            )
-            .order_by(UserVideoItem.saved_at.desc(), UserVideoItem.id.desc())
-            .all()
+    assets = query.order_by(MediaAsset.created_at.desc()).all()
+    if not assets:
+        return []
+
+    asset_ids = [asset.id for asset in assets]
+    owner_rows_by_asset: dict[int, list[tuple[UserVideoItem, User]]] = defaultdict(list)
+    for item, owner_user in (
+        session.query(UserVideoItem, User)
+        .join(User, User.id == UserVideoItem.owner_user_id)
+        .filter(
+            UserVideoItem.media_asset_id.in_(asset_ids),
+            UserVideoItem.deleted_at.is_(None),
         )
-        rows.append(_admin_media_asset_to_dict(session, asset, owner_rows))
-    return rows
+        .order_by(
+            UserVideoItem.media_asset_id.asc(),
+            UserVideoItem.saved_at.desc(),
+            UserVideoItem.id.desc(),
+        )
+        .all()
+    ):
+        owner_rows_by_asset[item.media_asset_id].append((item, owner_user))
+
+    source_rows_by_asset: dict[int, list[MediaSource]] = defaultdict(list)
+    for source_row in (
+        session.query(MediaSource)
+        .filter(MediaSource.media_asset_id.in_(asset_ids))
+        .order_by(MediaSource.media_asset_id.asc(), MediaSource.created_at.asc(), MediaSource.id.asc())
+        .all()
+    ):
+        source_rows_by_asset[source_row.media_asset_id].append(source_row)
+
+    return [
+        _admin_media_asset_to_dict(
+            asset,
+            owner_rows_by_asset.get(asset.id, []),
+            source_rows_by_asset.get(asset.id, []),
+        )
+        for asset in assets
+    ]
 
 
 def delete_user_video_item(
@@ -543,9 +569,9 @@ def _item_to_dict(item: UserVideoItem, asset: MediaAsset, owner: User) -> dict[s
 
 
 def _admin_media_asset_to_dict(
-    session: Session,
     asset: MediaAsset,
     owner_rows: list[tuple[UserVideoItem, User]],
+    source_rows: list[MediaSource],
 ) -> dict[str, Any]:
     owners = [
         {
@@ -562,12 +588,6 @@ def _admin_media_asset_to_dict(
     owner_count = len(owners)
     first_owner = owners[0] if owners else None
     first_enabled_share = next((owner for owner in owners if owner.get("share_enabled")), first_owner)
-    source_rows = (
-        session.query(MediaSource)
-        .filter(MediaSource.media_asset_id == asset.id)
-        .order_by(MediaSource.created_at.asc(), MediaSource.id.asc())
-        .all()
-    )
     source_urls = [row.source_url for row in source_rows if row.source_url]
     source_count = len(source_urls)
     source_url = asset.source_url or ""

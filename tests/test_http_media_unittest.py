@@ -66,6 +66,25 @@ def _make_request(range_header: str | None = None) -> Request:
 
 
 class HttpMediaTests(unittest.TestCase):
+    def test_content_disposition_escapes_unsafe_filename_characters(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sample.mp4"
+            path.write_bytes(b"0123456789")
+            request = _make_request()
+
+            response = build_video_stream_response(
+                request,
+                path,
+                filename='evil"\r\nX-Test: injected.mp4',
+            )
+            status, headers, _body = asyncio.run(_render_response(response))
+
+            disposition = headers.get("content-disposition", "")
+            self.assertEqual(status, 200)
+            self.assertNotIn("\r", disposition)
+            self.assertNotIn("\n", disposition)
+            self.assertIn("filename*=", disposition)
+
     def test_range_request_returns_partial_content(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "sample.mp4"

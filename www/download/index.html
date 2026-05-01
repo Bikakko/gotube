@@ -5,309 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GoTube - 下载</title>
     <link rel="icon" href="/static/shared/images/favicon.jpg" type="image/jpeg">
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: #0d1117;
-            color: #e6edf3;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            padding: 40px 16px;
-        }
-        .container { width: 100%; max-width: 640px; }
-        .logo {
-            text-align: center;
-            font-size: 32px;
-            font-weight: bold;
-            margin-bottom: 30px;
-        }
-        .logo a {
-            color: inherit;
-            text-decoration: none;
-            transition: all 0.2s ease;
-            display: inline-block;
-            padding: 6px 12px;
-            border-radius: 8px;
-            position: relative;
-        }
-        .logo a:hover {
-            background: rgba(230, 33, 23, 0.1);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(230, 33, 23, 0.25);
-        }
-        .logo a:active { transform: translateY(0); box-shadow: none; }
-        .logo a.logged-in { color: #3fb950; }
-        .logo a.logged-in:hover {
-            background: rgba(63, 185, 80, 0.1);
-            box-shadow: 0 4px 12px rgba(63, 185, 80, 0.25);
-        }
-        .input-row { display: flex; gap: 10px; margin-bottom: 16px; }
-        #url-input {
-            flex: 1; padding: 14px 16px; border-radius: 8px;
-            border: 1px solid #30363d; background: #161b22; color: #e6edf3;
-            font-size: 16px; outline: none;
-        }
-        #url-input:focus { border-color: #e62117; }
-        #dl-btn {
-            padding: 14px 28px; border-radius: 8px; border: none;
-            background: #e62117; color: #fff; font-size: 16px;
-            font-weight: bold; cursor: pointer; white-space: nowrap;
-        }
-        #dl-btn:hover { background: #ff3325; }
-        #dl-btn:disabled { background: #333; cursor: not-allowed; }
-        #status { text-align: center; font-size: 14px; color: #8b949e; min-height: 20px; margin-bottom: 20px; }
-        .actionable-error {
-            display: none;
-            margin: -8px 0 18px;
-            padding: 12px 14px;
-            border: 1px solid rgba(248, 81, 73, 0.45);
-            border-radius: 8px;
-            background: rgba(248, 81, 73, 0.08);
-            color: #f85149;
-        }
-        .actionable-error.active { display: block; }
-        .actionable-error-message {
-            font-size: 13px;
-            line-height: 1.5;
-        }
-        .actionable-error-actions {
-            display: flex;
-            justify-content: center;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-top: 10px;
-        }
-        .task {
-            background: #161b22; border: 1px solid #30363d;
-            border-radius: 8px; padding: 16px; margin-bottom: 10px;
-        }
-        .task-title { font-size: 14px; margin-bottom: 8px; word-break: break-all; }
-        .task-status { font-size: 12px; font-weight: bold; }
-        .status-pending { color: #d29922; }
-        .status-downloading { color: #58a6ff; }
-        .status-completed, .status-duplicate { color: #3fb950; }
-        .status-failed { color: #f85149; }
-        .progress-bg { height: 6px; background: #21262d; border-radius: 3px; overflow: hidden; margin: 8px 0; }
-        .progress-fill { height: 100%; background: #58a6ff; border-radius: 3px; transition: width 0.4s; }
-        .progress-info { display: flex; justify-content: space-between; font-size: 12px; color: #8b949e; }
-        .task-actions { margin-top: 10px; display: flex; gap: 8px; justify-content: center; }
-        .task-btn {
-            padding: 6px 14px; border-radius: 6px; border: 1px solid;
-            background: transparent; font-size: 12px; cursor: pointer;
-        }
-        .task-btn.retry { border-color: #a371f7; color: #a371f7; }
-        .task-btn.retry:hover { background: #a371f7; color: #0d1117; }
-        .task-btn.play { border-color: #3fb950; color: #3fb950; }
-        .task-btn.play:hover { background: #3fb950; color: #0d1117; }
-        .task-btn.download { border-color: #3fb950; color: #3fb950; }
-        .task-btn.download:hover { background: #3fb950; color: #0d1117; }
-        .task-btn.share { border-color: #58a6ff; color: #58a6ff; }
-        .task-btn.share:hover { background: #58a6ff; color: #0d1117; }
-        .task-btn.danger { border-color: #f85149; color: #f85149; }
-        .task-btn.danger:hover { background: #f85149; color: #0d1117; }
-        .task-btn.secondary { border-color: #8b949e; color: #8b949e; }
-        .task-btn.secondary:hover { background: #8b949e; color: #0d1117; }
-        .task-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        .session-bar {
-            position: fixed;
-            top: 16px;
-            right: 16px;
-            z-index: 90;
-            display: none;
-            justify-content: flex-end;
-            align-items: center;
-            gap: 10px;
-            max-width: calc(100vw - 32px);
-            padding: 8px 10px;
-            background: rgba(22, 27, 34, 0.94);
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
-            color: #8b949e;
-            font-size: 13px;
-        }
-        .session-bar.active { display: flex; }
-        .session-bar > span {
-            max-width: 220px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .library-section {
-            margin-top: 28px;
-            border-top: 1px solid #30363d;
-            padding-top: 20px;
-        }
-        .library-header {
-            display: flex;
-            justify-content: space-between;
-            gap: 12px;
-            align-items: flex-start;
-            margin-bottom: 14px;
-        }
-        .library-header h2 { font-size: 18px; margin-bottom: 6px; }
-        .quota-info { font-size: 13px; color: #8b949e; }
-        .library-item {
-            background: #161b22;
-            border: 1px solid #30363d;
-            border-radius: 8px;
-            padding: 14px;
-            margin-bottom: 10px;
-            display: grid;
-            grid-template-columns: 112px 1fr;
-            gap: 12px;
-        }
-        .library-thumb {
-            width: 112px;
-            aspect-ratio: 16 / 9;
-            border-radius: 6px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            object-fit: cover;
-        }
-        .library-thumb-empty {
-            width: 112px;
-            aspect-ratio: 16 / 9;
-            border-radius: 6px;
-            background: #0d1117;
-            border: 1px solid #30363d;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #8b949e;
-        }
-        .library-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; word-break: break-word; }
-        .library-meta { font-size: 12px; color: #8b949e; margin-bottom: 10px; }
-        .library-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-        .library-pager {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            margin-top: 14px;
-            color: #8b949e;
-            font-size: 13px;
-        }
-        .empty-library { color: #8b949e; font-size: 14px; text-align: center; padding: 18px; }
-        @media (max-width: 520px) {
-            .library-item { grid-template-columns: 1fr; }
-            .library-thumb, .library-thumb-empty { width: 100%; }
-        }
-        /* 播放模态框 */
-        .modal {
-            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85); z-index: 1000; align-items: center; justify-content: center;
-        }
-        .modal.active { display: flex; }
-        .modal-content {
-            width: 90%; max-width: 800px; max-height: 90vh; background: #161b22;
-            border-radius: 12px; overflow-y: auto; display: flex; flex-direction: column;
-        }
-        .modal-header {
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 12px 16px; border-bottom: 1px solid #30363d; flex-shrink: 0;
-        }
-        .modal-header h3 { font-size: 14px; flex: 1; margin-right: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .modal-close { background: none; border: none; color: #8b949e; font-size: 24px; cursor: pointer; padding: 4px; }
-        .modal-close:hover { color: #fff; }
-        .modal-body { flex-shrink: 0; }
-        .modal-body video { width: 100%; max-height: 60vh; display: block; background: #000; }
-        .modal-footer {
-            padding: 12px 16px; display: flex; justify-content: center; gap: 12px;
-            border-top: 1px solid #30363d; flex-shrink: 0;
-        }
-        .modal-btn {
-            padding: 8px 18px; border-radius: 6px; border: 1px solid; background: transparent;
-            font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
-        }
-        .modal-btn.share { border-color: #58a6ff; color: #58a6ff; }
-        .modal-btn.share:hover { background: #58a6ff; color: #0d1117; }
-        .auth-modal { max-width: 400px; }
-        .auth-body { padding: 20px; }
-        .auth-tabs {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 16px;
-        }
-        .auth-tab {
-            flex: 1;
-            padding: 8px;
-            border-radius: 6px;
-            border: 1px solid #30363d;
-            background: transparent;
-            color: #e6edf3;
-            cursor: pointer;
-        }
-        .auth-tab.active {
-            border-color: #58a6ff;
-            background: #58a6ff;
-            color: #0d1117;
-        }
-        .auth-field { margin-bottom: 16px; }
-        .auth-input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #30363d;
-            background: #0d1117;
-            color: #e6edf3;
-            border-radius: 6px;
-            font-size: 14px;
-        }
-        .auth-input:focus {
-            outline: none;
-            border-color: #58a6ff;
-        }
-        .auth-error {
-            color: #f85149;
-            font-size: 13px;
-            text-align: center;
-            min-height: 20px;
-            margin-bottom: 10px;
-        }
-        .auth-error-actions {
-            display: flex;
-            justify-content: center;
-            gap: 8px;
-            flex-wrap: wrap;
-            min-height: 34px;
-            margin-bottom: 12px;
-        }
-        .auth-submit {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 6px;
-            color: #fff;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .auth-submit.login { background: #e62117; }
-        .auth-submit.login:hover { background: #ff3325; }
-        .auth-submit.register { background: #238636; }
-        .auth-submit.register:hover { background: #2ea043; }
-        .auth-submit:disabled { opacity: 0.6; cursor: not-allowed; }
-        @media (max-width: 700px) {
-            .session-bar {
-                left: 16px;
-                right: 16px;
-                justify-content: space-between;
-            }
-            .session-bar > span { max-width: 46vw; }
-        }
-    </style>
+    <link rel="stylesheet" href="/static/download/page.css?v={{ASSET_VERSION}}">
 </head>
 <body>
     <div class="container">
         <div class="logo">🎬 <a href="#" id="logo-link" title="点击登录">GoTube</a></div>
         <div id="session-bar" class="session-bar">
             <span id="session-user"></span>
-            <div>
-                <button id="profile-btn" type="button" class="task-btn secondary" style="display:none;">&#20462;&#25913;&#26165;&#31216;</button>
-                <button id="password-btn" type="button" class="task-btn secondary" style="display:none;">&#20462;&#25913;&#23494;&#30721;</button>
-                <button id="admin-link-btn" type="button" class="task-btn secondary" style="display:none;">管理后台</button>
+            <div class="session-actions">
+                <button id="profile-btn" type="button" class="task-btn secondary" hidden>&#20462;&#25913;&#26165;&#31216;</button>
+                <button id="password-btn" type="button" class="task-btn secondary" hidden>&#20462;&#25913;&#23494;&#30721;</button>
+                <button id="admin-link-btn" type="button" class="task-btn secondary" hidden>管理后台</button>
                 <button id="logout-btn" type="button" class="task-btn danger">退出登录</button>
             </div>
         </div>
@@ -330,7 +38,7 @@
             <div id="actionable-error-actions" class="actionable-error-actions"></div>
         </div>
         <div id="task-list"></div>
-        <section id="library-section" class="library-section" style="display:none;">
+        <section id="library-section" class="library-section" hidden>
             <div class="library-header">
                 <div>
                     <h2>我的视频库</h2>
@@ -379,7 +87,7 @@
                     <div id="login-error-actions" class="auth-error-actions"></div>
                     <button id="login-submit-btn" type="button" class="auth-submit login">登录</button>
                 </form>
-                <form id="register-panel" style="display: none;" autocomplete="off">
+                <form id="register-panel" hidden autocomplete="off">
                     <div class="auth-field">
                         <input class="auth-input" type="text" id="register-username" name="register_username" placeholder="用户名，3-32 位字母/数字/_/-" autocomplete="username">
                     </div>
@@ -399,7 +107,6 @@
         </div>
     </div>
 
-    <script src="/static/shared/common.js?v={{ASSET_VERSION}}"></script>
-    <script src="/static/download/page.js?v={{ASSET_VERSION}}"></script>
+    <script type="module" src="/static/download/page.js?v={{ASSET_VERSION}}"></script>
 </body>
 </html>

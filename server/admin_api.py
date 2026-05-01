@@ -51,6 +51,7 @@ from .video_library import admin_delete_media_asset, list_admin_media_assets, li
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+_BATCH_DELETE_LIMIT = 100
 
 
 def get_local_timezone() -> ZoneInfo | timezone:
@@ -58,6 +59,11 @@ def get_local_timezone() -> ZoneInfo | timezone:
         return ZoneInfo("Asia/Shanghai")
     except Exception:
         return timezone(timedelta(hours=8))
+
+
+def _raise_internal_admin_error(user_message: str, exc: Exception) -> None:
+    logger.exception("%s: %s", user_message, exc)
+    raise HTTPException(status_code=500, detail=user_message) from exc
 
 
 # ── Token 管理 ──
@@ -572,14 +578,14 @@ async def create_user(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
-    """??????"""
+    """创建普通用户账号。"""
     if body.role == "admin":
         raise HTTPException(
             status_code=403,
-            detail="????????????????? .env ??????",
+            detail="管理员账号只能通过 .env 配置管理",
         )
     if db.query(User).filter(User.username == body.username).first():
-        raise HTTPException(status_code=400, detail="??????")
+        raise HTTPException(status_code=400, detail="用户名已存在")
 
     import bcrypt
 
@@ -607,10 +613,10 @@ async def update_user(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
-    """???????"""
+    """更新用户资料与角色信息。"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="?????")
+        raise HTTPException(status_code=404, detail="用户不存在")
 
     fields_set = body.model_fields_set if hasattr(body, "model_fields_set") else getattr(body, "__fields_set__", set())
     if user.role == "admin":
@@ -618,13 +624,13 @@ async def update_user(
         if forbidden:
             raise HTTPException(
                 status_code=403,
-                detail="???????????????????? .env ????",
+                detail="管理员账号仅允许修改昵称，其他信息请通过 .env 管理",
             )
 
     if body.username:
         existing = db.query(User).filter(User.username == body.username).first()
         if existing and existing.id != user_id:
-            raise HTTPException(status_code=400, detail="??????")
+            raise HTTPException(status_code=400, detail="用户名已存在")
         user.username = body.username
 
     if body.display_name is not None:
@@ -635,7 +641,7 @@ async def update_user(
         if body.role == "admin":
             raise HTTPException(
                 status_code=403,
-                detail="????????????????? .env ??????",
+                detail="管理员账号只能通过 .env 配置管理",
             )
         user.role = body.role
 
@@ -683,20 +689,20 @@ async def change_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> dict:
-    """?????????????"""
+    """管理员重置普通用户密码，或普通用户修改自己的密码。"""
     is_admin = current_user.role == "admin"
     is_self = current_user.id == user_id
 
     if not (is_admin or is_self):
-        raise HTTPException(status_code=403, detail="????")
+        raise HTTPException(status_code=403, detail="权限不足")
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="?????")
+        raise HTTPException(status_code=404, detail="用户不存在")
     if user.role == "admin":
         raise HTTPException(
             status_code=403,
-            detail="??????????????? .env ??????",
+            detail="管理员密码仅允许通过 .env 配置修改",
         )
 
     import bcrypt
@@ -710,7 +716,7 @@ async def change_password(
 
     if not is_admin:
         if not body.old_password or not bcrypt.checkpw(body.old_password.encode("utf-8"), user.password_hash.encode("utf-8")):
-            raise HTTPException(status_code=400, detail="?????")
+            raise HTTPException(status_code=400, detail="当前密码错误")
 
     user.password_hash = bcrypt.hashpw(new_password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     db.flush()
@@ -866,7 +872,7 @@ async def delete_video(
         logger.info("已删除视频文件: %s", filepath)
     except OSError as e:
         logger.error("删除视频文件失败: %s, 错误: %s", filepath, e)
-        raise HTTPException(status_code=500, detail=f"删除文件失败: {e}") from e
+        raise HTTPException(status_code=500, detail="删除文件失败") from e
     
     # 删除元数据
     meta_path = parent_dir / "meta.json"
@@ -950,6 +956,8 @@ async def batch_delete_videos(
         raise HTTPException(status_code=400, detail="filenames 必须是数组")
     if not media_asset_ids and not filenames:
         raise HTTPException(status_code=400, detail="缺少 media_asset_ids 或 filenames 参数")
+    if len(media_asset_ids) > _BATCH_DELETE_LIMIT or len(filenames) > _BATCH_DELETE_LIMIT:
+        raise HTTPException(status_code=400, detail=f"批量删除最多允许 {_BATCH_DELETE_LIMIT} 项")
 
     results = []
 
@@ -972,8 +980,9 @@ async def batch_delete_videos(
                     "status": "error",
                     "reason": e.detail if isinstance(e.detail, str) else "删除失败",
                 })
-            except Exception as e:
-                results.append({"media_asset_id": raw_media_asset_id, "status": "error", "reason": str(e)})
+            except Exception:
+                logger.exception("批量维护删除媒体资产失败: id=%s", raw_media_asset_id)
+                results.append({"media_asset_id": raw_media_asset_id, "status": "error", "reason": "删除失败"})
     else:
         download_dir = settings.get_download_dir()
         for filename in filenames:
@@ -1535,8 +1544,7 @@ def _reload_cookies_in_downloader(cookies_path: Path | None) -> None:
         qm = _get_queue_manager()
         qm.downloader.reload_cookies(cookies_path if cookies_path and cookies_path.exists() else None)
     except Exception as e:
-        logger.error("热重载 cookies 失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"热重载 cookies 失败: {e}") from e
+        _raise_internal_admin_error("热重载 cookies 失败", e)
 
 
 @router.get("/cookies/status")
@@ -1585,8 +1593,7 @@ async def get_cookies_status(
             "diagnostics": diagnose_cookie_content(content),
         }
     except Exception as e:
-        logger.error("获取 cookies 状态失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"获取 cookies 状态失败: {e}") from e
+        _raise_internal_admin_error("获取 cookies 状态失败", e)
 
 
 @router.get("/runtime/health")
@@ -1654,8 +1661,7 @@ async def check_cookies_merge(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("预检查 cookies 失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"预检查失败: {e}") from e
+        _raise_internal_admin_error("预检查失败", e)
 
 
 @router.post("/cookies/upload")
@@ -1758,8 +1764,7 @@ async def upload_cookies(
             set_runtime_cookies_source("upload")
             logger.info("cookies 文件已更新: %s (%d bytes, %s)", cookies_path, len(final_content), mode_message)
         except Exception as e:
-            logger.error("保存 cookies 失败: %s", e)
-            raise HTTPException(status_code=500, detail=f"保存 cookies 失败: {e}") from e
+            _raise_internal_admin_error("保存 cookies 失败", e)
 
         # 热重载下载器
         _reload_cookies_in_downloader(cookies_path)
@@ -1781,8 +1786,7 @@ async def upload_cookies(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("上传 cookies 失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"上传 cookies 失败: {e}") from e
+        _raise_internal_admin_error("上传 cookies 失败", e)
 
 
 @router.delete("/cookies")
@@ -1817,6 +1821,5 @@ async def delete_cookies(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error("删除 cookies 失败: %s", e)
-        raise HTTPException(status_code=500, detail=f"删除 cookies 失败: {e}") from e
+        _raise_internal_admin_error("删除 cookies 失败", e)
 

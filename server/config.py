@@ -7,6 +7,7 @@ GoTube 配置管理
 """
 
 import sys
+import re
 from pathlib import Path
 
 from dotenv import dotenv_values
@@ -64,12 +65,28 @@ def _b(key: str, default: bool) -> bool:
     return val.strip().lower() in ("1", "true", "yes", "on")
 
 
+_HIDDEN_PATH_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def validate_hidden_path(value: str) -> str:
+    """Validate the configured hidden-path segment."""
+    candidate = value or ""
+    if not _HIDDEN_PATH_PATTERN.fullmatch(candidate):
+        raise ValueError("hidden_path 仅允许 1-64 位字母、数字、下划线或短横线")
+    return candidate
+
+
 # ── 读取所有配置项 ──
 
 _project_root: Path = Path(__file__).parent.parent
 
 _port: int = _i("GOTUBE_PORT", required=True, min_val=1, max_val=65535)
-_hidden_path: str = _s("GOTUBE_HIDDEN_PATH", required=True)
+_hidden_path_raw: str = _s("GOTUBE_HIDDEN_PATH", required=True)
+try:
+    _hidden_path: str = validate_hidden_path(_hidden_path_raw)
+except ValueError as exc:
+    _errors.append(f"  GOTUBE_HIDDEN_PATH = '{_hidden_path_raw}' ({exc})")
+    _hidden_path = _hidden_path_raw
 _max_concurrent: int = _i("GOTUBE_MAX_CONCURRENT", required=True, min_val=1, max_val=20)
 _download_dir: str = _s("GOTUBE_DOWNLOAD_DIR", required=True)
 _www_dir: str = _s("GOTUBE_WWW_DIR", default="www")

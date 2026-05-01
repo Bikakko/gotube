@@ -155,6 +155,9 @@ def init_db(db_path: str) -> None:
     global _engine, _SessionLocal
     logger.info("初始化数据库: %s", db_path)
     _engine = create_engine(f"sqlite:///{db_path}", pool_pre_ping=True)
+    with _engine.connect() as conn:
+        conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+        conn.exec_driver_sql("PRAGMA synchronous=NORMAL")
     _SessionLocal = sessionmaker(bind=_engine)
     Base.metadata.create_all(_engine)  # 自动建表（不存在的表才创建）
     from .config import settings

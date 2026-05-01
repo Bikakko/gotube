@@ -10,6 +10,7 @@ from typing import Any
 
 import bcrypt
 from fastapi import HTTPException
+from sqlalchemy import or_, update
 from sqlalchemy.orm import Session
 
 from .db import InviteCode, User
@@ -86,9 +87,22 @@ def consume_invite(session: Session, code: str) -> InviteCode:
     if invite.used_count >= invite.max_uses:
         raise HTTPException(status_code=400, detail="邀请码已用完")
 
-    invite.used_count += 1
+    now = datetime.now(UTC)
+    result = session.execute(
+        update(InviteCode)
+        .where(
+            InviteCode.id == invite.id,
+            InviteCode.is_active == True,
+            or_(InviteCode.expires_at.is_(None), InviteCode.expires_at >= now),
+            InviteCode.used_count < InviteCode.max_uses,
+        )
+        .values(used_count=InviteCode.used_count + 1)
+    )
+    if result.rowcount != 1:
+        raise HTTPException(status_code=400, detail="邀请码已失效")
+
     session.flush()
-    return invite
+    return session.query(InviteCode).filter(InviteCode.id == invite.id).one()
 
 
 def register_user_with_invite(

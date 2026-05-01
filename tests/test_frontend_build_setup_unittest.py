@@ -12,7 +12,9 @@ MAIN_PY = ROOT / 'server' / 'main.py'
 ADMIN_HTML = ROOT / 'www' / 'admin' / 'index.html'
 DOWNLOAD_HTML = ROOT / 'www' / 'download' / 'index.html'
 COMMON_JS = ROOT / 'www' / 'shared' / 'common.js'
+COMMON_MODULE_JS = ROOT / 'www' / 'shared' / 'common.module.js'
 DOWNLOAD_JS = ROOT / 'www' / 'download' / 'page.js'
+DOWNLOAD_CSS = ROOT / 'www' / 'download' / 'page.css'
 INDEX_HTML = ROOT / 'www' / 'home' / 'index.html'
 INDEX_JS = ROOT / 'www' / 'home' / 'page.js'
 WATCH_HTML = ROOT / 'www' / 'watch' / 'index.html'
@@ -56,14 +58,20 @@ class FrontendBuildSetupTests(unittest.TestCase):
 
     def test_download_html_uses_runtime_asset_version_placeholder(self):
         html = DOWNLOAD_HTML.read_text(encoding='utf-8')
-        self.assertIn('/static/shared/common.js?v={{ASSET_VERSION}}', html)
-        self.assertIn('/static/download/page.js?v={{ASSET_VERSION}}', html)
+        self.assertIn('/static/download/page.css?v={{ASSET_VERSION}}', html)
+        self.assertIn('type="module" src="/static/download/page.js?v={{ASSET_VERSION}}"', html)
+        self.assertNotIn('<style>', html)
+
+    def test_download_frontend_assets_exist(self):
+        self.assertTrue(DOWNLOAD_CSS.exists())
+        self.assertTrue(COMMON_MODULE_JS.exists())
 
     def test_download_html_avoids_inline_behavior_handlers(self):
         html = DOWNLOAD_HTML.read_text(encoding='utf-8')
         self.assertNotIn('onclick=', html)
         self.assertNotIn('onsubmit=', html)
         self.assertNotIn('onkeypress=', html)
+        self.assertNotIn('style=', html)
 
     def test_frontend_scripts_use_gotube_namespace_boundary(self):
         common = COMMON_JS.read_text(encoding='utf-8')
@@ -78,10 +86,15 @@ class FrontendBuildSetupTests(unittest.TestCase):
 
     def test_download_script_centralizes_page_event_binding(self):
         download = DOWNLOAD_JS.read_text(encoding='utf-8')
+        common_module = COMMON_MODULE_JS.read_text(encoding='utf-8')
+
+        self.assertIn('from "/static/shared/common.module.js"', download)
         self.assertIn('function bindEventHandlers()', download)
         self.assertIn("document.addEventListener('keydown'", download)
         self.assertIn('downloadPage.bootstrap = init;', download)
         self.assertIn('window.DownloadPage = downloadPage;', download)
+        self.assertIn('export function getDownloadClientId()', common_module)
+        self.assertIn('export function resolveHiddenPath(', common_module)
 
     def test_home_script_uses_explicit_bootstrap_and_lifecycle_helpers(self):
         index = INDEX_JS.read_text(encoding='utf-8')

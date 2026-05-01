@@ -31,8 +31,12 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("video.tabIndex = 0;", common_js)
 
     def test_pages_use_shared_session_helper_for_auth_client_cleanup(self):
+        module_source = read_text("www/shared/common.module.js")
+        self.assertIn("export const session", module_source)
+        self.assertIn("markAuthenticatedClient", module_source)
+        self.assertIn("clearAuthState", module_source)
+
         for path in [
-            "www/download/page.js",
             "www/admin/js/auth.js",
             "www/admin/js/users.js",
             "www/shared/common.js",
@@ -42,13 +46,16 @@ class FrontendSessionContractTests(unittest.TestCase):
             if path != "www/shared/common.js":
                 self.assertNotIn("gotube_authenticated_client", source, path)
 
+        download_source = read_text("www/download/page.js")
+        self.assertIn('from "/static/shared/common.module.js"', download_source)
+        self.assertIn("session.clearAuthState", download_source)
+        self.assertNotIn("gotube_authenticated_client", download_source)
+
     def test_download_page_loads_common_helpers_before_download_script(self):
         html = read_text("www/download/index.html")
-        common_idx = html.find("/static/shared/common.js")
-        download_idx = html.find("/static/download/page.js")
-
-        self.assertGreaterEqual(common_idx, 0)
-        self.assertGreater(download_idx, common_idx)
+        self.assertIn('/static/download/page.css?v={{ASSET_VERSION}}', html)
+        self.assertIn('type="module" src="/static/download/page.js?v={{ASSET_VERSION}}"', html)
+        self.assertNotIn("/static/shared/common.js", html)
 
     def test_guest_completed_task_can_play_without_share_hash(self):
         source = read_text("www/download/page.js")
@@ -63,7 +70,7 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("function isLibraryUser()", source)
         self.assertIn("return isLoggedIn && currentUser && (currentUser.role === 'user' || currentUser.role === 'admin');", source)
         self.assertIn("if (!isLibraryUser()) {", source)
-        self.assertIn("section.style.display = isLibraryUser() ? 'block' : 'none';", source)
+        self.assertIn("section.hidden = !isLibraryUser();", source)
 
     def test_download_page_archives_completed_library_tasks_but_keeps_guest_cards(self):
         source = read_text("www/download/page.js")
@@ -141,7 +148,7 @@ class FrontendSessionContractTests(unittest.TestCase):
     def test_download_page_uses_shared_video_keyboard_controls_for_modal_player(self):
         source = read_text("www/download/page.js")
 
-        self.assertIn("const attachVideoKeyboardControls = goTube.attachVideoKeyboardControls;", source)
+        self.assertIn('attachVideoKeyboardControls, resolveHiddenPath, session } from "/static/shared/common.module.js"', source)
         self.assertIn("let modalVideoKeyboardCleanup = null;", source)
         self.assertIn("modalVideoKeyboardCleanup?.();", source)
         self.assertIn("attachVideoKeyboardControls(video", source)

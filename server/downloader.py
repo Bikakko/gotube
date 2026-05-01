@@ -7,11 +7,14 @@ yt-dlp 下载器封装层
 
 import asyncio
 import binascii
+import ipaddress
 import json
 import logging
 import os
 import re
 import shutil
+import socket
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -43,6 +46,51 @@ class DownloadCancelledError(Exception):
     """下载任务被用户或会话生命周期取消。"""
 
 
+def _is_public_ip_address(ip_text: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(ip_text)
+    except ValueError:
+        return False
+    return not (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+        or ip.is_unspecified
+    )
+
+
+def is_safe_thumbnail_url(url: str) -> bool:
+    """Reject local and private thumbnail URLs to reduce SSRF risk."""
+    if not url:
+        return False
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+
+    if parsed.scheme not in {"http", "https"}:
+        return False
+
+    hostname = (parsed.hostname or "").strip().lower()
+    if not hostname or hostname == "localhost":
+        return False
+
+    if _is_public_ip_address(hostname):
+        return True
+
+    try:
+        infos = socket.getaddrinfo(hostname, None, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return False
+
+    addresses = {info[4][0] for info in infos if info and info[4]}
+    if not addresses:
+        return False
+    return all(_is_public_ip_address(address) for address in addresses)
+
+
 def _download_thumbnail(url: str, save_path: Path) -> bool:
     """
     从远程 URL 下载缩略图到本地。
@@ -57,6 +105,9 @@ def _download_thumbnail(url: str, save_path: Path) -> bool:
         成功返回 True，失败返回 False。
     """
     if not url:
+        return False
+    if not is_safe_thumbnail_url(url):
+        logger.warning("拒绝下载不安全的缩略图 URL: %s", url)
         return False
 
     try:
@@ -170,6 +221,9 @@ class Downloader:
 
         # hash → 文件路径的索引（避免递归搜索）
         self._hash_index: dict[str, Path] = {}
+        self._hash_index_lock = threading.Lock()
+        self._hash_index_time: float = 0
+        self._hash_index_ttl = 30
 
         # 匿名用户临时下载目录
         self.guest_download_dir = self.download_dir / "temp_guest"
@@ -353,27 +407,37 @@ class Downloader:
         """
         构建 hash → 文件路径的索引（用于 find_hash_file 优化）。
 
-        如果 _hash_index 为空则重建，否则直接返回。
+        采用带 TTL 的内存缓存，避免在热点路径上重复递归扫描磁盘。
         """
-        if self._hash_index:
+        now = time.time()
+        if self._hash_index and (now - self._hash_index_time) < self._hash_index_ttl:
             return self._hash_index
 
-        for f in self.download_dir.rglob("*"):
-            if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
-                rel_path = f.relative_to(self.download_dir)
-                if rel_path.parts and rel_path.parts[0] == "temp_guest":
-                    continue
-                # 从目录名提取 hash：标题_hash
-                parent_name = f.parent.name
-                if "_" in parent_name:
-                    file_hash = parent_name.rsplit("_", 1)[-1]
-                    self._hash_index[file_hash] = f
+        with self._hash_index_lock:
+            now = time.time()
+            if self._hash_index and (now - self._hash_index_time) < self._hash_index_ttl:
+                return self._hash_index
 
-        return self._hash_index
+            rebuilt_index: dict[str, Path] = {}
+            for f in self.download_dir.rglob("*"):
+                if f.is_file() and f.suffix.lower() in VIDEO_EXTENSIONS:
+                    rel_path = f.relative_to(self.download_dir)
+                    if rel_path.parts and rel_path.parts[0] == "temp_guest":
+                        continue
+                    parent_name = f.parent.name
+                    if "_" in parent_name:
+                        file_hash = parent_name.rsplit("_", 1)[-1]
+                        rebuilt_index[file_hash] = f
+
+            self._hash_index = rebuilt_index
+            self._hash_index_time = now
+            return self._hash_index
 
     def invalidate_hash_index(self) -> None:
         """文件变更时使 hash 索引失效"""
-        self._hash_index.clear()
+        with self._hash_index_lock:
+            self._hash_index.clear()
+            self._hash_index_time = 0
 
     def find_hash_file(self, file_hash: str) -> Path | None:
         """
@@ -395,14 +459,14 @@ class Downloader:
             # 文件不存在，从缓存中移除
             logger.warning("hash索引中的文件不存在，已移除: hash=%s, path=%s", file_hash, path)
             hash_index.pop(file_hash, None)
-        # 前缀匹配（降级到递归扫描）
-        for f in self.download_dir.rglob("*"):
-            if f.is_file() and f.name.startswith(file_hash):
-                rel_path = f.relative_to(self.download_dir)
-                if rel_path.parts and rel_path.parts[0] == "temp_guest":
-                    continue
-                self._hash_index[file_hash] = f
-                return f
+        # 前缀匹配（仅在内存索引中查找，避免再次递归扫描磁盘）
+        for indexed_hash, indexed_path in list(hash_index.items()):
+            if indexed_hash.startswith(file_hash):
+                if indexed_path.is_file():
+                    return indexed_path
+                logger.warning("hash索引中的文件不存在，已移除: hash=%s, path=%s", indexed_hash, indexed_path)
+                hash_index.pop(indexed_hash, None)
+                break
         return None
 
     def get_task(self, task_id: str) -> DownloadTask | None:
@@ -1517,7 +1581,7 @@ class Downloader:
         logger.debug("文件移动完成")
 
         # 验证文件完整性（检查是否同时包含视频和音频流）
-        self._verify_file_integrity(str(final_path), task)
+        await asyncio.to_thread(self._verify_file_integrity, str(final_path), task)
 
         # 下载缩略图到本地（静默失败，不影响主流程）
         if task.thumbnail:
@@ -1525,7 +1589,7 @@ class Downloader:
             thumb_ext = Path(urlparse(task.thumbnail).path).suffix or ".jpg"
             thumb_local_name = f"thumbnail{thumb_ext}"
             thumb_path = dir_path / thumb_local_name
-            if _download_thumbnail(task.thumbnail, thumb_path):
+            if await asyncio.to_thread(_download_thumbnail, task.thumbnail, thumb_path):
                 task.thumbnail = thumb_local_name  # 保存相对路径
                 logger.debug("缩略图下载成功: %s", thumb_local_name)
             else:
