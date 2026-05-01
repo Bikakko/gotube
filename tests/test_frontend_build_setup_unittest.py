@@ -8,11 +8,13 @@ ENV_EXAMPLE = ROOT / '.env.example'
 WK_SCRIPT = ROOT / 'wk.sh'
 PACKAGE_JSON = ROOT / 'package.json'
 BUILD_SCRIPT = ROOT / 'build.js'
+MAIN_PY = ROOT / 'server' / 'main.py'
 ADMIN_HTML = ROOT / 'www' / 'admin' / 'admin.html'
 DOWNLOAD_HTML = ROOT / 'www' / 'download.html'
-COMMON_JS = ROOT / 'www' / 'common.js'
+COMMON_JS = ROOT / 'www' / 'shared' / 'common.js'
 DOWNLOAD_JS = ROOT / 'www' / 'download.js'
-INDEX_JS = ROOT / 'www' / 'index.js'
+INDEX_HTML = ROOT / 'www' / 'home' / 'index.html'
+INDEX_JS = ROOT / 'www' / 'home' / 'page.js'
 
 
 class FrontendBuildSetupTests(unittest.TestCase):
@@ -52,7 +54,7 @@ class FrontendBuildSetupTests(unittest.TestCase):
 
     def test_download_html_uses_runtime_asset_version_placeholder(self):
         html = DOWNLOAD_HTML.read_text(encoding='utf-8')
-        self.assertIn('/static/common.js?v={{ASSET_VERSION}}', html)
+        self.assertIn('/static/shared/common.js?v={{ASSET_VERSION}}', html)
         self.assertIn('/static/download.js?v={{ASSET_VERSION}}', html)
 
     def test_download_html_avoids_inline_behavior_handlers(self):
@@ -85,6 +87,16 @@ class FrontendBuildSetupTests(unittest.TestCase):
         self.assertIn('function bindModalEvents()', index)
         self.assertIn('function bindSceneLifecycle()', index)
         self.assertIn('goTube.home.bootstrap = bootstrapHomePage;', index)
+
+    def test_home_page_uses_home_and_shared_asset_paths(self):
+        html = INDEX_HTML.read_text(encoding='utf-8')
+        self.assertIn('/static/home/page.css?v={{ASSET_VERSION}}', html)
+        self.assertIn('/static/home/page.js?v={{ASSET_VERSION}}', html)
+        self.assertIn('/static/shared/images/favicon.jpg', html)
+
+    def test_server_root_page_reads_home_index_html(self):
+        main_py = MAIN_PY.read_text(encoding='utf-8')
+        self.assertIn('return _serve_html("home/index.html")', main_py)
 
 
 if __name__ == '__main__':

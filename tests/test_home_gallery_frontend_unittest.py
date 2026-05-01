@@ -11,10 +11,9 @@ def read_text(relative_path: str) -> str:
 
 class HomeGalleryFrontendTests(unittest.TestCase):
     def test_home_page_uses_gallery_shell_and_hides_business_words(self):
-        html = read_text("www/index.html")
+        html = read_text("www/home/index.html")
 
-        self.assertIn('id="gallery-app"', html)
-        self.assertIn('id="page-sky"', html)
+        self.assertIn('id="home-scene"', html)
         self.assertIn('id="albums-grid"', html)
         self.assertIn('id="gallery-modal"', html)
         self.assertNotIn("Share the tiny bright moments", html)
@@ -24,7 +23,7 @@ class HomeGalleryFrontendTests(unittest.TestCase):
         self.assertNotIn("视频库", html)
 
     def test_home_page_contains_secret_entry_placeholder(self):
-        html = read_text("www/index.html")
+        html = read_text("www/home/index.html")
 
         self.assertIn('id="secret-entry"', html)
         self.assertIn('id="secret-entry-image"', html)
@@ -32,36 +31,39 @@ class HomeGalleryFrontendTests(unittest.TestCase):
         self.assertNotIn("GOTUBE_HIDDEN_PATH", html)
 
     def test_home_page_loads_gallery_assets(self):
-        html = read_text("www/index.html")
+        html = read_text("www/home/index.html")
 
-        self.assertIn("/static/index.css", html)
-        self.assertIn("/static/index.js", html)
+        self.assertIn("/static/home/page.css", html)
+        self.assertIn("/static/home/page.js", html)
+        self.assertIn("/static/shared/images/favicon.jpg", html)
 
     def test_index_styles_use_soft_rounded_album_cards(self):
-        css = read_text("www/index.css")
+        css = read_text("www/home/page.css")
 
         self.assertIn("repeat(4, minmax(0, 220px))", css)
-        self.assertIn(".page-sky", css)
+        self.assertIn(".home-scene", css)
         self.assertIn("border-radius: 40px", css)
         self.assertIn("aspect-ratio: 6 / 4", css)
         self.assertIn("backdrop-filter: blur(16px)", css)
         self.assertIn("inset: -18px", css)
-        self.assertIn("clamp(292px, 40vh, 420px)", css)
+        self.assertIn("left: clamp(128px, 11vw, 184px)", css)
+        self.assertIn("bottom: clamp(34px, 5dvh, 58px)", css)
 
     def test_modal_shell_hides_visible_title_copy_and_count(self):
-        html = read_text("www/index.html")
-        css = read_text("www/index.css")
+        html = read_text("www/home/index.html")
+        css = read_text("www/home/page.css")
 
         self.assertNotIn("Album View", html)
         self.assertNotIn("gallery-modal-title", html)
         self.assertNotIn("gallery-modal-count", html)
-        self.assertIn(".gallery-modal-panel::before", css)
+        self.assertIn(".gallery-modal-panel {", css)
+        self.assertIn("backdrop-filter: blur(20px)", css)
         self.assertIn("border-radius: 42px", css)
         self.assertIn("backdrop-filter: blur(18px)", css)
 
     def test_index_script_drives_gallery_and_modal_navigation(self):
-        source = read_text("www/index.js")
-        common = read_text("www/common.js")
+        source = read_text("www/home/page.js")
+        common = read_text("www/shared/common.js")
         download = read_text("www/download.js")
 
         for marker in [
@@ -74,10 +76,11 @@ class HomeGalleryFrontendTests(unittest.TestCase):
             "showPrevImage",
             "keydown",
             "Escape",
-            "startMoonSky",
-            'moonImage.src = "/static/moon.png"',
-            "drawMoon",
-            "drawCloud",
+            "ensureScene",
+            "createNightSky",
+            '"/static/home/moon.png"',
+            "createMoon",
+            "bootstrapHomePage",
         ]:
             self.assertIn(marker, source)
 

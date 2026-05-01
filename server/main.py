@@ -200,7 +200,7 @@ if WWW_DIR.exists():
 @app.get("/", response_model=None)
 async def root_page() -> FileResponse | HTMLResponse:
     """根路径 - 空白页（v.pikakko.top）"""
-    return _serve_html("index.html")
+    return _serve_html("home/index.html")
 
 
 @app.get("/go", response_model=None)
@@ -310,7 +310,7 @@ async def catch_all(
     否则返回 watch.html（分享链接进入）。
     """
     # 保护敏感页面
-    if filename in ("index.html", "admin.html", "admin/admin.html", "download.html"):
+    if filename in ("index.html", "home/index.html", "admin.html", "admin/admin.html", "download.html"):
         raise HTTPException(status_code=404, detail="Not Found")
 
     # 从 www 目录提供静态文件

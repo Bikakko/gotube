@@ -1,4 +1,4 @@
-import * as THREE from "/static/vendor/three.module.min.js";
+import * as THREE from "/static/shared/vendor/three.module.min.js";
 
 (function () {
     const sceneHost = document.getElementById("lab-scene");
@@ -7,7 +7,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
     const modalImage = document.getElementById("lab-modal-image");
     const modalClose = document.getElementById("lab-modal-close");
     const modalBackdrop = document.querySelector("[data-modal-close]");
-    const fallback = "/static/favicon.jpg";
+    const fallback = "/static/shared/images/favicon.jpg";
 
     let disposeScene = null;
 
@@ -567,7 +567,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
     }
 
     function createMoon() {
-        const moonTexture = new THREE.TextureLoader().load("/static/moon.png");
+        const moonTexture = new THREE.TextureLoader().load("/static/home/moon.png");
         moonTexture.colorSpace = THREE.SRGBColorSpace;
 
         const maskMaterial = new THREE.SpriteMaterial({

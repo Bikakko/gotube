@@ -11,7 +11,7 @@ def read_text(relative_path: str) -> str:
 
 class FrontendSessionContractTests(unittest.TestCase):
     def test_common_session_helper_owns_download_client_state(self):
-        common_js = read_text("www/common.js")
+        common_js = read_text("www/shared/common.js")
 
         self.assertIn("window.GoTubeSession", common_js)
         for helper in [
@@ -29,16 +29,16 @@ class FrontendSessionContractTests(unittest.TestCase):
             "www/download.js",
             "www/admin/js/auth.js",
             "www/admin/js/users.js",
-            "www/common.js",
+            "www/shared/common.js",
         ]:
             source = read_text(path)
             self.assertIn("GoTubeSession", source, path)
-            if path != "www/common.js":
+            if path != "www/shared/common.js":
                 self.assertNotIn("gotube_authenticated_client", source, path)
 
     def test_download_page_loads_common_helpers_before_download_script(self):
         html = read_text("www/download.html")
-        common_idx = html.find("/static/common.js")
+        common_idx = html.find("/static/shared/common.js")
         download_idx = html.find("/static/download.js")
 
         self.assertGreaterEqual(common_idx, 0)

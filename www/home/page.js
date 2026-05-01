@@ -1,4 +1,4 @@
-import * as THREE from "/static/vendor/three.module.min.js";
+import * as THREE from "/static/shared/vendor/three.module.min.js";
 
 (function () {
     const goTube = window.GoTube = window.GoTube || {};
@@ -684,7 +684,7 @@ import * as THREE from "/static/vendor/three.module.min.js";
     }
 
     function createMoon() {
-        const moonTexture = new THREE.TextureLoader().load("/static/moon.png");
+        const moonTexture = new THREE.TextureLoader().load("/static/home/moon.png");
         moonTexture.colorSpace = THREE.SRGBColorSpace;
 
         const occluderMaterial = new THREE.SpriteMaterial({
