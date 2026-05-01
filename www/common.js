@@ -5,6 +5,8 @@
 
 // ========== 基础工具函数 ==========
 
+window.GoTube = window.GoTube || {};
+
 window.GoTubeSession = window.GoTubeSession || (() => {
     const CLIENT_KEY = 'gotube_client_id';
     const AUTH_CLIENT_KEY = 'gotube_authenticated_client';
@@ -93,6 +95,7 @@ window.GoTubeSession = window.GoTubeSession || (() => {
         clearAuthState,
     };
 })();
+window.GoTube.session = window.GoTubeSession;
 
 /**
  * querySelector 快捷方式
@@ -211,6 +214,11 @@ function getApiBase() {
     }
     return '/api';
 }
+window.GoTube.resolveHiddenPath = function resolveHiddenPath(pathname = window.location.pathname, injectedHiddenPath = window.GOTUBE_HIDDEN_PATH) {
+    if (injectedHiddenPath) return injectedHiddenPath;
+    const parts = String(pathname || '').split('/').filter(Boolean);
+    return parts[0] || '';
+};
 
 /**
  * 带认证的 API 请求封装
@@ -255,6 +263,20 @@ async function apiFetch(endpoint, options = {}) {
     
     return response.json();
 }
+
+window.GoTube.utils = {
+    $,
+    $$,
+    el,
+    formatBytes,
+    formatSpeed,
+    formatETA,
+    escapeHtml,
+    extractSource,
+    formatRole,
+    getApiBase,
+    apiFetch,
+};
 
 // ========== 样式注入 ==========
 

@@ -6,13 +6,16 @@
 
     const $ = (s) => document.querySelector(s);
 
-    const session = window.GoTubeSession;
+    const goTube = window.GoTube = window.GoTube || {};
+    const session = goTube.session || window.GoTubeSession;
     let clientId = session.getDownloadClientId();
-    const hiddenPath = (() => {
-        if (window.GOTUBE_HIDDEN_PATH) return window.GOTUBE_HIDDEN_PATH;
-        const parts = window.location.pathname.split('/').filter(Boolean);
-        return parts[0] || '';
-    })();
+    const hiddenPath = typeof goTube.resolveHiddenPath === 'function'
+        ? goTube.resolveHiddenPath(window.location.pathname, window.GOTUBE_HIDDEN_PATH)
+        : (() => {
+            if (window.GOTUBE_HIDDEN_PATH) return window.GOTUBE_HIDDEN_PATH;
+            const parts = window.location.pathname.split('/').filter(Boolean);
+            return parts[0] || '';
+        })();
 
     // ── 匿名用户 Session 管理 ──
     // 使用 sessionStorage：刷新页面复用，关闭标签页后失效，避免旧路人 session 被新登录用户转存。

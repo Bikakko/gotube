@@ -10,6 +10,9 @@ PACKAGE_JSON = ROOT / 'package.json'
 BUILD_SCRIPT = ROOT / 'build.js'
 ADMIN_HTML = ROOT / 'www' / 'admin' / 'admin.html'
 DOWNLOAD_HTML = ROOT / 'www' / 'download.html'
+COMMON_JS = ROOT / 'www' / 'common.js'
+DOWNLOAD_JS = ROOT / 'www' / 'download.js'
+INDEX_JS = ROOT / 'www' / 'index.js'
 
 
 class FrontendBuildSetupTests(unittest.TestCase):
@@ -51,6 +54,16 @@ class FrontendBuildSetupTests(unittest.TestCase):
         html = DOWNLOAD_HTML.read_text(encoding='utf-8')
         self.assertIn('/static/common.js?v={{ASSET_VERSION}}', html)
         self.assertIn('/static/download.js?v={{ASSET_VERSION}}', html)
+
+    def test_frontend_scripts_use_gotube_namespace_boundary(self):
+        common = COMMON_JS.read_text(encoding='utf-8')
+        download = DOWNLOAD_JS.read_text(encoding='utf-8')
+        index = INDEX_JS.read_text(encoding='utf-8')
+
+        self.assertIn('window.GoTube = window.GoTube || {};', common)
+        self.assertIn('window.GoTube.session = window.GoTubeSession;', common)
+        self.assertIn('const goTube = window.GoTube = window.GoTube || {};', download)
+        self.assertIn('const goTube = window.GoTube = window.GoTube || {};', index)
 
 
 if __name__ == '__main__':

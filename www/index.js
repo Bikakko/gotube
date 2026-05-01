@@ -1,6 +1,9 @@
 import * as THREE from "/static/vendor/three.module.min.js";
 
 (function () {
+    const goTube = window.GoTube = window.GoTube || {};
+    goTube.home = goTube.home || {};
+
     const state = {
         albums: [],
         currentAlbum: null,
@@ -129,6 +132,9 @@ import * as THREE from "/static/vendor/three.module.min.js";
         modal.hidden = true;
         document.body.style.overflow = "";
     }
+
+    goTube.home.ensureScene = ensureScene;
+    goTube.home.closeGalleryModal = closeModal;
 
     function ensureScene() {
         if (!sceneHost || disposeScene || sceneHost.querySelector("canvas")) {
