@@ -25,6 +25,7 @@ from .admin_api import router as admin_api_router
 from .config import settings
 from .db import init_db, get_session, sync_admins_from_env
 from .downloader import Downloader, DownloadTask
+from .http_media import build_video_stream_response
 from .queue_manager import QueueManager
 from .security import validate_guest_session_id, validate_hash_id
 from .video_library import resolve_share_token
@@ -260,11 +261,7 @@ async def watch_unified(
                 _item, asset = resolved
                 matched_file = Path(asset.filepath)
                 logger.info("[/watch] returning shared video: path=%s, size=%d", matched_file, matched_file.stat().st_size)
-                return FileResponse(
-                    matched_file,
-                    media_type="video/mp4",
-                    headers={"Content-Disposition": f'inline; filename="{matched_file.name}"'},
-                )
+                return build_video_stream_response(request, matched_file, filename=matched_file.name)
 
         hash_id = validate_hash_id(v)
         qm: QueueManager = get_queue_manager(request)
@@ -276,11 +273,7 @@ async def watch_unified(
 
         if matched_file is not None and matched_file.is_file():
             logger.info("[/watch] returning video: path=%s, size=%d", matched_file, matched_file.stat().st_size)
-            return FileResponse(
-                matched_file,
-                media_type="video/mp4",
-                headers={"Content-Disposition": f'inline; filename="{matched_file.name}"'},
-            )
+            return build_video_stream_response(request, matched_file, filename=matched_file.name)
         else:
             logger.warning("[/watch] file not found: v=%s, matched=%s", hash_id, matched_file)
 

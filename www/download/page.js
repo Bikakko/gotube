@@ -10,6 +10,7 @@
     goTube.download = goTube.download || {};
     const downloadPage = goTube.download;
     const session = goTube.session || window.GoTubeSession;
+    const attachVideoKeyboardControls = goTube.attachVideoKeyboardControls;
     let clientId = session.getDownloadClientId();
     const hiddenPath = typeof goTube.resolveHiddenPath === 'function'
         ? goTube.resolveHiddenPath(window.location.pathname, window.GOTUBE_HIDDEN_PATH)
@@ -35,6 +36,7 @@
     let myQuota = null;
     let libraryPage = 1;
     const libraryPageSize = 8;
+    let modalVideoKeyboardCleanup = null;
 
     function authHeaders(extra = {}) {
         const token = localStorage.getItem('gotube_admin_token');
@@ -357,6 +359,14 @@
         video.style.width = '100%';
         video.style.background = '#000';
         modalVideo.appendChild(video);
+        modalVideoKeyboardCleanup?.();
+        if (typeof attachVideoKeyboardControls === 'function') {
+            modalVideoKeyboardCleanup = attachVideoKeyboardControls(video, {
+                isActive: () => $('#modal')?.classList.contains('active') === true,
+                wheelTarget: $('#modal-body') || $('#modal-video') || video,
+                feedbackTarget: $('#modal-body') || $('#modal-video') || video.parentElement || video,
+            });
+        }
         $('#copy-btn').dataset.shareUrl = shareUrl;
 
         $('#modal').classList.add('active');
@@ -364,6 +374,8 @@
 
     function closeModal() {
         $('#modal').classList.remove('active');
+        modalVideoKeyboardCleanup?.();
+        modalVideoKeyboardCleanup = null;
         $('#modal-video').innerHTML = '';
     }
 
@@ -956,6 +968,14 @@
         elem.style.width = '100%';
         elem.style.background = '#000';
         modalVideo.appendChild(elem);
+        modalVideoKeyboardCleanup?.();
+        if (typeof attachVideoKeyboardControls === 'function') {
+            modalVideoKeyboardCleanup = attachVideoKeyboardControls(elem, {
+                isActive: () => $('#modal')?.classList.contains('active') === true,
+                wheelTarget: $('#modal-body') || $('#modal-video') || elem,
+                feedbackTarget: $('#modal-body') || $('#modal-video') || elem.parentElement || elem,
+            });
+        }
         $('#copy-btn').dataset.shareUrl = `${location.origin}/watch?v=${encodeURIComponent(video.share_token)}`;
         $('#modal').classList.add('active');
     }

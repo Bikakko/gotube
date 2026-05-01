@@ -24,6 +24,8 @@ class AdminModalsFrontendTests(unittest.TestCase):
 
         self.assertIn("loop: true", source)
         self.assertIn("videoEl.loop = true", source)
+        self.assertIn("window.GoTube.attachVideoKeyboardControls(videoEl", source)
+        self.assertIn("feedbackTarget: overlay.querySelector('.modal-body') || videoEl.parentElement || videoEl", source)
         self.assertNotIn("player-loop-toggle", source)
         self.assertNotIn(".player-loop-toggle.active", css)
         self.assertNotIn(".player-modal-actions", css)
@@ -53,6 +55,10 @@ class AdminModalsFrontendTests(unittest.TestCase):
         watch_html = read_text("www/watch/index.html")
 
         self.assertIn("controls autoplay loop", watch_html)
+        self.assertIn('/static/shared/common.js?v={{ASSET_VERSION}}', watch_html)
+        self.assertIn("window.GoTube.attachVideoKeyboardControls(video, {", watch_html)
+        self.assertIn("wheelTarget: document.querySelector('.player-wrap') || video", watch_html)
+        self.assertIn("feedbackTarget: document.querySelector('.player-wrap') || video.parentElement || video", watch_html)
 
 
 if __name__ == "__main__":

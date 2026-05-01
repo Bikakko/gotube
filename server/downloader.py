@@ -118,6 +118,9 @@ class DownloadTask:
         self.total_bytes = 0
         self.download_artifact_path = ""
         self.estimated_size_bytes: int | None = None
+        self.download_phase_count = 1
+        self.download_phase_index = 0
+        self.download_phase_artifacts: list[str] = []
         self.cancel_requested = False
         self.cancel_reason = ""
         self.video_id = ""
@@ -1112,12 +1115,39 @@ class Downloader:
     def _make_progress_hook(self, task: DownloadTask, max_size_bytes: int | None = None) -> Callable:
         """创建 yt-dlp 进度回调钩子"""
 
+        def phase_progress(downloaded: int, total: int) -> float:
+            phase_count = max(1, int(task.download_phase_count or 1))
+            phase_index = max(1, int(task.download_phase_index or 1))
+            current_ratio = (downloaded / total) if total > 0 else 0.0
+            return min((((phase_index - 1) + current_ratio) / phase_count) * 100, 99.9)
+
+        def normalize_artifact_key(d: dict) -> str:
+            artifact_path = d.get("filename") or d.get("tmpfilename") or ""
+            if not artifact_path:
+                return ""
+            try:
+                normalized = Path(artifact_path).resolve()
+            except OSError:
+                normalized = Path(artifact_path)
+            if normalized.suffix in {".part", ".temp", ".ytdl"}:
+                normalized = normalized.with_suffix("")
+            return str(normalized)
+
+        def update_phase_tracking(d: dict) -> None:
+            artifact_key = normalize_artifact_key(d)
+            if not artifact_key:
+                return
+            if artifact_key not in task.download_phase_artifacts:
+                task.download_phase_artifacts.append(artifact_key)
+            task.download_phase_index = task.download_phase_artifacts.index(artifact_key) + 1
+
         def hook(d: dict) -> None:
             try:
                 if task.cancel_requested:
                     raise DownloadCancelledError(task.cancel_reason or "下载已取消")
 
                 if d["status"] == "downloading":
+                    update_phase_tracking(d)
                     downloaded = d.get("downloaded_bytes", 0)
                     total = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
                     speed = d.get("speed") or 0
@@ -1127,11 +1157,11 @@ class Downloader:
                         task.download_artifact_path = artifact_path
 
                     if total > 0:
-                        task.progress = (downloaded / total) * 100
+                        task.progress = phase_progress(downloaded, total)
                     elif downloaded > 0 and speed > 0:
                         estimated_total = max(downloaded + speed * eta, downloaded * 1.5) if eta > 0 else downloaded * 2
                         if estimated_total > 0:
-                            task.progress = min((downloaded / estimated_total) * 100, 95)
+                            task.progress = min(phase_progress(downloaded, estimated_total), 95)
                     elif downloaded > 0:
                         task.progress = max(task.progress, 5.0)
 
@@ -1142,7 +1172,10 @@ class Downloader:
                     self._enforce_active_size_limit(artifact_path, downloaded, max_size_bytes=max_size_bytes)
 
                 elif d["status"] == "finished":
-                    task.progress = 100.0
+                    update_phase_tracking(d)
+                    phase_count = max(1, int(task.download_phase_count or 1))
+                    phase_index = max(1, int(task.download_phase_index or 1))
+                    task.progress = min((phase_index / phase_count) * 100, 100.0)
                     task.speed = 0
                     task.eta = 0
             except (DownloadSizeLimitError, DownloadCancelledError):
@@ -1197,6 +1230,13 @@ class Downloader:
         task.title = info.get("title", "")
         task.thumbnail = info.get("thumbnail", "")
         task.duration = info.get("duration", 0)
+        requested_formats = info.get("requested_formats")
+        if isinstance(requested_formats, list) and requested_formats:
+            task.download_phase_count = len(requested_formats)
+        else:
+            task.download_phase_count = 1
+        task.download_phase_index = 0
+        task.download_phase_artifacts = []
         task.estimated_size_bytes = self._estimate_selected_download_size(info)
         self._enforce_preflight_size_limit(info)
 

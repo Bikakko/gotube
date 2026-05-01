@@ -42,10 +42,31 @@ function showPlayerModal(video) {
 
     document.body.appendChild(overlay);
     const videoEl = overlay.querySelector('#player-video');
+    let cleanupKeyboardControls = null;
 
     if (videoEl) {
         videoEl.loop = true;
         videoEl.focus();
+        if (window.GoTube && typeof window.GoTube.attachVideoKeyboardControls === 'function') {
+            cleanupKeyboardControls = window.GoTube.attachVideoKeyboardControls(videoEl, {
+                isActive: () => Boolean(document.getElementById('player-modal')),
+                wheelTarget: overlay.querySelector('.modal-body') || videoEl,
+                feedbackTarget: overlay.querySelector('.modal-body') || videoEl.parentElement || videoEl,
+            });
+        }
+    }
+
+    const previousCloseModal = window.closeModal;
+    if (typeof previousCloseModal === 'function') {
+        const wrappedCloseModal = function(modalId) {
+            if (modalId === 'player-modal') {
+                cleanupKeyboardControls?.();
+                cleanupKeyboardControls = null;
+                window.closeModal = previousCloseModal;
+            }
+            return previousCloseModal(modalId);
+        };
+        window.closeModal = wrappedCloseModal;
     }
 }
 

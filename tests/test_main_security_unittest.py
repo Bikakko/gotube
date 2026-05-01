@@ -63,7 +63,7 @@ class MainSecurityRoutesTests(unittest.TestCase):
         self.assertEqual(status, 404)
 
     def test_real_static_asset_still_serves_normally(self):
-        status, headers, body = asyncio.run(asgi_get('/download.js'))
+        status, headers, body = asyncio.run(asgi_get('/static/shared/common.js'))
         self.assertEqual(status, 200)
         self.assertIn('javascript', headers.get('content-type', ''))
         self.assertTrue(body)

@@ -23,6 +23,12 @@ class FrontendSessionContractTests(unittest.TestCase):
             "clearAuthState",
         ]:
             self.assertIn(helper, common_js)
+        self.assertIn("attachVideoKeyboardControls", common_js)
+        self.assertIn("event.key === ' ' || event.code === 'Space'", common_js)
+        self.assertIn("wheelTarget.addEventListener('wheel', wheelHandler, { passive: false });", common_js)
+        self.assertIn("event.repeat", common_js)
+        self.assertIn("showVolumeHud", common_js)
+        self.assertIn("video.tabIndex = 0;", common_js)
 
     def test_pages_use_shared_session_helper_for_auth_client_cleanup(self):
         for path in [
@@ -131,6 +137,19 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("onClick: handleLogin", source)
         self.assertIn("onClick: submit", source)
         self.assertIn("onClick: loadMyLibrary", source)
+
+    def test_download_page_uses_shared_video_keyboard_controls_for_modal_player(self):
+        source = read_text("www/download/page.js")
+
+        self.assertIn("const attachVideoKeyboardControls = goTube.attachVideoKeyboardControls;", source)
+        self.assertIn("let modalVideoKeyboardCleanup = null;", source)
+        self.assertIn("modalVideoKeyboardCleanup?.();", source)
+        self.assertIn("attachVideoKeyboardControls(video", source)
+        self.assertIn("attachVideoKeyboardControls(elem", source)
+        self.assertIn("wheelTarget: $('#modal-body') || $('#modal-video') || video", source)
+        self.assertIn("wheelTarget: $('#modal-body') || $('#modal-video') || elem", source)
+        self.assertIn("feedbackTarget: $('#modal-body') || $('#modal-video') || video.parentElement || video", source)
+        self.assertIn("feedbackTarget: $('#modal-body') || $('#modal-video') || elem.parentElement || elem", source)
 
 
 

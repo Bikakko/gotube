@@ -212,3 +212,41 @@ class DownloaderArtifactCleanupTest(unittest.TestCase):
                     "downloaded_bytes": 5,
                     "total_bytes": 5,
                 })
+
+    def test_progress_hook_weights_split_media_phases_instead_of_restarting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            downloader = self.make_downloader(root)
+            task = DownloadTask("phase1", "https://example.com/v", "client")
+            task.download_phase_count = 2
+            hook = downloader._make_progress_hook(task)
+            video_part = root / "Example.f137.mp4"
+            audio_part = root / "Example.f140.m4a"
+
+            hook({
+                "status": "downloading",
+                "filename": str(video_part),
+                "downloaded_bytes": 5,
+                "total_bytes": 10,
+            })
+            self.assertAlmostEqual(task.progress, 25.0)
+
+            hook({
+                "status": "finished",
+                "filename": str(video_part),
+            })
+            self.assertAlmostEqual(task.progress, 50.0)
+
+            hook({
+                "status": "downloading",
+                "filename": str(audio_part),
+                "downloaded_bytes": 5,
+                "total_bytes": 10,
+            })
+            self.assertAlmostEqual(task.progress, 75.0)
+
+            hook({
+                "status": "finished",
+                "filename": str(audio_part),
+            })
+            self.assertAlmostEqual(task.progress, 100.0)

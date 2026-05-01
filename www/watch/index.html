@@ -38,6 +38,7 @@
 </head>
 <body>
     <div class="container" id="app"><div class="err"><p>加载中...</p></div></div>
+    <script src="/static/shared/common.js?v={{ASSET_VERSION}}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', async () => {
             const p = new URLSearchParams(location.search);
@@ -65,6 +66,13 @@
                         <div class="meta">${sz ? `<span>📦 ${sz}</span>` : ''}</div>
                         <button class="dl-btn" id="d">⬇ 下载视频</button>
                     </div>`;
+                const video = document.getElementById('p');
+                if (window.GoTube && typeof window.GoTube.attachVideoKeyboardControls === 'function') {
+                    window.GoTube.attachVideoKeyboardControls(video, {
+                        wheelTarget: document.querySelector('.player-wrap') || video,
+                        feedbackTarget: document.querySelector('.player-wrap') || video.parentElement || video,
+                    });
+                }
                 document.getElementById('d').onclick = () => {
                     const a = document.createElement('a'); a.href = downloadUrl; a.download = `${v.title || 'video'}.mp4`;
                     a.style.display='none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);

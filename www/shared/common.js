@@ -220,6 +220,187 @@ window.GoTube.resolveHiddenPath = function resolveHiddenPath(pathname = window.l
     return parts[0] || '';
 };
 
+function attachVideoKeyboardControls(video, options = {}) {
+    if (!video) return () => {};
+    const seekSeconds = Number(options.seekSeconds || 5);
+    const volumeStep = Number(options.volumeStep || 0.1);
+    const isActive = typeof options.isActive === 'function' ? options.isActive : () => true;
+    const wheelTarget = options.wheelTarget || video;
+    const feedbackTarget = options.feedbackTarget || wheelTarget || video.parentElement || video;
+    let volumeHudTimer = null;
+
+    video.tabIndex = 0;
+
+    function ensureHudHost(target) {
+        const host = target instanceof HTMLElement ? target : video.parentElement || video;
+        if (host instanceof HTMLElement) {
+            const computed = window.getComputedStyle(host);
+            if (computed.position === 'static') {
+                host.style.position = 'relative';
+            }
+        }
+        return host;
+    }
+
+    function ensureVolumeHud(target) {
+        const host = ensureHudHost(target);
+        if (!(host instanceof HTMLElement)) return null;
+        let hud = host.querySelector('.gotube-volume-hud');
+        if (!hud) {
+            hud = document.createElement('div');
+            hud.className = 'gotube-volume-hud';
+            hud.style.cssText = [
+                'position:absolute',
+                'right:14px',
+                'bottom:18px',
+                'display:flex',
+                'align-items:center',
+                'gap:8px',
+                'padding:6px 10px',
+                'border-radius:999px',
+                'background:rgba(15,23,42,0.78)',
+                'color:#f8fafc',
+                'box-shadow:0 10px 30px rgba(0,0,0,0.28)',
+                'backdrop-filter:blur(10px)',
+                'opacity:0',
+                'transform:translateY(6px)',
+                'transition:opacity .18s ease, transform .18s ease',
+                'pointer-events:none',
+                'z-index:4',
+                'font-size:12px',
+                'font-weight:600',
+            ].join(';');
+
+            const icon = document.createElement('span');
+            icon.className = 'gotube-volume-hud-icon';
+            icon.textContent = '🔊';
+
+            const track = document.createElement('div');
+            track.className = 'gotube-volume-hud-track';
+            track.style.cssText = [
+                'width:88px',
+                'height:6px',
+                'border-radius:999px',
+                'background:rgba(255,255,255,0.18)',
+                'overflow:hidden',
+            ].join(';');
+
+            const fill = document.createElement('div');
+            fill.className = 'gotube-volume-hud-fill';
+            fill.style.cssText = [
+                'width:0%',
+                'height:100%',
+                'border-radius:999px',
+                'background:linear-gradient(90deg, #60a5fa 0%, #93c5fd 100%)',
+                'transition:width .14s ease',
+            ].join(';');
+
+            const label = document.createElement('span');
+            label.className = 'gotube-volume-hud-label';
+            label.textContent = '100%';
+
+            track.appendChild(fill);
+            hud.append(icon, track, label);
+            host.appendChild(hud);
+        }
+        return hud;
+    }
+
+    function showVolumeHud() {
+        const hud = ensureVolumeHud(feedbackTarget);
+        if (!hud) return;
+        const icon = hud.querySelector('.gotube-volume-hud-icon');
+        const fill = hud.querySelector('.gotube-volume-hud-fill');
+        const label = hud.querySelector('.gotube-volume-hud-label');
+        const nextVolume = video.muted ? 0 : Math.round((video.volume || 0) * 100);
+        if (icon) icon.textContent = nextVolume === 0 ? '🔇' : nextVolume < 50 ? '🔉' : '🔊';
+        if (fill) fill.style.width = `${nextVolume}%`;
+        if (label) label.textContent = `${nextVolume}%`;
+        hud.style.opacity = '1';
+        hud.style.transform = 'translateY(0)';
+        if (volumeHudTimer) {
+            clearTimeout(volumeHudTimer);
+        }
+        volumeHudTimer = window.setTimeout(() => {
+            hud.style.opacity = '0';
+            hud.style.transform = 'translateY(6px)';
+        }, 900);
+    }
+
+    function clampVolume(nextVolume) {
+        video.volume = Math.max(0, Math.min(1, Math.round(nextVolume * 100) / 100));
+        video.muted = video.volume === 0;
+        showVolumeHud();
+    }
+
+    const handler = (event) => {
+        if (!isActive()) return;
+        const target = event.target;
+        if (
+            target instanceof HTMLInputElement ||
+            target instanceof HTMLTextAreaElement ||
+            target instanceof HTMLSelectElement ||
+            (target && target.isContentEditable)
+        ) {
+            return;
+        }
+
+        if ((event.key === ' ' || event.code === 'Space') && event.repeat) {
+            event.preventDefault();
+            return;
+        }
+        if (event.key === ' ' || event.code === 'Space') {
+            event.preventDefault();
+            if (video.paused) {
+                void video.play().catch(() => {});
+            } else {
+                video.pause();
+            }
+            return;
+        }
+        if (event.key === 'ArrowLeft') {
+            event.preventDefault();
+            video.currentTime = Math.max(0, (video.currentTime || 0) - seekSeconds);
+            return;
+        }
+        if (event.key === 'ArrowRight') {
+            event.preventDefault();
+            video.currentTime = Math.min(video.duration || Number.MAX_SAFE_INTEGER, (video.currentTime || 0) + seekSeconds);
+            return;
+        }
+        if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            clampVolume(video.volume + volumeStep);
+            return;
+        }
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            clampVolume(video.volume - volumeStep);
+        }
+    };
+
+    const wheelHandler = (event) => {
+        if (!isActive()) return;
+        event.preventDefault();
+        const delta = event.deltaY < 0 ? volumeStep : -volumeStep;
+        clampVolume(video.volume + delta);
+    };
+
+    document.addEventListener('keydown', handler, true);
+    wheelTarget.addEventListener('wheel', wheelHandler, { passive: false });
+    return () => {
+        if (volumeHudTimer) {
+            clearTimeout(volumeHudTimer);
+            volumeHudTimer = null;
+        }
+        document.removeEventListener('keydown', handler, true);
+        wheelTarget.removeEventListener('wheel', wheelHandler);
+        const hud = feedbackTarget instanceof HTMLElement ? feedbackTarget.querySelector('.gotube-volume-hud') : null;
+        hud?.remove();
+    };
+}
+window.GoTube.attachVideoKeyboardControls = attachVideoKeyboardControls;
+
 /**
  * 带认证的 API 请求封装
  */

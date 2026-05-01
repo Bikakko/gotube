@@ -17,6 +17,7 @@ from .auth import get_current_user, get_db, get_optional_current_user
 from .db import AuthToken, MediaAsset, User
 from . import gallery
 from .downloader import _read_meta_from_dir
+from .http_media import build_video_stream_response
 from .invites import register_user_with_invite
 from .models import AddTaskRequest, ChangePasswordRequest, RegisterRequest, TaskResponse, UpdateProfileRequest, UpdateShareRequest
 from .path_utils import resolve_inside
@@ -633,6 +634,7 @@ async def stream_video(filename: str):
 
 @router.get("/guest-downloads/stream/{session_id}/{filename:path}")
 async def stream_guest_video(
+    request: Request,
     session_id: str,
     filename: str,
     qm: QueueManager = Depends(get_queue_manager),
@@ -658,12 +660,7 @@ async def stream_guest_video(
         raise HTTPException(status_code=404, detail="文件不存在")
 
     logger.info("[/api/guest-downloads/stream] returning video: path=%s, size=%d", filepath, filepath.stat().st_size)
-    return FileResponse(
-        filepath,
-        media_type="video/mp4",
-        filename=filepath.name,
-        headers={"Content-Disposition": f'inline; filename="{filepath.name}"'},
-    )
+    return build_video_stream_response(request, filepath, filename=filepath.name)
 
 
 @router.get("/share/{share_token}/info")
