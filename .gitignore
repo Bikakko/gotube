@@ -1,6 +1,4 @@
 docs/*
-!docs/superpowers/
-!docs/superpowers/**
 
 # 敏感信息 - 每个环境独立管理
 .env
@@ -14,8 +12,7 @@ server.log
 requirements-dev.txt
 
 # 测试 - 生产不需要
-tests/
-!tests/
+tests/*
 !tests/test_security_boundaries.py
 !tests/test_v4_migrations_unittest.py
 !tests/test_auth_roles_unittest.py
