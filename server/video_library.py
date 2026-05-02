@@ -476,6 +476,13 @@ def list_admin_media_assets_page(
         )
         for asset in assets
     ]
+
+    # 将本地缩略图路径转换为 API URL
+    for video in videos:
+        thumbnail = video.get("thumbnail") or ""
+        if thumbnail and not thumbnail.startswith(("http://", "https://")):
+            video["thumbnail"] = f"/api/thumbnail/{video.get('file_hash', '')}"
+
     return {
         "videos": videos,
         "total": total,
