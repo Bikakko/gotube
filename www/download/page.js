@@ -25,6 +25,8 @@ let myVideos = [];
 let myQuota = null;
 let libraryPage = 1;
 const libraryPageSize = 8;
+let libraryTotalPages = 1;
+let libraryTotalItems = 0;
 let modalVideoKeyboardCleanup = null;
 
 function authHeaders(extra = {}) {
@@ -788,15 +790,18 @@ function isQuotaError(message = '') {
             myVideos = [];
             myQuota = null;
             libraryPage = 1;
+            libraryTotalPages = 1;
+            libraryTotalItems = 0;
             renderMyLibrary();
             clearActionableError();
             return;
         }
 
         try {
+            const requestedPage = libraryPage;
             const [quotaRes, videosRes] = await Promise.all([
                 fetch('/api/me/quota', { headers: authHeaders() }),
-                fetch('/api/me/videos', { headers: authHeaders() }),
+                fetch(`/api/me/videos?page=${libraryPage}&per_page=${libraryPageSize}`, { headers: authHeaders() }),
             ]);
             if (!quotaRes.ok || !videosRes.ok) {
                 throw new Error('加载视频库失败');
@@ -804,7 +809,13 @@ function isQuotaError(message = '') {
             myQuota = await quotaRes.json();
             const videosData = await videosRes.json();
             myVideos = videosData.videos || [];
-            libraryPage = Math.min(libraryPage, Math.max(1, Math.ceil(myVideos.length / libraryPageSize)));
+            libraryTotalPages = Math.max(1, Number(videosData.total_pages || 1));
+            libraryTotalItems = Math.max(0, Number(videosData.total || 0));
+            if (requestedPage > libraryTotalPages && libraryTotalItems > 0) {
+                libraryPage = libraryTotalPages;
+                return loadMyLibrary();
+            }
+            libraryPage = Math.min(requestedPage, libraryTotalPages);
             clearActionableError();
             renderMyLibrary();
         } catch (err) {
@@ -833,6 +844,8 @@ function isQuotaError(message = '') {
             myVideos = [];
             myQuota = null;
             libraryPage = 1;
+            libraryTotalPages = 1;
+            libraryTotalItems = 0;
             quotaInfo.textContent = '';
             return;
         }
@@ -852,10 +865,9 @@ function isQuotaError(message = '') {
             return;
         }
 
-        const totalPages = Math.max(1, Math.ceil(myVideos.length / libraryPageSize));
+        const totalPages = Math.max(1, libraryTotalPages);
         if (libraryPage > totalPages) libraryPage = totalPages;
-        const start = (libraryPage - 1) * libraryPageSize;
-        const visibleVideos = myVideos.slice(start, start + libraryPageSize);
+        const visibleVideos = myVideos;
 
         visibleVideos.forEach(video => {
             const card = document.createElement('div');
@@ -908,20 +920,20 @@ function isQuotaError(message = '') {
             prev.className = 'task-btn secondary';
             prev.textContent = '上一页';
             prev.disabled = libraryPage <= 1;
-            prev.addEventListener('click', () => {
+            prev.addEventListener('click', async () => {
                 libraryPage -= 1;
-                renderMyLibrary();
+                await loadMyLibrary();
             });
             const info = document.createElement('span');
-            info.textContent = `${libraryPage} / ${totalPages}，共 ${myVideos.length} 个`;
+            info.textContent = `${libraryPage} / ${totalPages}，共 ${libraryTotalItems} 个`;
             const next = document.createElement('button');
             next.type = 'button';
             next.className = 'task-btn secondary';
             next.textContent = '下一页';
             next.disabled = libraryPage >= totalPages;
-            next.addEventListener('click', () => {
+            next.addEventListener('click', async () => {
                 libraryPage += 1;
-                renderMyLibrary();
+                await loadMyLibrary();
             });
             pager.append(prev, info, next);
             list.appendChild(pager);

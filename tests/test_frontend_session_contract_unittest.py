@@ -124,6 +124,15 @@ class FrontendSessionContractTests(unittest.TestCase):
         self.assertIn("promptUpdateDisplayName", source)
         self.assertIn("promptChangePassword", source)
 
+    def test_download_page_uses_server_side_library_pagination(self):
+        source = read_text("www/download/page.js")
+
+        self.assertIn("fetch(`/api/me/videos?page=${libraryPage}&per_page=${libraryPageSize}`", source)
+        self.assertIn("libraryTotalPages = Math.max(1, Number(videosData.total_pages || 1));", source)
+        self.assertIn("libraryTotalItems = Math.max(0, Number(videosData.total || 0));", source)
+        self.assertNotIn("myVideos.slice(", source)
+        self.assertNotIn("Math.ceil(myVideos.length / libraryPageSize)", source)
+
     def test_download_page_exposes_actionable_error_model(self):
         html = read_text("www/download/index.html")
         source = read_text("www/download/page.js")

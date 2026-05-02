@@ -13,7 +13,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from fastapi import HTTPException
-from sqlalchemy import or_
+from sqlalchemy import case, or_
 from sqlalchemy.orm import Session
 
 from .db import MediaAsset, MediaSource, User, UserVideoItem
@@ -337,6 +337,28 @@ _SOURCE_PATTERNS: dict[str, tuple[str, ...]] = {
 }
 
 
+def _source_pattern_filter(patterns: tuple[str, ...]):
+    return or_(*[MediaAsset.source_url.ilike(f"%{pattern}%") for pattern in patterns])
+
+
+def _list_available_source_platforms(query) -> list[str]:
+    platform_case = case(
+        *[
+            (_source_pattern_filter(patterns), label)
+            for label, patterns in _SOURCE_PATTERNS.items()
+        ],
+        else_=None,
+    ).label("platform")
+    rows = (
+        query.order_by(None)
+        .with_entities(platform_case)
+        .filter(MediaAsset.source_url.is_not(None))
+        .distinct()
+        .all()
+    )
+    return sorted([row[0] for row in rows if row[0]])
+
+
 def list_admin_media_assets_page(
     session: Session,
     admin: User,
@@ -386,7 +408,7 @@ def list_admin_media_assets_page(
     if source:
         patterns = _SOURCE_PATTERNS.get(source)
         if patterns:
-            query = query.filter(or_(*[MediaAsset.source_url.ilike(f"%{pattern}%") for pattern in patterns]))
+            query = query.filter(_source_pattern_filter(patterns))
         else:
             query = query.filter(MediaAsset.source_url.ilike(f"%{source}%"))
 
@@ -444,8 +466,7 @@ def list_admin_media_assets_page(
     ):
         source_rows_by_asset[source_row.media_asset_id].append(source_row)
 
-    source_urls = [row[0] for row in query.with_entities(MediaAsset.source_url).all() if row[0]]
-    all_sources = sorted({source_platform(url) for url in source_urls if source_platform(url)})
+    all_sources = _list_available_source_platforms(query)
 
     videos = [
         _admin_media_asset_to_dict(
