@@ -287,7 +287,7 @@ function renderFilters() {
                     id: 'select-all-checkbox',
                     title: '全选 / 取消全选',
                     checked: false,
-                    onChange: (e) => toggleSelectAll(e.target.checked),
+                    'data-action': 'select-all',
                 }),
                 el('label', {
                     for: 'select-all-checkbox',
@@ -303,7 +303,7 @@ function renderFilters() {
                     type: 'text',
                     placeholder: '按标题搜索...',
                     value: state.filters.keyword,
-                    onInput: (e) => handleKeywordChange(e.target.value),
+                    'data-action': 'search-input',
                 }),
             ]),
         ]),
@@ -340,7 +340,7 @@ function renderFilters() {
                     id: 'page-size-select',
                     className: 'filter-select',
                     value: String(state.pagination.perPage),
-                    onChange: (e) => handlePerPageChange(e.target.value),
+                    'data-action': 'per-page-change',
                 }, [
                     el('option', { value: '20', textContent: '20' }),
                     el('option', { value: '50', textContent: '50' }),
@@ -366,7 +366,7 @@ function renderFilters() {
                                 placeholder: '搜索用户...',
                                 value: state.filters.ownerSearchKeyword || '',
                                 onClick: (e) => e.stopPropagation(),
-                                onInput: (e) => handleOwnerSearchInput(e.target.value),
+                                'data-action': 'owner-search-input',
                             }),
                         ]),
                         el('div', { id: 'owner-dropdown-items' }),
@@ -472,15 +472,8 @@ function renderVideoCard(video) {
         className: `video-select-toggle ${isSelected ? 'selected' : ''}`,
         textContent: isSelected ? '已选中' : '选择',
         title: isSelected ? '取消选择' : '选择媒体',
-        onClick: (e) => {
-            e.stopPropagation();
-            const isCurrentlySelected = state.selectedVideos.has(video.filename);
-            const newState = !isCurrentlySelected;
-            toggleVideoSelection(video.filename, newState);
-            selectToggle.textContent = newState ? '已选中' : '选择';
-            selectToggle.classList.toggle('selected', newState);
-            window.updateSelectAllCheckbox();
-        },
+        'data-action': 'toggle-select',
+        'data-filename': video.filename,
     });
 
     thumb.appendChild(selectToggle);
@@ -526,7 +519,7 @@ function renderVideoCard(video) {
     ]);
 
     card.addEventListener('click', (e) => {
-        if (!e.target.closest('.action-btn') && !e.target.closest('.video-actions-bar')) {
+        if (!e.target.closest('.action-btn') && !e.target.closest('.video-actions-bar') && !e.target.closest('.video-select-toggle')) {
             window.showPlayerModal(video);
         }
     });
@@ -653,20 +646,8 @@ function _createDropdownItem(value, text, filterType) {
     return el('div', {
         className: 'custom-dropdown-item',
         'data-value': value,
-        onClick: (e) => {
-            e.stopPropagation();
-            if (filterType === 'source') {
-                handleSourceChange(value);
-                window.setCustomDropdownValue('source-dropdown', value, text);
-            } else if (filterType === 'time') {
-                handleTimeChange(value);
-                window.setCustomDropdownValue('time-dropdown', value, text);
-            } else if (filterType === 'owner') {
-                handleOwnerChange(value);
-                window.setCustomDropdownValue('owner-dropdown', value, text);
-            }
-            window.hideAllCustomDropdowns();
-        },
+        'data-action': 'filter-change',
+        'data-filter-type': filterType,
     }, [document.createTextNode(text)]);
 }
 

@@ -174,6 +174,56 @@ function bindAdminShellEvents() {
         });
         window._adminShellDocumentClickBound = true;
     }
+
+    // 事件委托：统一处理由 render.js 通过 data-action 标记的交互
+    document.addEventListener('click', (e) => {
+        const target = e.target.closest('[data-action]');
+        if (!target) return;
+        const action = target.dataset.action;
+
+        if (action === 'filter-change') {
+            e.stopPropagation();
+            const filterType = target.dataset.filterType;
+            const value = target.dataset.value;
+            const text = target.textContent;
+            if (filterType === 'source') {
+                handleSourceChange(value);
+                window.setCustomDropdownValue('source-dropdown', value, text);
+            } else if (filterType === 'time') {
+                handleTimeChange(value);
+                window.setCustomDropdownValue('time-dropdown', value, text);
+            } else if (filterType === 'owner') {
+                handleOwnerChange(value);
+                window.setCustomDropdownValue('owner-dropdown', value, text);
+            }
+            window.hideAllCustomDropdowns();
+        } else if (action === 'toggle-select') {
+            const filename = target.dataset.filename;
+            const isCurrentlySelected = state.selectedVideos.has(filename);
+            const newState = !isCurrentlySelected;
+            toggleVideoSelection(filename, newState);
+            target.textContent = newState ? '已选中' : '选择';
+            target.classList.toggle('selected', newState);
+        }
+    });
+
+    document.addEventListener('input', (e) => {
+        const action = e.target.dataset.action;
+        if (action === 'search-input') {
+            handleKeywordChange(e.target.value);
+        } else if (action === 'owner-search-input') {
+            handleOwnerSearchInput(e.target.value);
+        }
+    });
+
+    document.addEventListener('change', (e) => {
+        const action = e.target.dataset.action;
+        if (action === 'select-all') {
+            toggleSelectAll(e.target.checked);
+        } else if (action === 'per-page-change') {
+            handlePerPageChange(e.target.value);
+        }
+    });
 }
 
 window.handleKeywordChange = handleKeywordChange;
