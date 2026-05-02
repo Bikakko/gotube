@@ -36,6 +36,8 @@ docs/superpowers/任务 10 手工验收反馈.md
 downloads/
 gotube.db
 data/
+*.db-shm
+*.db-wal
 
 # AI 助手配置 - 开发专用
 QWEN.md

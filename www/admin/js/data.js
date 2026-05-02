@@ -145,7 +145,7 @@ async function loadCookiesStatusData() {
 
 async function loadRuntimeLogsData(logType = 'app') {
     const params = new URLSearchParams({
-        type: logType,
+        log_type: logType,
         line_limit: '120',
     });
     return apiFetch(`/runtime/logs?${params}`);

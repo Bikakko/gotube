@@ -77,14 +77,14 @@ _ch.setFormatter(
 _ch.setLevel(log_level)
 logging.getLogger().addHandler(_ch)
 
-# 文件日志处理器（RotatingFileHandler，只记录 ERROR 级别，最大 5MB，保留 5 个备份）
+# 文件日志处理器（RotatingFileHandler，级别与 GOTUBE_LOG_LEVEL 一致，最大 5MB，保留 5 个备份）
 _fh = logging.handlers.RotatingFileHandler(
     LOG_FILE, maxBytes=5 * 1024 * 1024, backupCount=5, encoding="utf-8"
 )
 _fh.setFormatter(
     logging.Formatter("%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 )
-_fh.setLevel(logging.ERROR)
+_fh.setLevel(log_level)
 logging.getLogger().addHandler(_fh)
 
 
