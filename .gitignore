@@ -30,6 +30,7 @@ server/.venv/
 docs/superpowers/任务 10 手工验收反馈.md
 
 # 运行时数据 - 生产独立存储
+gallery/
 downloads/
 gotube.db
 data/
