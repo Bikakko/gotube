@@ -1385,6 +1385,9 @@ class Downloader:
                     "home": str(self.download_dir),  # 临时文件和最终文件同目录，由 yt-dlp 自行管理
                     "temp": str(self.download_dir),
                 },
+                # 使用视频 ID 作为临时文件名，避免推文等长标题导致
+                # Windows/ Linux 文件名超长 (Errno 36: File name too long)
+                "outtmpl": "%(id)s.%(ext)s",
                 "progress_hooks": [self._make_progress_hook(task)],
                 "quiet": False,
                 "no_warnings": False,

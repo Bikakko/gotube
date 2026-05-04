@@ -7,7 +7,7 @@ import * as THREE from "/static/shared/vendor/three.module.min.js";
     const modalImage = document.getElementById("lab-modal-image");
     const modalClose = document.getElementById("lab-modal-close");
     const modalBackdrop = document.querySelector("[data-modal-close]");
-    const fallback = "/static/shared/images/favicon.jpg";
+    const fallback = "/static/home/favicon.jpg";
 
     let disposeScene = null;
 

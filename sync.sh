@@ -132,7 +132,7 @@ PROD_FILES=(
     "www/common.js"
     "www/download.html"
     "www/download.js"
-    "www/favicon.jpg"
+    "www/home/favicon.jpg"
     "www/index.html"
     "www/watch.html"
     "www/admin/admin.html"
