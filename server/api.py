@@ -754,6 +754,8 @@ async def download_shared_video(
 
 def _download_filename(title: str, path: Path) -> str:
     safe_title = "".join(c for c in (title or path.stem).strip() if c not in '<>:"/\\|?*').strip()
+    if len(safe_title) > 40:
+        safe_title = safe_title[:40]
     if not safe_title:
         safe_title = path.stem
     suffix = path.suffix or ".mp4"

@@ -1519,10 +1519,12 @@ class Downloader:
         ext = Path(temp_file).suffix or ".mp4"
         logger.debug("文件扩展名: %s", ext)
 
-        # 清理标题中的非法文件名字符
+        # 清理标题中的非法文件名字符，并限制长度避免超出文件系统限制
         safe_title = ""
         if task.title:
             safe_title = "".join(c for c in task.title if c not in r'\/:*?"<>|').strip()
+        if len(safe_title) > 40:
+            safe_title = safe_title[:40]
         logger.debug("safe_title (清理后): %s", safe_title)
 
         if not safe_title:

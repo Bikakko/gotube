@@ -765,7 +765,7 @@ function isQuotaError(message = '') {
             const downloadUrl = `/watch?v=${t.file_hash}`;
             const a = document.createElement('a');
             a.href = downloadUrl;
-            a.download = t.title || 'video';
+            a.download = (t.title || 'video').slice(0, 40);
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -779,7 +779,7 @@ function isQuotaError(message = '') {
         // 触发浏览器下载
         const a = document.createElement('a');
         a.href = downloadUrl;
-        a.download = t.title || 'video';
+        a.download = (t.title || 'video').slice(0, 40);
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1058,7 +1058,8 @@ function isQuotaError(message = '') {
     }
 
     function filenameWithExtension(title, filename) {
-        const base = (title || 'video').trim() || 'video';
+        let base = (title || 'video').trim() || 'video';
+        if (base.length > 40) base = base.slice(0, 40);
         const extMatch = (filename || '').match(/\.[A-Za-z0-9]{2,5}$/);
         const ext = extMatch ? extMatch[0] : '.mp4';
         return base.toLowerCase().endsWith(ext.toLowerCase()) ? base : base + ext;
