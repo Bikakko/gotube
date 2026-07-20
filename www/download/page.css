@@ -307,24 +307,48 @@ body {
 .auth-submit.register:hover { background: #2ea043; }
 .auth-submit:disabled { opacity: 0.6; cursor: not-allowed; }
 @media (max-width: 700px) {
+    body {
+        padding-top: 64px;
+    }
     .session-bar {
-        left: 16px;
-        right: 16px;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 90;
+        margin: 0;
+        max-width: none;
+        padding: 8px 12px;
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+        border-top: none;
         justify-content: space-between;
+        white-space: nowrap;
+        overflow-x: auto;
+        background: rgba(22, 27, 34, 0.96);
+        backdrop-filter: blur(8px);
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
     }
     .session-bar > span {
-    max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.session-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    flex-wrap: wrap;
-}
+        max-width: 110px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    .session-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+        flex-wrap: nowrap;
+        flex-shrink: 0;
+    }
+    .session-bar .task-btn {
+        padding: 5px 10px;
+        font-size: 11px;
+    }
 }
 
 
