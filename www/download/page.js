@@ -24,7 +24,7 @@ let currentUser = null;
 let myVideos = [];
 let myQuota = null;
 let libraryPage = 1;
-const libraryPageSize = 8;
+const libraryPageSize = 12;
 let libraryTotalPages = 1;
 let libraryTotalItems = 0;
 let modalVideoKeyboardCleanup = null;
@@ -111,6 +111,17 @@ function isQuotaError(message = '') {
         if (!s) return '';
         const m = Math.floor(s / 60);
         return m > 0 ? `${m}分${s % 60}秒` : `${s}秒`;
+    }
+
+    function fmtDuration(duration) {
+        const totalSeconds = Math.max(0, Math.floor(Number(duration) || 0));
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        if (hours > 0) {
+            return [hours, minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
+        }
+        return [minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
     }
 
     function renderTasksSafe(list, arr) {
@@ -871,22 +882,38 @@ function isQuotaError(message = '') {
         visibleVideos.forEach(video => {
             const card = document.createElement('div');
             card.className = 'library-item';
+            card.title = video.title || '未命名视频';
+            card.addEventListener('click', (e) => {
+                if (!e.target.closest('.task-btn')) {
+                    openLibraryVideo(video);
+                }
+            });
 
-            let preview;
+            const thumbWrap = document.createElement('div');
+            thumbWrap.className = 'library-thumb-wrap';
             const thumbnailUrl = video.thumbnail_url || video.thumbnail || '';
             if (thumbnailUrl) {
-                preview = document.createElement('img');
+                const preview = document.createElement('img');
                 preview.className = 'library-thumb';
                 preview.alt = '';
                 preview.loading = 'lazy';
                 setAuthorizedImage(preview, thumbnailUrl);
+                thumbWrap.appendChild(preview);
             } else {
-                preview = document.createElement('div');
-                preview.className = 'library-thumb-empty';
-                preview.textContent = '暂无预览';
+                const empty = document.createElement('div');
+                empty.className = 'library-thumb-empty';
+                empty.textContent = '暂无预览';
+                thumbWrap.appendChild(empty);
+            }
+            if (video.duration) {
+                const badge = document.createElement('span');
+                badge.className = 'library-duration-badge';
+                badge.textContent = fmtDuration(video.duration);
+                thumbWrap.appendChild(badge);
             }
 
             const body = document.createElement('div');
+            body.className = 'library-body';
 
             const title = document.createElement('div');
             title.className = 'library-title';
@@ -895,19 +922,22 @@ function isQuotaError(message = '') {
             const meta = document.createElement('div');
             meta.className = 'library-meta';
             const source = sourceFromUrl(video.source_url);
-            const savedAt = video.saved_at ? new Date(video.saved_at).toLocaleString('zh-CN') : '';
-            meta.textContent = `${fmtBytes(video.size)} · ${source || 'Unknown'} · ${savedAt} · ${video.share_enabled ? '分享已开启' : '分享已关闭'}`;
+            const savedAt = video.saved_at ? new Date(video.saved_at).toLocaleDateString('zh-CN') : '';
+            meta.textContent = [fmtBytes(video.size), source || 'Unknown', savedAt].filter(Boolean).join(' · ');
+
+            const shareBadge = document.createElement('span');
+            shareBadge.className = `library-share-badge ${video.share_enabled ? 'on' : 'off'}`;
+            shareBadge.textContent = video.share_enabled ? '分享已开启' : '分享已关闭';
 
             const actions = document.createElement('div');
             actions.className = 'library-actions';
-            addLibraryButton(actions, 'play', '▶ 播放', () => openLibraryVideo(video));
             addLibraryButton(actions, 'share', '🔗 分享', () => copyLibraryShare(video), !video.share_enabled);
             addLibraryButton(actions, 'download', '⬇ 下载', () => downloadMyVideo(video));
-            addLibraryButton(actions, 'retry', video.share_enabled ? '关闭分享' : '开启分享', () => toggleLibraryShare(video));
+            addLibraryButton(actions, 'retry', video.share_enabled ? '关分享' : '开分享', () => toggleLibraryShare(video));
             addLibraryButton(actions, 'danger', '移除', () => deleteLibraryVideo(video));
 
-            body.append(title, meta, actions);
-            card.append(preview, body);
+            body.append(title, meta, shareBadge);
+            card.append(thumbWrap, body, actions);
             list.appendChild(card);
         });
 

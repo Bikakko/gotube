@@ -23,7 +23,8 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     min-height: 100vh;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
     padding: 40px 16px;
 }
 .container { width: 100%; max-width: 640px; }
@@ -153,6 +154,8 @@ body {
     flex-wrap: wrap;
 }
 .library-section {
+    width: 100%;
+    max-width: max(640px, min(1280px, 66vw));
     margin-top: 28px;
     border-top: 1px solid #30363d;
     padding-top: 20px;
@@ -166,51 +169,109 @@ body {
 }
 .library-header h2 { font-size: 18px; margin-bottom: 6px; }
 .quota-info { font-size: 13px; color: var(--download-text-muted); }
+#library-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+}
 .library-item {
     background: var(--download-surface);
     border: 1px solid var(--download-border);
     border-radius: var(--download-radius);
-    padding: 14px;
-    margin-bottom: 10px;
-    display: grid;
-    grid-template-columns: 112px 1fr;
-    gap: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.library-item:hover {
+    transform: translateY(-3px);
+    border-color: #484f58;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+}
+.library-thumb-wrap {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    background: var(--download-bg);
+    overflow: hidden;
+    flex-shrink: 0;
 }
 .library-thumb {
-    width: 112px;
-    aspect-ratio: 16 / 9;
-    border-radius: 6px;
-    background: var(--download-bg);
-    border: 1px solid var(--download-border);
+    width: 100%;
+    height: 100%;
     object-fit: cover;
+    display: block;
+    transition: transform 0.25s ease;
 }
+.library-item:hover .library-thumb { transform: scale(1.04); }
 .library-thumb-empty {
-    width: 112px;
-    aspect-ratio: 16 / 9;
-    border-radius: 6px;
-    background: var(--download-bg);
-    border: 1px solid var(--download-border);
+    width: 100%;
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--download-text-muted);
+    font-size: 12px;
 }
-.library-title { font-size: 14px; font-weight: 600; margin-bottom: 8px; word-break: break-word; }
-.library-meta { font-size: 12px; color: var(--download-text-muted); margin-bottom: 10px; }
-.library-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.library-duration-badge {
+    position: absolute;
+    right: 6px;
+    bottom: 6px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    font-size: 11px;
+    line-height: 1.4;
+}
+.library-body { padding: 10px 12px 8px; flex: 1; min-width: 0; }
+.library-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.library-meta { font-size: 11px; color: var(--download-text-muted); line-height: 1.5; word-break: break-all; }
+.library-share-badge {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    border: 1px solid;
+    font-size: 11px;
+    line-height: 1.5;
+}
+.library-share-badge.on { border-color: rgba(63, 185, 80, 0.5); color: var(--download-success); background: rgba(63, 185, 80, 0.08); }
+.library-share-badge.off { border-color: var(--download-border); color: var(--download-text-muted); background: var(--download-surface-muted); }
+.library-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 10px 12px;
+    border-top: 1px solid var(--download-border);
+}
+.library-actions .task-btn { padding: 4px 10px; font-size: 11px; }
 .library-pager {
+    grid-column: 1 / -1;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 12px;
-    margin-top: 14px;
+    margin-top: 4px;
     color: var(--download-text-muted);
     font-size: 13px;
 }
-.empty-library { color: var(--download-text-muted); font-size: 14px; text-align: center; padding: 18px; }
-@media (max-width: 520px) {
-    .library-item { grid-template-columns: 1fr; }
-    .library-thumb, .library-thumb-empty { width: 100%; }
+.empty-library {
+    grid-column: 1 / -1;
+    color: var(--download-text-muted);
+    font-size: 14px;
+    text-align: center;
+    padding: 18px;
+}
+@media (max-width: 640px) {
+    #library-list { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 }
 /* 播放模态框 */
 .modal {
