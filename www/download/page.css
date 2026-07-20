@@ -294,6 +294,9 @@ body {
 .modal-body video {
     width: auto; height: auto; max-width: 100%; max-height: 60vh;
     display: block; background: #000; margin: 0 auto;
+    /* attachVideoKeyboardControls 会设 tabIndex=0 使视频可聚焦，键盘操作后
+       浏览器会画焦点框，这里去掉（与管理页全局 outline:none 对齐） */
+    outline: none;
 }
 .modal-footer {
     padding: 12px 16px; display: flex; justify-content: center; gap: 12px;
