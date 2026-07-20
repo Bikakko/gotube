@@ -76,20 +76,27 @@ def _raise_internal_admin_error(user_message: str, exc: Exception) -> None:
 # ── Token 管理 ──
 
 
+# Token 有效期：约 100 年，等效于永不过期（仅主动登出失效）。
+# 写入真实远未来日期而非 NULL，以兼容历史 NOT NULL 约束的数据库，无需迁移。
+_TOKEN_TTL_SECONDS = 100 * 365 * 24 * 3600
+
+
 def generate_token(db: Session, user_id: int, username: str, role: str) -> str:
-    """生成 token 并存入数据库（永不过期，仅主动登出失效）"""
+    """生成 token 并存入数据库"""
     token = secrets.token_hex(32)
+    expiry = datetime.now(UTC) + timedelta(seconds=_TOKEN_TTL_SECONDS)
 
     auth_token = AuthToken(
         token=token,
         user_id=user_id,
-        expires_at=None,
+        expires_at=expiry,
         is_active=True,
     )
     db.add(auth_token)
     db.commit()
 
-    logger.info("生成 token: user=%s, role=%s (无过期时间)", username, role)
+    logger.info("生成 token: user=%s, role=%s, 过期时间: %s",
+                username, role, expiry.isoformat())
     return token
 
 

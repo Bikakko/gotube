@@ -64,7 +64,7 @@ class AuthToken(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     token = Column(String(128), unique=True, nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    expires_at = Column(DateTime, nullable=True, index=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     last_used_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     is_active = Column(Boolean, nullable=False, default=True, index=True)
