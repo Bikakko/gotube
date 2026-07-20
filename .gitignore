@@ -30,6 +30,7 @@ docs/superpowers/任务 10 手工验收反馈.md
 gallery/
 downloads/
 gotube.db
+databackups/
 data/
 *.db-shm
 *.db-wal

@@ -106,6 +106,9 @@ _www_dir: str = _s("GOTUBE_WWW_DIR", default="www")
 _cookies_file: str = _s("GOTUBE_COOKIES_FILE")
 _warp_proxy: str = _s("GOTUBE_WARP_PROXY")
 _db_file: str = _s("GOTUBE_DB_FILE", default="./gotube.db")
+_backup_dir: str = _s("GOTUBE_BACKUP_DIR", default="databackups")
+_backup_interval_hours: int = _i("GOTUBE_BACKUP_INTERVAL_HOURS", default=24, min_val=1)
+_backup_retention: int = _i("GOTUBE_BACKUP_RETENTION", default=3, min_val=1)
 
 # 解析管理员账号列表（格式：用户名1:密码1,用户名2:密码2）
 _raw_admins: str = _s("GOTUBE_ADMINS", required=True)
@@ -200,6 +203,22 @@ class _Settings:
     def db_file(self) -> Path:
         p = Path(_db_file)
         return p if p.is_absolute() else _project_root / p
+
+    @property
+    def backup_dir(self) -> Path:
+        """数据库备份目录（相对路径按项目根解析）"""
+        p = Path(_backup_dir)
+        return p if p.is_absolute() else _project_root / p
+
+    @property
+    def backup_interval_hours(self) -> int:
+        """数据库自动备份间隔（小时）"""
+        return _backup_interval_hours
+
+    @property
+    def backup_retention(self) -> int:
+        """数据库备份保留份数"""
+        return _backup_retention
 
     @property
     def debug(self) -> bool:

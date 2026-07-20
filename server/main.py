@@ -10,7 +10,7 @@ import logging
 import logging.handlers
 import re
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from .api import get_queue_manager
 from .api import router as api_router
 from .admin_api import router as admin_api_router
+from .backup import backup_loop
 from .config import settings
 from .db import init_db, get_session, sync_admins_from_env
 from .downloader import Downloader, DownloadTask
@@ -108,10 +109,16 @@ async def lifespan(app: FastAPI):
     logger.info("GoTube 启动，下载目录: %s", downloader.download_dir)
     logger.info("最大并发下载数: %d", settings.max_concurrent)
 
+    # 启动数据库定时备份后台任务
+    backup_task = asyncio.create_task(backup_loop())
+
     yield
 
     # 关闭阶段
     logger.info("GoTube 正在关闭...")
+    backup_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await backup_task
     try:
         await queue_mgr.shutdown()
     except Exception as e:
