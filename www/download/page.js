@@ -347,7 +347,6 @@ function isQuotaError(message = '') {
         video.src = videoUrl;
         video.controls = true;
         video.autoplay = true;
-        video.style.width = '100%';
         video.style.background = '#000';
         modalVideo.appendChild(video);
         modalVideoKeyboardCleanup?.();
@@ -968,7 +967,6 @@ function isQuotaError(message = '') {
         elem.src = videoUrl;
         elem.controls = true;
         elem.autoplay = true;
-        elem.style.width = '100%';
         elem.style.background = '#000';
         modalVideo.appendChild(elem);
         modalVideoKeyboardCleanup?.();

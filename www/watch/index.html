@@ -21,7 +21,10 @@
             width: 100%; background: #000; border-radius: 12px;
             overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.4);
         }
-        .player-wrap video { width: 100%; display: block; }
+        .player-wrap video {
+            width: auto; height: auto; max-width: 100%; max-height: 70vh;
+            display: block; margin: 0 auto;
+        }
         .info { padding: 20px 0; }
         .info h1 { font-size: 18px; margin-bottom: 10px; word-break: break-word; }
         .meta { color: #8b949e; font-size: 14px; display: flex; gap: 16px; margin-bottom: 16px; }
