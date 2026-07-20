@@ -31,6 +31,7 @@ def cleanup_expired_tokens(db: Session) -> None:
     result = db.execute(
         update(AuthToken)
         .where(
+            AuthToken.expires_at.isnot(None),
             AuthToken.expires_at < now,
             AuthToken.is_active == True,
         )
@@ -60,15 +61,16 @@ def verify_token(db: Session, token: str | None) -> dict | None:
         return None
     auth_token, user = row
 
-    now = datetime.now(UTC)
-    expires_at = auth_token.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=UTC)
+    if auth_token.expires_at is not None:
+        now = datetime.now(UTC)
+        expires_at = auth_token.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
 
-    if now > expires_at:
-        auth_token.is_active = False
-        db.commit()
-        return None
+        if now > expires_at:
+            auth_token.is_active = False
+            db.commit()
+            return None
 
     if not user.is_active:
         auth_token.is_active = False
@@ -81,7 +83,7 @@ def verify_token(db: Session, token: str | None) -> dict | None:
     return {
         **build_user_identity(user),
         "user_id": user.id,
-        "expiry": auth_token.expires_at.timestamp(),
+        "expiry": auth_token.expires_at.timestamp() if auth_token.expires_at else None,
         "_user": user,
     }
 

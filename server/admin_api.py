@@ -76,26 +76,20 @@ def _raise_internal_admin_error(user_message: str, exc: Exception) -> None:
 # ── Token 管理 ──
 
 
-# Token 有效期：120 小时
-_TOKEN_TTL_SECONDS = 120 * 3600
-
-
 def generate_token(db: Session, user_id: int, username: str, role: str) -> str:
-    """生成 token 并存入数据库"""
+    """生成 token 并存入数据库（永不过期，仅主动登出失效）"""
     token = secrets.token_hex(32)
-    expiry = datetime.now(UTC) + timedelta(seconds=_TOKEN_TTL_SECONDS)
-    
+
     auth_token = AuthToken(
         token=token,
         user_id=user_id,
-        expires_at=expiry,
+        expires_at=None,
         is_active=True,
     )
     db.add(auth_token)
     db.commit()
-    
-    logger.info("生成 token: user=%s, role=%s, 过期时间: %s",
-                username, role, expiry.isoformat())
+
+    logger.info("生成 token: user=%s, role=%s (无过期时间)", username, role)
     return token
 
 

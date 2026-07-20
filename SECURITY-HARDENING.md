@@ -37,7 +37,7 @@
 
 ### 4. 访问日志带时间字段
 
-`wk.sh` 启动 Gunicorn 时会显式设置 access log 格式，并统一写入日志文件。
+`wk.sh` 启动 uvicorn 时日志统一写入 `$GOTUBE_LOG_FILE`。
 
 ## 代理层建议
 

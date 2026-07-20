@@ -35,7 +35,6 @@ GOTUBE_PORT=8000
 GOTUBE_VENV_DIR=./venv
 GOTUBE_PID_FILE=./.server.pid
 GOTUBE_LOG_FILE=./server.log
-GOTUBE_WORKERS=1
 GOTUBE_BUILD_FRONTEND=1
 GOTUBE_WWW_DIR=www_dist
 GOTUBE_DOWNLOAD_DIR=./downloads
@@ -45,7 +44,6 @@ GOTUBE_ADMINS=admin:请改成你自己的密码
 
 说明：
 
-- `GOTUBE_WORKERS` 建议保持 `1`，当前下载队列和会话状态不适合多 worker 并行。
 - `GOTUBE_ADMINS` 必须替换默认值。
 - `GOTUBE_HIDDEN_PATH` 只是弱隐藏入口，不是认证措施；不要把它当作后台安全边界。
 

@@ -67,7 +67,6 @@ runtime_load_common_config() {
     GOTUBE_VENV_DIR="$(runtime_resolve_path "$(runtime_get_config GOTUBE_VENV_DIR "./venv")")"
     GOTUBE_PID_FILE="$(runtime_resolve_path "$(runtime_get_config GOTUBE_PID_FILE "./.server.pid")")"
     GOTUBE_LOG_FILE="$(runtime_resolve_path "$(runtime_get_config GOTUBE_LOG_FILE "./server.log")")"
-    GOTUBE_WORKERS="$(runtime_get_config GOTUBE_WORKERS "1")"
     GOTUBE_BUILD_FRONTEND="$(runtime_get_config GOTUBE_BUILD_FRONTEND "0")"
     GOTUBE_AUTO_INIT_VENV="$(runtime_get_config GOTUBE_AUTO_INIT_VENV "1")"
     GOTUBE_AUTO_INSTALL_DEPS="$(runtime_get_config GOTUBE_AUTO_INSTALL_DEPS "1")"
@@ -142,7 +141,7 @@ runtime_python_dep_ready() {
 
 runtime_prod_dep_ready() {
     runtime_activate_venv || return 1
-    python -c "import gunicorn" >/dev/null 2>&1
+    python -c "import uvicorn" >/dev/null 2>&1
 }
 
 runtime_ensure_python_deps() {

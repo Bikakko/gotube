@@ -46,6 +46,7 @@ AGENTS.md
 view_debug_log.sh
 
 # 开发文档 - 不部署到生产
+dev-notes/
 www/ADMIN_PLAN.md
 www/DEV_LOG.md
 www/WORKLOG.md

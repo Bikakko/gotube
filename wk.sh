@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# GoTube 生产环境启动脚本 (v4.7.25)
-# 使用 gunicorn + uvicorn workers 模式
+# GoTube 生产环境启动脚本
+# 使用 uvicorn 直接运行（单进程，systemd 负责保活）
 
 set -e
 
@@ -98,8 +98,6 @@ force_kill_port() {
 start() {
     runtime_load_common_config
     local PORT="$GOTUBE_PORT"
-    local WORKERS="$GOTUBE_WORKERS"
-    local ACCESS_LOG_FORMAT='time="%(t)s" remote="%(h)s" method="%(m)s" path="%(U)s" query="%(q)s" status=%(s)s bytes=%(B)s referer="%(f)s" agent="%(a)s"'
 
     # 端口预检
     if check_port "$PORT"; then
@@ -122,10 +120,9 @@ start() {
     runtime_ensure_python_deps prod || exit 1
     runtime_build_frontend || exit 1
 
-echo -e "${GREEN}正在启动 GoTube 生产服务器 (v4.7.25)...${NC}"
+    echo -e "${GREEN}正在启动 GoTube 生产服务器...${NC}"
     runtime_print_summary
     echo -e "  端口:    ${YELLOW}$PORT${NC}"
-    echo -e "  Workers: ${YELLOW}$WORKERS${NC}"
 
     runtime_activate_venv || exit 1
     cd "$PROJECT_DIR"
@@ -141,22 +138,17 @@ echo -e "${GREEN}正在启动 GoTube 生产服务器 (v4.7.25)...${NC}"
     unset GOTUBE_DOWNLOAD_DIR GOTUBE_COOKIES_FILE GOTUBE_WARP_PROXY
     unset GOTUBE_DEBUG GOTUBE_ADMINS GOTUBE_LOG_LEVEL GOTUBE_DB_FILE
 
-    # 使用 gunicorn + uvicorn workers 启动
-    gunicorn server.main:app \
-        --workers "$WORKERS" \
-        --worker-class uvicorn.workers.UvicornWorker \
-        --bind "$GOTUBE_HOST:$PORT" \
-        --pid "$GOTUBE_PID_FILE" \
-        --access-logfile "$GOTUBE_LOG_FILE" \
-        --access-logformat "$ACCESS_LOG_FORMAT" \
-        --error-logfile "$GOTUBE_LOG_FILE" \
-        --capture-output \
-        --daemon
+    # 使用 uvicorn 直接启动
+    nohup python -m uvicorn server.main:app \
+        --host "$GOTUBE_HOST" \
+        --port "$PORT" \
+        >> "$GOTUBE_LOG_FILE" 2>&1 &
+    echo $! > "$GOTUBE_PID_FILE"
 
     # 等待服务启动
     sleep 2
 
-    if [ -f "$GOTUBE_PID_FILE" ]; then
+    if [ -f "$GOTUBE_PID_FILE" ] && kill -0 "$(cat "$GOTUBE_PID_FILE")" 2>/dev/null; then
         local pid=$(cat "$GOTUBE_PID_FILE")
         echo -e "${GREEN}✓ 服务器已启动!${NC}"
         echo -e "  PID:      ${YELLOW}$pid${NC}"
@@ -164,6 +156,7 @@ echo -e "${GREEN}正在启动 GoTube 生产服务器 (v4.7.25)...${NC}"
         echo -e "  日志文件: ${YELLOW}$GOTUBE_LOG_FILE${NC}"
     else
         echo -e "${RED}✗ 服务器启动失败，请检查日志: $GOTUBE_LOG_FILE${NC}"
+        rm -f "$GOTUBE_PID_FILE"
         exit 1
     fi
 }
@@ -215,7 +208,7 @@ status() {
 
     if is_running; then
         local pid=$(cat "$GOTUBE_PID_FILE")
-echo -e "${GREEN}● 服务器运行中 (v4.7.25)${NC}"
+echo -e "${GREEN}● 服务器运行中${NC}"
         echo -e "  PID:      $pid"
         echo -e "  访问地址: http://$GOTUBE_HOST:$PORT"
     elif check_port "$PORT"; then
