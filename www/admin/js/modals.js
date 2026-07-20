@@ -3,72 +3,70 @@
  * 播放器、分享、媒体详情等弹窗。
  */
 
-function showPlayerModal(video) {
-    const videoSrc = `/watch?v=${encodeURIComponent(video.file_hash)}`;
-    const overlay = el('div', { className: 'modal active', id: 'player-modal' }, [
-        el('div', { className: 'modal-content' }, [
-            el('div', { className: 'modal-header' }, [
-                el('div', {
-                    className: 'modal-title',
-                    textContent: video.title || '未命名视频',
-                }),
-                el('button', {
-                    className: 'modal-close',
-                    textContent: '×',
-                    onClick: () => closeModal('player-modal'),
-                }),
-            ]),
-            el('div', { className: 'modal-body' }, [
-                el('video', {
-                    id: 'player-video',
-                    controls: true,
-                    autoplay: true,
-                    loop: true,
-                }, [
-                    el('source', {
-                        src: videoSrc,
-                        type: 'video/mp4',
-                    }),
-                ]),
-            ]),
-        ]),
-    ]);
+let playerKeyboardCleanup = null;
 
-    overlay.addEventListener('click', (event) => {
-        if (event.target === overlay) {
-            closeModal('player-modal');
+function showPlayerModal(video) {
+    const modal = $('#player-modal');
+    const titleEl = $('#player-modal-title');
+    const bodyEl = $('#player-modal-body');
+    if (!modal || !titleEl || !bodyEl) return;
+
+    titleEl.textContent = video.title || '未命名视频';
+    bodyEl.replaceChildren();
+    modal.classList.add('active');
+
+    // 先显示模态框再插入视频，与旧版一致：在可见容器里创建视频，避免隐藏容器
+    // 下布局时机异常（同步任务内完成，浏览器不会中途渲染，无空弹窗闪烁）
+    const videoSrc = `/watch?v=${encodeURIComponent(video.file_hash)}`;
+    const videoEl = document.createElement('video');
+    videoEl.controls = true;
+    videoEl.autoplay = true;
+    videoEl.loop = true;
+    videoEl.style.background = '#000';
+    videoEl.src = videoSrc;
+    bodyEl.appendChild(videoEl);
+
+    playerKeyboardCleanup?.();
+    playerKeyboardCleanup = null;
+    if (window.GoTube && typeof window.GoTube.attachVideoKeyboardControls === 'function') {
+        playerKeyboardCleanup = window.GoTube.attachVideoKeyboardControls(videoEl, {
+            isActive: () => modal.classList.contains('active'),
+            wheelTarget: bodyEl,
+            feedbackTarget: bodyEl,
+        });
+    }
+    videoEl.focus();
+}
+
+function closePlayerModal() {
+    const modal = $('#player-modal');
+    if (!modal) return;
+    playerKeyboardCleanup?.();
+    playerKeyboardCleanup = null;
+    const videoEl = modal.querySelector('video');
+    if (videoEl) {
+        videoEl.pause();
+        videoEl.src = '';
+        videoEl.load();
+    }
+    $('#player-modal-body')?.replaceChildren();
+    modal.classList.remove('active');
+}
+
+function bindPlayerModalEvents() {
+    const modal = $('#player-modal');
+    if (!modal) return;
+    $('#player-modal-close')?.addEventListener('click', closePlayerModal);
+    modal.addEventListener('click', (event) => {
+        if (event.target === modal) closePlayerModal();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape' && modal.classList.contains('active')) {
+            closePlayerModal();
         }
     });
-
-    document.body.appendChild(overlay);
-    const videoEl = overlay.querySelector('#player-video');
-    let cleanupKeyboardControls = null;
-
-    if (videoEl) {
-        videoEl.loop = true;
-        videoEl.focus();
-        if (window.GoTube && typeof window.GoTube.attachVideoKeyboardControls === 'function') {
-            cleanupKeyboardControls = window.GoTube.attachVideoKeyboardControls(videoEl, {
-                isActive: () => Boolean(document.getElementById('player-modal')),
-                wheelTarget: overlay.querySelector('.modal-body') || videoEl,
-                feedbackTarget: overlay.querySelector('.modal-body') || videoEl.parentElement || videoEl,
-            });
-        }
-    }
-
-    const previousCloseModal = window.closeModal;
-    if (typeof previousCloseModal === 'function') {
-        const wrappedCloseModal = function(modalId) {
-            if (modalId === 'player-modal') {
-                cleanupKeyboardControls?.();
-                cleanupKeyboardControls = null;
-                window.closeModal = previousCloseModal;
-            }
-            return previousCloseModal(modalId);
-        };
-        window.closeModal = wrappedCloseModal;
-    }
 }
+bindPlayerModalEvents();
 
 function showShareModal(video) {
     const shareId = video.share_token || video.file_hash;
@@ -320,16 +318,12 @@ function showMediaDetailsModal(video) {
 }
 
 function closeModal(modalId) {
+    if (modalId === 'player-modal') {
+        closePlayerModal();
+        return;
+    }
     const modal = $(`#${modalId}`);
     if (modal) {
-        if (modalId === 'player-modal') {
-            const videoEl = modal.querySelector('video');
-            if (videoEl) {
-                videoEl.pause();
-                videoEl.src = '';
-                videoEl.load();
-            }
-        }
         modal.remove();
     }
 }
