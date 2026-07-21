@@ -353,9 +353,11 @@ class QueueManager:
         if task.status != "failed":
             return False
 
-        # 构建回调并启动重试
-        callback = self._build_callback(client_id)
-        self.downloader.retry_task(task, callback)
+        # 重置状态后通过信号量调度，避免绕过并发限制
+        self.downloader.reset_for_retry(task)
+        runner = asyncio.create_task(self._execute_with_semaphore(task), name=f"retry-{task.task_id}")
+        self._running_tasks[task.task_id] = runner
+        runner.add_done_callback(lambda _runner, tid=task.task_id: self._running_tasks.pop(tid, None))
         logger.info("任务重试: %s, client=%s, url=%s", task_id, client_id, task.url[:80])
         return True
 

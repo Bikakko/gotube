@@ -19,7 +19,7 @@ import time
 import uuid
 from collections.abc import Callable
 from contextlib import suppress
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -225,6 +225,9 @@ class Downloader:
         self._hash_index_time: float = 0
         self._hash_index_ttl = 30
 
+        # 后处理临界区锁：保护"查重 → 落盘 → 刷索引"的原子性
+        self._post_process_lock = asyncio.Lock()
+
         # 匿名用户临时下载目录
         self.guest_download_dir = self.download_dir / "temp_guest"
         self.guest_download_dir.mkdir(parents=True, exist_ok=True)
@@ -322,10 +325,27 @@ class Downloader:
         Returns:
             新创建的 DownloadTask 对象。
         """
+        self._cleanup_stale_tasks()
         task_id = str(uuid.uuid4())[:8]
         task = DownloadTask(task_id, url, client_id)
         self._tasks[task_id] = task
         return task
+
+    def _cleanup_stale_tasks(self, max_age_hours: float = 24.0) -> None:
+        """清理超过指定时间的终态任务记录（completed/failed/cancelled）。"""
+        now = datetime.now(UTC)
+        max_age = timedelta(hours=max_age_hours)
+        stale_ids = [
+            task_id
+            for task_id, task in self._tasks.items()
+            if task.status in ("completed", "failed", "cancelled")
+            and task.completed_at
+            and (now - task.completed_at) > max_age
+        ]
+        for task_id in stale_ids:
+            del self._tasks[task_id]
+        if stale_ids:
+            logger.info("清理 %d 个过期任务记录", len(stale_ids))
 
     @staticmethod
     def compute_file_hash(filepath: str, chunk_size: int = 65536) -> str:
@@ -883,18 +903,16 @@ class Downloader:
 
         return result
 
-    def retry_task(self, task: DownloadTask, progress_callback: Callable) -> asyncio.Task:
+    def reset_for_retry(self, task: DownloadTask) -> None:
         """
-        重试下载：重置任务状态 → 清理缓存 → 重新下载。
+        重置失败任务的状态，为重新下载做准备。
+
+        只负责状态重置和临时文件清理，不启动下载协程。
+        由 QueueManager 通过信号量调度执行。
 
         Args:
             task: 下载任务对象。
-            progress_callback: 异步进度回调函数。
-
-        Returns:
-            下载协程的 Task 对象。
         """
-        # 重置任务状态
         task.status = "pending"
         task.progress = 0.0
         task.speed = 0.0
@@ -909,12 +927,13 @@ class Downloader:
         task.total_bytes = 0
         task.download_artifact_path = ""
         task.estimated_size_bytes = None
+        task.cancel_requested = False
+        task.cancel_reason = ""
+        task.download_phase_count = 1
+        task.download_phase_index = 0
+        task.download_phase_artifacts = []
 
-        # 清理残留临时文件
         self.cleanup_temp_files(task.task_id)
-
-        # 启动下载协程
-        return asyncio.create_task(self.download(task, progress_callback), name=f"retry-{task.task_id}")
 
     def delete_task(self, task_id: str) -> bool:
         """删除任务记录"""
@@ -1502,88 +1521,94 @@ class Downloader:
         logger.debug("文件 hash: %s", file_hash)
 
         # 检查是否已存在相同 hash 的文件（内容去重）
-        existing = self.find_hash_file(file_hash)
-        logger.debug("检查去重 - existing: %s", existing)
-        if existing:
-            logger.debug("发现重复文件,删除 temp_file")
-            os.remove(temp_file)
-            task.is_duplicate = True
-            rel_path = existing.relative_to(self.download_dir)
-            # 游客任务保留 temp_guest/ 前缀，但添加 DUPLICATE/ 标记
-            # filepath 指向主视频库的已存在文件
-            if task.is_guest:
-                task.filename = f"temp_guest/{task.session_id}/DUPLICATE/{rel_path}"
-            else:
-                task.filename = str(rel_path)
-            task.filepath = str(existing)
-            logger.debug("文件已存在（去重）: %s", rel_path)
-            raise FileExistsError(f"重复文件: {existing}")
-
-        ext = Path(temp_file).suffix or ".mp4"
-        logger.debug("文件扩展名: %s", ext)
-
-        # 清理标题中的非法文件名字符，并限制长度避免超出文件系统限制
-        safe_title = ""
-        if task.title:
-            safe_title = "".join(c for c in task.title if c not in r'\/:*?"<>|').strip()
-        if len(safe_title) > 40:
-            safe_title = safe_title[:40]
-        logger.debug("safe_title (清理后): %s", safe_title)
-
-        if not safe_title:
-            safe_title = file_hash
-            logger.debug("safe_title 为空,使用 hash 作为标题")
-
-        # 根据是否为匿名用户决定目录路径
-        if task.is_guest and task.session_id:
-            session_id = validate_guest_session_id(task.session_id)
-            base_dir = resolve_inside(self.guest_download_dir, session_id)
-            base_dir.mkdir(parents=True, exist_ok=True)
-        else:
-            base_dir = self.download_dir
-
-        # 构造目录名：标题_指纹
-        dir_name = f"{safe_title}_{file_hash}"
-        dir_path = base_dir / dir_name
-        logger.debug("目标目录: %s, base_dir: %s", dir_path, base_dir)
-
-        # 检查同名冲突
-        if dir_path.exists():
-            logger.debug("目录已存在,检查冲突")
-            existing_in_dir = dir_path / f"{file_hash}{ext}"
-            if existing_in_dir.exists():
-                logger.debug("发现同名同 hash 文件,删除 temp_file")
+        # 锁保护"查重 → 落盘 → 刷索引"的原子性，防止并发下载同视频时重复落盘
+        async with self._post_process_lock:
+            existing = self.find_hash_file(file_hash)
+            logger.debug("检查去重 - existing: %s", existing)
+            if existing:
+                logger.debug("发现重复文件,删除 temp_file")
                 os.remove(temp_file)
                 task.is_duplicate = True
+                rel_path = existing.relative_to(self.download_dir)
+                # 游客任务保留 temp_guest/ 前缀，但添加 DUPLICATE/ 标记
+                # filepath 指向主视频库的已存在文件
                 if task.is_guest:
-                    task.filename = f"temp_guest/{task.session_id}/{dir_name}/{file_hash}{ext}"
+                    task.filename = f"temp_guest/{task.session_id}/DUPLICATE/{rel_path}"
                 else:
-                    task.filename = f"{dir_name}/{file_hash}{ext}"
-                task.filepath = str(existing_in_dir)
-                raise FileExistsError(f"重复文件: {existing_in_dir}")
+                    task.filename = str(rel_path)
+                task.filepath = str(existing)
+                logger.debug("文件已存在（去重）: %s", rel_path)
+                raise FileExistsError(f"重复文件: {existing}")
 
-            # 同名不同内容，加序号
-            i = 1
-            while True:
-                new_dir_name = f"{safe_title}_{i}_{file_hash}"
-                new_dir_path = base_dir / new_dir_name
-                logger.debug("尝试新目录名: %s", new_dir_name)
-                if not new_dir_path.exists():
-                    dir_name = new_dir_name
-                    dir_path = new_dir_path
-                    break
-                i += 1
+            ext = Path(temp_file).suffix or ".mp4"
+            logger.debug("文件扩展名: %s", ext)
 
-        # 创建子目录
-        dir_path.mkdir(exist_ok=True)
-        logger.debug("创建目录: %s", dir_path)
+            # 清理标题中的非法文件名字符，并限制长度避免超出文件系统限制
+            safe_title = ""
+            if task.title:
+                safe_title = "".join(c for c in task.title if c not in r'\/:*?"<>|').strip()
+            if len(safe_title) > 40:
+                safe_title = safe_title[:40]
+            logger.debug("safe_title (清理后): %s", safe_title)
 
-        # 移动文件到子目录
-        final_name = f"{file_hash}{ext}"
-        final_path = dir_path / final_name
-        logger.debug("移动文件: %s -> %s", temp_file, final_path)
-        shutil.move(temp_file, str(final_path))
-        logger.debug("文件移动完成")
+            if not safe_title:
+                safe_title = file_hash
+                logger.debug("safe_title 为空,使用 hash 作为标题")
+
+            # 根据是否为匿名用户决定目录路径
+            if task.is_guest and task.session_id:
+                session_id = validate_guest_session_id(task.session_id)
+                base_dir = resolve_inside(self.guest_download_dir, session_id)
+                base_dir.mkdir(parents=True, exist_ok=True)
+            else:
+                base_dir = self.download_dir
+
+            # 构造目录名：标题_指纹
+            dir_name = f"{safe_title}_{file_hash}"
+            dir_path = base_dir / dir_name
+            logger.debug("目标目录: %s, base_dir: %s", dir_path, base_dir)
+
+            # 检查同名冲突
+            if dir_path.exists():
+                logger.debug("目录已存在,检查冲突")
+                existing_in_dir = dir_path / f"{file_hash}{ext}"
+                if existing_in_dir.exists():
+                    logger.debug("发现同名同 hash 文件,删除 temp_file")
+                    os.remove(temp_file)
+                    task.is_duplicate = True
+                    if task.is_guest:
+                        task.filename = f"temp_guest/{task.session_id}/{dir_name}/{file_hash}{ext}"
+                    else:
+                        task.filename = f"{dir_name}/{file_hash}{ext}"
+                    task.filepath = str(existing_in_dir)
+                    raise FileExistsError(f"重复文件: {existing_in_dir}")
+
+                # 同名不同内容，加序号
+                i = 1
+                while True:
+                    new_dir_name = f"{safe_title}_{i}_{file_hash}"
+                    new_dir_path = base_dir / new_dir_name
+                    logger.debug("尝试新目录名: %s", new_dir_name)
+                    if not new_dir_path.exists():
+                        dir_name = new_dir_name
+                        dir_path = new_dir_path
+                        break
+                    i += 1
+
+            # 创建子目录
+            dir_path.mkdir(exist_ok=True)
+            logger.debug("创建目录: %s", dir_path)
+
+            # 移动文件到子目录
+            final_name = f"{file_hash}{ext}"
+            final_path = dir_path / final_name
+            logger.debug("移动文件: %s -> %s", temp_file, final_path)
+            shutil.move(temp_file, str(final_path))
+            logger.debug("文件移动完成")
+
+            # 落盘后立即刷新索引，让后续查重能看到新文件
+            self.invalidate_file_index_cache()
+            self.invalidate_hash_index()
 
         # 验证文件完整性（检查是否同时包含视频和音频流）
         await asyncio.to_thread(self._verify_file_integrity, str(final_path), task)
