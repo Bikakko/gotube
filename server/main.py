@@ -100,14 +100,20 @@ async def lifespan(app: FastAPI):
         sync_admins_from_env(session, settings.admins)
 
     downloader = Downloader()
-    queue_mgr = QueueManager(downloader, max_concurrent=settings.max_concurrent)
+    queue_mgr = QueueManager(
+        downloader,
+        max_concurrent=settings.max_concurrent,
+        max_downloads_per_user=settings.max_downloads_per_user,
+    )
 
     # 挂载到 app state
     app.state.downloader = downloader
     app.state.queue_manager = queue_mgr
 
     logger.info("GoTube 启动，下载目录: %s", downloader.download_dir)
-    logger.info("最大并发下载数: %d", settings.max_concurrent)
+    logger.info("最大并发下载数: %d, 单用户限制: %s",
+                settings.max_concurrent,
+                settings.max_downloads_per_user or "不限制")
 
     # 启动数据库定时备份后台任务
     backup_task = asyncio.create_task(backup_loop())

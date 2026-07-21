@@ -101,6 +101,7 @@ except ValueError as exc:
     _errors.append(f"  GOTUBE_HIDDEN_PATH = '{_hidden_path_raw}' ({exc})")
     _hidden_path = _hidden_path_raw
 _max_concurrent: int = _i("GOTUBE_MAX_CONCURRENT", required=True, min_val=1, max_val=20)
+_max_downloads_per_user: int = _i("GOTUBE_MAX_DOWNLOADS_PER_USER", required=False, default=1, min_val=0)
 _download_dir: str = _s("GOTUBE_DOWNLOAD_DIR", required=True)
 _www_dir: str = _s("GOTUBE_WWW_DIR", default="www")
 _cookies_file: str = _s("GOTUBE_COOKIES_FILE")
@@ -178,6 +179,10 @@ class _Settings:
     @property
     def max_concurrent(self) -> int:
         return _max_concurrent
+
+    @property
+    def max_downloads_per_user(self) -> int:
+        return _max_downloads_per_user
 
     @property
     def download_dir(self) -> str:

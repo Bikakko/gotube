@@ -124,6 +124,15 @@ function isQuotaError(message = '') {
         return [minutes, seconds].map((value) => String(value).padStart(2, '0')).join(':');
     }
 
+    function countQueueAhead(arr, task) {
+        const created = new Date(task.created_at);
+        return arr.filter(x =>
+            x.task_id !== task.task_id
+            && (x.status === 'downloading'
+                || (x.status === 'pending' && new Date(x.created_at) < created))
+        ).length;
+    }
+
     function renderTasksSafe(list, arr) {
         list.replaceChildren();
         if (arr.length === 0) return;
@@ -163,7 +172,13 @@ function isQuotaError(message = '') {
             progressFill.style.width = `${pct}%`;
             progressBg.appendChild(progressFill);
 
-            const metaParts = [`${pct}%`];
+            const metaParts = [];
+            if (t.status === 'pending') {
+                const ahead = countQueueAhead(arr, t);
+                metaParts.push(ahead > 0 ? `⏳ 前面还有 ${ahead} 个` : '⏳ 等待下载槽位');
+            } else {
+                metaParts.push(`${pct}%`);
+            }
 
             if (t.status === 'downloading') {
                 if (t.speed) metaParts.push(`⚡ ${fmtBytes(t.speed)}/s`);

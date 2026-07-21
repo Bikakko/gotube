@@ -19,17 +19,20 @@ logger = logging.getLogger(__name__)
 class QueueManager:
     """下载队列管理器"""
 
-    def __init__(self, downloader: Downloader, max_concurrent: int = 5) -> None:
+    def __init__(self, downloader: Downloader, max_concurrent: int = 5, max_downloads_per_user: int = 1) -> None:
         """
         初始化队列管理器。
 
         Args:
             downloader: 下载器实例。
             max_concurrent: 最大并发下载数。
+            max_downloads_per_user: 单用户最大同时下载数（0=不限制）。
         """
         self.downloader = downloader
         self.max_concurrent = max_concurrent
+        self.max_downloads_per_user = max_downloads_per_user
         self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._user_semaphores: dict[str, asyncio.Semaphore] = {}
         self._progress_callbacks: dict[str, Callable] = {}
         self._running_tasks: dict[str, asyncio.Task] = {}
 
@@ -228,19 +231,48 @@ class QueueManager:
             if self.cancel_task(task.task_id, reason=reason)
         )
 
+    @staticmethod
+    def _user_key(task: DownloadTask) -> str | None:
+        """从任务推导用户标识：登录用户按账号，游客按会话。"""
+        if task.is_guest and task.session_id:
+            return f"guest:{task.session_id}"
+        if task.owner_user_id is not None:
+            return f"user:{task.owner_user_id}"
+        return None
+
+    def _resolve_user_semaphore(self, task: DownloadTask) -> asyncio.Semaphore | None:
+        """获取任务对应的单用户信号量，不限制时返回 None。"""
+        if self.max_downloads_per_user <= 0:
+            return None
+        key = self._user_key(task)
+        if key is None:
+            return None
+        if key not in self._user_semaphores:
+            self._user_semaphores[key] = asyncio.Semaphore(self.max_downloads_per_user)
+        return self._user_semaphores[key]
+
     async def _execute_with_semaphore(self, task: DownloadTask) -> None:
-        """使用信号量控制并发执行下载"""
+        """使用信号量控制并发执行下载（单用户 + 全局）"""
         try:
-            async with self._semaphore:
-                if task.cancel_requested:
-                    return
-                callback = self._build_callback(task.client_id)
-                await self.downloader.download(task, callback)
-                if task.status == "completed" and task.owner_user_id and not task.is_guest:
-                    self._register_completed_library_item(task)
-                    await callback(task)
+            user_sem = self._resolve_user_semaphore(task)
+            if user_sem is not None:
+                async with user_sem:
+                    await self._download_with_global_semaphore(task)
+            else:
+                await self._download_with_global_semaphore(task)
         except asyncio.CancelledError:
             logger.info("下载任务 runner 已取消: task=%s", task.task_id)
+
+    async def _download_with_global_semaphore(self, task: DownloadTask) -> None:
+        """获取全局信号量后执行下载。"""
+        async with self._semaphore:
+            if task.cancel_requested:
+                return
+            callback = self._build_callback(task.client_id)
+            await self.downloader.download(task, callback)
+            if task.status == "completed" and task.owner_user_id and not task.is_guest:
+                self._register_completed_library_item(task)
+                await callback(task)
 
     def _register_completed_library_item(self, task: DownloadTask) -> None:
         """Persist completed logged-in downloads into the v4 video library."""
