@@ -2,6 +2,16 @@
 
 GoTube 是一个以自部署为前提的多平台视频下载与个人视频库工具，当前主线版本为 `4.10.0`。
 
+## 🚀 快速开始 (Linux 一键安装)
+
+在 Linux / Debian / Ubuntu 服务器终端直接运行以下命令：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Bikakko/gotube/master/scripts/install.sh | bash
+```
+
+*脚本会自动安装系统依赖、克隆代码、生成初始随机密码并完成运行环境初始化。*
+
 ## 项目文档指引
 
 - [操作说明](docs/manuals/操作说明.md) — 4.10.0 完整使用与运维指南
