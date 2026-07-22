@@ -18,16 +18,20 @@ elif command -v yum >/dev/null 2>&1; then
     sudo yum install -y git python3 ffmpeg nodejs npm
 fi
 
-# 2. 克隆仓库
-INSTALL_DIR="gotube"
-if [ ! -d "$INSTALL_DIR" ]; then
-    echo "[2/4] 克隆 GoTube 代码库..."
-    git clone https://github.com/Bikakko/gotube.git "$INSTALL_DIR"
-    cd "$INSTALL_DIR"
+# 2. 检查项目目录
+if [ -f "wk.sh" ] && [ -d "server" ]; then
+    echo "[2/4] 当前已在 GoTube 代码目录内部，跳过克隆步骤。"
 else
-    echo "[2/4] 检测到已存在目录 $INSTALL_DIR，自动更新..."
-    cd "$INSTALL_DIR"
-    git pull --ff-only
+    INSTALL_DIR="gotube"
+    if [ ! -d "$INSTALL_DIR" ]; then
+        echo "[2/4] 克隆 GoTube 代码库..."
+        git clone https://github.com/Bikakko/gotube.git "$INSTALL_DIR"
+        cd "$INSTALL_DIR"
+    else
+        echo "[2/4] 检测到子目录 $INSTALL_DIR，自动进入并拉取更新..."
+        cd "$INSTALL_DIR"
+        git pull --ff-only
+    fi
 fi
 
 # 3. 配置生成
