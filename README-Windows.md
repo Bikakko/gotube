@@ -217,4 +217,4 @@ uvicorn server.main:app --host 0.0.0.0 --port 8000 --reload
 
 ---
 
-*最后更新: 2026-04-14 - Windows 开发环境初始设置*
+*最后更新: 2026-07-23 - Windows 开发环境说明 (v4.10.0)*
