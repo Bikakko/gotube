@@ -1,90 +1,69 @@
-# GoTube 安全加固
+# GoTube 安全加固与防范指南 (v4.10.0)
 
-本文记录当前已经落地的应用层安全收口，以及服务器侧仍建议补齐的代理层规则。
+本文记录 GoTube 已落地的应用层安全措施以及生产环境下反向代理（Nginx / Caddy）侧的安全建议。
 
-## 已落地的应用层收口
+---
 
-### 0. hidden path 只是弱隐藏入口
+## 一、 应用层已落地的安全防护
 
-- `hidden_path` 只用于隐藏下载页和后台入口，不承担权限控制职责。
-- 即使访问者知道该路径，后台接口仍然必须经过 Bearer Token 和权限校验。
-- 生产环境的真实安全边界依赖 HTTPS、认证、鉴权以及反向代理限流，而不是路径本身。
+### 1. 弱隐藏路径 (Hidden Path) 说明
+- `GOTUBE_HIDDEN_PATH`（如 `/7777`）仅作为避免被扫描器直接扫到下载页的弱保护，不作为真正的鉴权边界。
+- 真实的访问控制依赖于 **HTTPS 加密**、**Bearer Token 签名** 以及管理员/用户权限校验。
 
-### 1. 常见探测路径不再返回 200
+### 2. 敏感路径探针拦截 (404 响应)
+FastAPI 应用层已内置自动过滤与拦截机制，对以下常见探针扫描路径统一直接返回 `404 Not Found`：
+- `/.git/*`, `/.env*`, `/.svn/*`
+- `/wp-*`, `/wordpress/*`, `/composer.json`
+- `/backup*`, `/config.*`
 
-应用会直接对以下类型路径返回 `404`：
+### 3. SSRF (服务端请求伪造) 缩略图防护
+在下载第三方平台视频缩略图时，应用层内置了 `is_safe_thumbnail_url` 安全校验：
+- 拒绝解析至 `127.0.0.1`、`localhost` 或任何内网/局域网私有 IP（如 `10.x.x.x`, `192.168.x.x`）的图片链接。
+- 若域名无法解析或属于内网，自动拦截本地下载请求并静默降级为远程 URL 展示。
 
-- `/.git/*`
-- `/.env`
-- `/.svn/*`
-- `/wp-*`
-- `/composer.json`
-- `/backup*`
-- `/config.*`
-
-### 2. 未知路径返回真实 404
-
-不存在的路由不再兜底落到前端页面，也不会再返回伪 `200`。
-
-### 3. 基础响应头
-
-应用层已补充：
-
+### 4. 安全响应头 (Security Headers)
+应用层已自动注入基础安全响应头：
 - `X-Content-Type-Options: nosniff`
 - `X-Frame-Options: DENY`
 - `Referrer-Policy: same-origin`
-- 基础 `Content-Security-Policy`
+- `Content-Security-Policy`
 
-### 4. 访问日志带时间字段
+---
 
-`wk.sh` 启动 uvicorn 时日志统一写入 `$GOTUBE_LOG_FILE`。
+## 二、 生产代理层加固建议 (Nginx 示例)
 
-## 代理层建议
-
-如果线上暴露公网上，建议继续在 Caddy 或 Nginx 层补齐拦截和限流。
-
-### HTTPS 要求
-
-- 生产环境必须优先通过 HTTPS 暴露服务。
-- HTTP 入口只应用于 301/308 跳转到 HTTPS，或直接关闭。
-- 不要在明文 HTTP 下暴露后台登录、Token、下载会话或用户库接口。
-
-### Nginx 示例
+建议在生产环境反向代理层强制开启 HTTPS 并补齐防护：
 
 ```nginx
-location ~* ^/(\.git|\.env|\.svn|\.hg) {
-    return 404;
-}
+server {
+    listen 443 ssl http2;
+    server_name your-domain.com;
 
-location ~* ^/(wp-|wordpress|composer\.(json|lock)|backup|backups|dump|dumps|config) {
-    return 404;
+    # 1. 禁用敏感路径探针
+    location ~* ^/(\.git|\.env|\.svn|\.hg) {
+        return 404;
+    }
+    location ~* ^/(wp-|wordpress|composer\.(json|lock)|backup|dumps|config) {
+        return 404;
+    }
+
+    # 2. 安全响应头
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy same-origin always;
+
+    # 3. 反向代理至 GoTube
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # WebSocket 支持
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
 }
 ```
-
-### 建议保留的响应头
-
-```nginx
-add_header X-Content-Type-Options nosniff always;
-add_header X-Frame-Options DENY always;
-add_header Referrer-Policy same-origin always;
-```
-
-### 限流与封禁
-
-建议至少覆盖：
-
-- 高频扫描不存在路径
-- 集中探测 `/.git`、`/.env`、`/wp-login.php`
-- 管理认证失败的重复尝试
-
-如果服务长期暴露公网，建议接入 Fail2ban。
-
-## 上线后检查
-
-至少手工确认：
-
-1. `/.git/config` 返回 `404`
-2. 随机不存在路径返回 `404`
-3. `/health` 正常
-4. `server.log` 中访问日志带时间
-5. `wk.sh init` 能构建并使用 `www_dist`

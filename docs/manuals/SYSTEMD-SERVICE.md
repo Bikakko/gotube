@@ -1,70 +1,77 @@
-# GoTube systemd 部署
+# GoTube systemd 服务托管指南 (v4.10.0)
 
-本文说明如何把当前 `wk.sh + .env` 启动方式接入 Debian 12 / 13 的 `systemd`。
+本文指南说明如何将 GoTube 接入 Linux (`systemd`) 实现开机自启、后台守护与日志托管。
 
-如果你还没有完成基础部署，先看 [Debian 最小部署](DEPLOYMENT.md)。
+---
 
-## 设计原则
+## 一、 设计原则
 
-`systemd` 只负责：
+`systemd` 仅负责：
+- 开机服务自启
+- 进程挂掉后自动拉起恢复
+- 使用 `journalctl` 统一下发日志查阅
 
-- 开机自启
-- 统一进程管理
-- 异常退出后自动拉起
-- 通过 `journalctl` 查看服务日志
+而 Python 虚拟环境、依赖初始化及前端编译构建依然由 `./wk.sh` 脚本统一掌控。
 
-应用启动、停止、依赖初始化仍统一通过 `wk.sh` 完成，避免维护第二套启动参数。
+---
 
-## 接入步骤
+## 二、 配置步骤
 
-1. 准备项目
+### 1. 拷贝服务配置文件
 
-```bash
-cp .env.example .env
-./wk.sh doctor
-./wk.sh init
-```
-
-2. 复制服务模板
+将模板复制到系统 `systemd` 目录：
 
 ```bash
 sudo cp deploy/gotube.service.example /etc/systemd/system/gotube.service
 ```
 
-3. 修改服务文件
+### 2. 编辑配置文件
 
-至少调整：
+编辑 `/etc/systemd/system/gotube.service`，确认或调整路径与用户组：
 
 ```ini
-WorkingDirectory=/你的部署目录/gotube
-User=你的运行用户
-Group=你的运行用户组
+[Unit]
+Description=GoTube Video Downloader & Library Service
+After=network.target
+
+[Service]
+Type=forking
+WorkingDirectory=/你的实际部署目录/gotube
+ExecStart=/你的实际部署目录/gotube/wk.sh start
+ExecStop=/你的实际部署目录/gotube/wk.sh stop
+ExecReload=/你的实际部署目录/gotube/wk.sh restart
+PIDFile=/你的实际部署目录/gotube/.server.pid
+User=运行用户
+Group=运行用户组
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
 ```
 
-4. 重新加载并启用
+### 3. 重载并开启开机自启
 
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now gotube
 ```
 
-5. 查看状态
+---
+
+## 三、 日常管理命令
 
 ```bash
-sudo systemctl status gotube
+sudo systemctl start gotube      # 启动服务
+sudo systemctl stop gotube       # 停止服务
+sudo systemctl restart gotube    # 重启服务
+sudo systemctl status gotube     # 查看服务运行状态
+sudo journalctl -u gotube -f     # 实时查看控制台输出日志
 ```
 
-## 日常操作
+---
 
-```bash
-sudo systemctl start gotube
-sudo systemctl stop gotube
-sudo systemctl restart gotube
-sudo systemctl status gotube
-sudo journalctl -u gotube -f
-```
-
-## 推荐更新流程
+## 四、 更新流程
 
 ```bash
 cd /你的部署目录/gotube
@@ -72,21 +79,3 @@ git pull --ff-only
 ./wk.sh init
 sudo systemctl restart gotube
 ```
-
-## 排障
-
-先看：
-
-```bash
-sudo systemctl status gotube
-sudo journalctl -u gotube -n 100 --no-pager
-./wk.sh doctor
-```
-
-常见问题通常集中在：
-
-- `WorkingDirectory` 配置错误
-- 运行用户无目录权限
-- `.env` 配置不完整
-- `venv` 未初始化
-- `ffmpeg` 或 Python 依赖缺失
