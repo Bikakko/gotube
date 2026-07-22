@@ -2,37 +2,46 @@
  * GoTube Admin - 事件处理模块
  */
 
+import { $ } from '../../shared/common.module.js';
+import { state } from './state.js';
+import { loadVideos } from './data.js';
+import { updateOwnerDropdownOptions, renderVideoGrid, updateBatchBar, renderOverviewSection, renderSystemSection, setCustomDropdownValue, hideAllCustomDropdowns } from './render.js';
+import { switchAdminView, showVideoManagement, showUserManagement } from './users.js';
+import { showInviteManagement } from './invites.js';
+import { loadSystemPage } from './system.js';
+import { uploadCookiesFile, uploadCookiesText } from './cookies.js';
+
 function handleKeywordChange(keyword) {
     state.filters.keyword = keyword;
     state.pagination.page = 1;
 
     clearTimeout(window._searchTimeout);
     window._searchTimeout = setTimeout(() => {
-        window.loadVideos();
+        loadVideos();
     }, 300);
 }
 
 function handleSourceChange(source) {
     state.filters.source = source;
     state.pagination.page = 1;
-    window.loadVideos();
+    loadVideos();
 }
 
 function handleTimeChange(time) {
     state.filters.time = time;
     state.pagination.page = 1;
-    window.loadVideos();
+    loadVideos();
 }
 
 function handleOwnerChange(owner) {
     state.filters.owner = owner;
     state.pagination.page = 1;
-    window.loadVideos();
+    loadVideos();
 }
 
 function handleOwnerSearchInput(keyword) {
     state.filters.ownerSearchKeyword = keyword;
-    window.updateOwnerDropdownOptions();
+    updateOwnerDropdownOptions();
 }
 
 function handlePerPageChange(value) {
@@ -40,7 +49,7 @@ function handlePerPageChange(value) {
     if (!Number.isInteger(parsed) || parsed <= 0) return;
     state.pagination.perPage = parsed;
     state.pagination.page = 1;
-    window.loadVideos();
+    loadVideos();
 }
 
 function toggleVideoSelection(filename, selected) {
@@ -49,8 +58,8 @@ function toggleVideoSelection(filename, selected) {
     } else {
         state.selectedVideos.delete(filename);
     }
-    window.updateSelectAllCheckbox();
-    window.updateBatchBar();
+    updateSelectAllCheckbox();
+    updateBatchBar();
 }
 
 function toggleSelectAll(selectAll) {
@@ -63,9 +72,9 @@ function toggleSelectAll(selectAll) {
             state.selectedVideos.delete(video.filename);
         });
     }
-    window.updateSelectAllCheckbox();
-    window.updateBatchBar();
-    window.renderVideoGrid();
+    updateSelectAllCheckbox();
+    updateBatchBar();
+    renderVideoGrid();
 }
 
 function updateSelectAllCheckbox() {
@@ -92,9 +101,9 @@ function updateSelectAllCheckbox() {
 
 function clearSelection() {
     state.selectedVideos.clear();
-    window.updateSelectAllCheckbox();
-    window.updateBatchBar();
-    window.renderVideoGrid();
+    updateSelectAllCheckbox();
+    updateBatchBar();
+    renderVideoGrid();
 }
 
 function toggleDropdown(menuId) {
@@ -118,25 +127,23 @@ async function handleAdminNav(view) {
     switch (view) {
     case 'overview':
         document.title = 'GoTube Admin - 概览';
-        window.switchAdminView('overview');
-        window.renderOverviewSection();
+        switchAdminView('overview');
+        renderOverviewSection();
         break;
     case 'media':
-        await window.showVideoManagement();
+        await showVideoManagement();
         break;
     case 'users':
-        await window.showUserManagement();
+        await showUserManagement();
         break;
     case 'invites':
-        await window.showInviteManagement();
+        await showInviteManagement();
         break;
     case 'system':
         document.title = 'GoTube Admin - 系统';
-        window.switchAdminView('system');
-        window.renderSystemSection();
-        if (typeof window.loadSystemPage === 'function') {
-            await window.loadSystemPage();
-        }
+        switchAdminView('system');
+        renderSystemSection();
+        await loadSystemPage();
         break;
     default:
         break;
@@ -188,15 +195,15 @@ function bindAdminShellEvents() {
             const text = target.textContent;
             if (filterType === 'source') {
                 handleSourceChange(value);
-                window.setCustomDropdownValue('source-dropdown', value, text);
+                setCustomDropdownValue('source-dropdown', value, text);
             } else if (filterType === 'time') {
                 handleTimeChange(value);
-                window.setCustomDropdownValue('time-dropdown', value, text);
+                setCustomDropdownValue('time-dropdown', value, text);
             } else if (filterType === 'owner') {
                 handleOwnerChange(value);
-                window.setCustomDropdownValue('owner-dropdown', value, text);
+                setCustomDropdownValue('owner-dropdown', value, text);
             }
-            window.hideAllCustomDropdowns();
+            hideAllCustomDropdowns();
         } else if (action === 'toggle-select') {
             const filename = target.dataset.filename;
             const isCurrentlySelected = state.selectedVideos.has(filename);
@@ -204,6 +211,10 @@ function bindAdminShellEvents() {
             toggleVideoSelection(filename, newState);
             target.textContent = newState ? '已选中' : '选择';
             target.classList.toggle('selected', newState);
+        } else if (action === 'upload-cookies-file') {
+            uploadCookiesFile();
+        } else if (action === 'upload-cookies-text') {
+            uploadCookiesText();
         }
     });
 
@@ -225,19 +236,5 @@ function bindAdminShellEvents() {
         }
     });
 }
-
-window.handleKeywordChange = handleKeywordChange;
-window.handleSourceChange = handleSourceChange;
-window.handleTimeChange = handleTimeChange;
-window.handleOwnerChange = handleOwnerChange;
-window.handleOwnerSearchInput = handleOwnerSearchInput;
-window.handlePerPageChange = handlePerPageChange;
-window.toggleVideoSelection = toggleVideoSelection;
-window.toggleSelectAll = toggleSelectAll;
-window.updateSelectAllCheckbox = updateSelectAllCheckbox;
-window.clearSelection = clearSelection;
-window.toggleDropdown = toggleDropdown;
-window.hideAllDropdowns = hideAllDropdowns;
-window.bindAdminShellEvents = bindAdminShellEvents;
 
 export { handleKeywordChange, handleSourceChange, handleTimeChange, handleOwnerChange, handleOwnerSearchInput, handlePerPageChange, toggleVideoSelection, toggleSelectAll, updateSelectAllCheckbox, clearSelection, toggleDropdown, hideAllDropdowns, bindAdminShellEvents };

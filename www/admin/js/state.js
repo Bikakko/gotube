@@ -2,7 +2,7 @@
  * GoTube Admin - 全局状态管理
  */
 
-let state = {
+const state = {
     currentUser: null,
     nav: {
         current: 'overview',
@@ -80,11 +80,5 @@ function invalidateInviteCache() {
     state.invites = [];
     state.invitesLoaded = false;
 }
-
-// state 为顶层 let，转 ES Module 后会变成模块私有，需显式挂到 window 供其他模块以裸全局访问
-window.state = state;
-window.invalidateVideoCache = invalidateVideoCache;
-window.invalidateUserCache = invalidateUserCache;
-window.invalidateInviteCache = invalidateInviteCache;
 
 export { state, invalidateVideoCache, invalidateUserCache, invalidateInviteCache };

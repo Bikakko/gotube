@@ -3,8 +3,12 @@
  * 登录、登出、Token 管理
  */
 
+import { $, el, apiFetch, getApiBase, session } from '../../shared/common.module.js';
+import { renderPage } from './render.js';
+import { state } from './state.js';
+
 function clearDownloadPageSession() {
-    window.GoTubeSession.clearDownloadClient();
+    session.clearDownloadClient();
 }
 
 /**
@@ -162,7 +166,7 @@ async function handleLogin() {
         clearDownloadPageSession();
         state.currentUser = data.user;  // 立即更新用户状态
         hideLoginForm();
-        window.renderPage();
+        renderPage();
     } catch (err) {
         // 显示错误信息在表单内
         if (errorEl) {
@@ -207,12 +211,5 @@ async function handleLogout() {
     clearDownloadPageSession();
     window.location.href = '/';
 }
-
-// 显式挂载到 window，确保全局可见性
-window.checkAuth = checkAuth;
-window.showLoginForm = showLoginForm;
-window.hideLoginForm = hideLoginForm;
-window.handleLogin = handleLogin;
-window.handleLogout = handleLogout;
 
 export { checkAuth, showLoginForm, hideLoginForm, handleLogin, handleLogout };

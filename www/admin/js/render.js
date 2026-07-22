@@ -3,6 +3,16 @@
  * 顶部导航、概览骨架、媒体筛选区、媒体网格、分页、批量操作栏
  */
 
+import { $, el, formatBytes } from '../../shared/common.module.js';
+import { state } from './state.js';
+import { loadStats, handleDeleteVideo, handleBatchDelete, goToPage } from './data.js';
+import { loadSystemPage, copySystemLogView, switchSystemLogView } from './system.js';
+import { showCookiesManagement, deleteCookies } from './cookies.js';
+import { updateSelectAllCheckbox, clearSelection } from './events.js';
+import { showMediaDetailsModal, showShareModal, showPlayerModal } from './modals.js';
+import { showToast } from './toast.js';
+import { handleExportZip, handleExportM3u8 } from './export.js';
+
 function getRoleLabel(role) {
     const map = {
         admin: '管理员',
@@ -59,12 +69,12 @@ function ensureViewContainerVisible(view) {
 async function renderPage() {
     state.nav.current = 'overview';
 
-    window.renderNavbar();
-    window.renderMainLayout();
-    await window.loadStats();
-    window.renderOverviewSection();
-    window.renderSystemSection();
-    window.renderBatchBar();
+    renderNavbar();
+    renderMainLayout();
+    await loadStats();
+    renderOverviewSection();
+    renderSystemSection();
+    renderBatchBar();
 
     ensureViewContainerVisible('overview');
 }
@@ -142,7 +152,7 @@ function renderSystemSection() {
                     type: 'button',
                     className: 'btn btn-secondary',
                     textContent: '刷新系统状态',
-                    onClick: () => window.loadSystemPage(true),
+                    onClick: () => loadSystemPage(true),
                 }),
             ]),
         ]),
@@ -164,14 +174,14 @@ function renderSystemSection() {
                             id: 'system-cookie-upload-btn',
                             className: 'btn btn-primary',
                             textContent: '上传 Cookie',
-                            onClick: () => window.showCookiesManagement(),
+                            onClick: () => showCookiesManagement(),
                         }),
                         el('button', {
                             type: 'button',
                             id: 'system-cookie-delete-btn',
                             className: 'btn btn-danger',
                             textContent: '删除当前 Cookie',
-                            onClick: () => window.deleteCookies(),
+                            onClick: () => deleteCookies(),
                             disabled: true,
                         }),
                     ]),
@@ -190,13 +200,13 @@ function renderSystemSection() {
                             type: 'button',
                             className: 'btn btn-secondary',
                             textContent: '刷新日志',
-                            onClick: () => window.loadSystemPage(true),
+                            onClick: () => loadSystemPage(true),
                         }),
                         el('button', {
                             type: 'button',
                             className: 'btn btn-secondary',
                             textContent: '复制日志',
-                            onClick: () => window.copySystemLogView(),
+                            onClick: () => copySystemLogView(),
                         }),
                     ]),
                 ]),
@@ -206,14 +216,14 @@ function renderSystemSection() {
                         className: 'invite-view-tab active',
                         id: 'system-log-tab-app',
                         textContent: '应用日志',
-                        onClick: () => window.switchSystemLogView('app'),
+                        onClick: () => switchSystemLogView('app'),
                     }),
                     el('button', {
                         type: 'button',
                         className: 'invite-view-tab',
                         id: 'system-log-tab-access',
                         textContent: '访问日志',
-                        onClick: () => window.switchSystemLogView('access'),
+                        onClick: () => switchSystemLogView('access'),
                     }),
                 ]),
                 el('div', { id: 'system-log-slot' }, [
@@ -264,15 +274,6 @@ function renderStatsPanel() {
     slot.appendChild(statsPanel);
 }
 
-function toggleStatsPanel() {
-    const panel = $('#stats-panel');
-    if (panel) {
-        panel.style.display = panel.style.display === 'none' ? 'grid' : 'none';
-    } else {
-        window.renderStatsPanel();
-    }
-}
-
 function renderFilters() {
     const slot = $('#filters-slot');
     if (!slot || state.nav.current !== 'media') return;
@@ -313,7 +314,7 @@ function renderFilters() {
                 el('div', { className: 'custom-dropdown', id: 'source-dropdown' }, [
                     el('button', {
                         className: 'custom-dropdown-btn',
-                        onClick: (e) => { e.stopPropagation(); window.toggleCustomDropdown('source-dropdown'); },
+                        onClick: (e) => { e.stopPropagation(); toggleCustomDropdown('source-dropdown'); },
                     }, [
                         el('span', { className: 'dropdown-text', id: 'source-dropdown-text', textContent: '全部来源' }),
                         el('span', { className: 'dropdown-arrow', textContent: '▾' }),
@@ -326,7 +327,7 @@ function renderFilters() {
                 el('div', { className: 'custom-dropdown', id: 'time-dropdown' }, [
                     el('button', {
                         className: 'custom-dropdown-btn',
-                        onClick: (e) => { e.stopPropagation(); window.toggleCustomDropdown('time-dropdown'); },
+                        onClick: (e) => { e.stopPropagation(); toggleCustomDropdown('time-dropdown'); },
                     }, [
                         el('span', { className: 'dropdown-text', id: 'time-dropdown-text', textContent: '全部时间' }),
                         el('span', { className: 'dropdown-arrow', textContent: '▾' }),
@@ -352,7 +353,7 @@ function renderFilters() {
                 el('div', { className: 'custom-dropdown', id: 'owner-dropdown' }, [
                     el('button', {
                         className: 'custom-dropdown-btn',
-                        onClick: (e) => { e.stopPropagation(); window.toggleCustomDropdown('owner-dropdown'); },
+                        onClick: (e) => { e.stopPropagation(); toggleCustomDropdown('owner-dropdown'); },
                     }, [
                         el('span', { className: 'dropdown-text', id: 'owner-dropdown-text', textContent: '全部归属' }),
                         el('span', { className: 'dropdown-arrow', textContent: '▾' }),
@@ -381,15 +382,15 @@ function renderFilters() {
     if (!window._customDropdownListenerAdded) {
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.custom-dropdown')) {
-                window.hideAllCustomDropdowns();
+                hideAllCustomDropdowns();
             }
         });
         window._customDropdownListenerAdded = true;
     }
 
-    window.updateSourceDropdownOptions();
-    window.updateTimeDropdownOptions();
-    window.updateOwnerDropdownOptions();
+    updateSourceDropdownOptions();
+    updateTimeDropdownOptions();
+    updateOwnerDropdownOptions();
 }
 
 function renderVideoGrid() {
@@ -408,7 +409,7 @@ function renderVideoGrid() {
             el('p', { textContent: '暂无媒体' }),
         ]);
         gridSlot.appendChild(emptyState);
-        window.updateSelectAllCheckbox();
+        updateSelectAllCheckbox();
         return;
     }
 
@@ -425,7 +426,7 @@ function renderVideoGrid() {
     gridSlot.appendChild(grid);
 
     renderPagination();
-    window.updateSelectAllCheckbox();
+    updateSelectAllCheckbox();
 }
 
 function renderVideoCard(video) {
@@ -485,7 +486,7 @@ function renderVideoCard(video) {
                 textContent: '详情',
                 onClick: (e) => {
                     e.stopPropagation();
-                    window.showMediaDetailsModal(video);
+                    showMediaDetailsModal(video);
                 },
             }),
             el('button', {
@@ -498,7 +499,7 @@ function renderVideoCard(video) {
                         showToast('当前媒体未开启分享', 'warning');
                         return;
                     }
-                    window.showShareModal(video);
+                    showShareModal(video);
                 },
             }),
             el('button', {
@@ -506,7 +507,7 @@ function renderVideoCard(video) {
                 textContent: '删除',
                 onClick: (e) => {
                     e.stopPropagation();
-                    window.handleDeleteVideo(video.filename);
+                    handleDeleteVideo(video.filename);
                 },
             }),
         ]),
@@ -520,7 +521,7 @@ function renderVideoCard(video) {
 
     card.addEventListener('click', (e) => {
         if (!e.target.closest('.action-btn') && !e.target.closest('.video-actions-bar') && !e.target.closest('.video-select-toggle')) {
-            window.showPlayerModal(video);
+            showPlayerModal(video);
         }
     });
 
@@ -597,22 +598,22 @@ function renderBatchBar() {
         el('button', {
             className: 'btn btn-secondary',
             textContent: '导出 ZIP',
-            onClick: () => window.handleExportZip(),
+            onClick: () => handleExportZip(),
         }),
         el('button', {
             className: 'btn btn-secondary',
             textContent: '导出 m3u8',
-            onClick: () => window.handleExportM3u8(),
+            onClick: () => handleExportM3u8(),
         }),
         el('button', {
             className: 'btn btn-danger',
             textContent: '批量删除',
-            onClick: () => window.handleBatchDelete(),
+            onClick: () => handleBatchDelete(),
         }),
         el('button', {
             className: 'btn btn-secondary',
             textContent: '取消选择',
-            onClick: () => window.clearSelection(),
+            onClick: () => clearSelection(),
         }),
     ]);
 
@@ -786,25 +787,4 @@ function updateOwnerDropdownOptions() {
     if (textEl) textEl.textContent = currentText;
 }
 
-window.renderPage = renderPage;
-window.renderNavbar = renderNavbar;
-window.renderMainLayout = renderMainLayout;
-window.renderOverviewSection = renderOverviewSection;
-window.renderSystemSection = renderSystemSection;
-window.renderStatsPanel = renderStatsPanel;
-window.toggleStatsPanel = toggleStatsPanel;
-window.renderFilters = renderFilters;
-window.renderVideoGrid = renderVideoGrid;
-window.renderVideoCard = renderVideoCard;
-window.renderPagination = renderPagination;
-window.renderBatchBar = renderBatchBar;
-window.updateBatchBar = updateBatchBar;
-window.ensureViewContainerVisible = ensureViewContainerVisible;
-window.toggleCustomDropdown = toggleCustomDropdown;
-window.hideAllCustomDropdowns = hideAllCustomDropdowns;
-window.setCustomDropdownValue = setCustomDropdownValue;
-window.updateSourceDropdownOptions = updateSourceDropdownOptions;
-window.updateTimeDropdownOptions = updateTimeDropdownOptions;
-window.updateOwnerDropdownOptions = updateOwnerDropdownOptions;
-
-export { renderPage, renderNavbar, renderMainLayout, renderOverviewSection, renderSystemSection, renderStatsPanel, toggleStatsPanel, renderFilters, renderVideoGrid, renderVideoCard, renderPagination, renderBatchBar, updateBatchBar, ensureViewContainerVisible, toggleCustomDropdown, hideAllCustomDropdowns, setCustomDropdownValue, updateSourceDropdownOptions, updateTimeDropdownOptions, updateOwnerDropdownOptions };
+export { renderPage, renderNavbar, renderMainLayout, renderOverviewSection, renderSystemSection, renderStatsPanel, renderFilters, renderVideoGrid, renderVideoCard, renderPagination, renderBatchBar, updateBatchBar, ensureViewContainerVisible, toggleCustomDropdown, hideAllCustomDropdowns, setCustomDropdownValue, updateSourceDropdownOptions, updateTimeDropdownOptions, updateOwnerDropdownOptions };

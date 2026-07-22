@@ -3,6 +3,9 @@
  * 播放器、分享、媒体详情等弹窗。
  */
 
+import { $, el, formatBytes, attachVideoKeyboardControls } from '../../shared/common.module.js';
+import { showToast } from './toast.js';
+
 let playerKeyboardCleanup = null;
 
 function showPlayerModal(video) {
@@ -28,13 +31,11 @@ function showPlayerModal(video) {
 
     playerKeyboardCleanup?.();
     playerKeyboardCleanup = null;
-    if (window.GoTube && typeof window.GoTube.attachVideoKeyboardControls === 'function') {
-        playerKeyboardCleanup = window.GoTube.attachVideoKeyboardControls(videoEl, {
-            isActive: () => modal.classList.contains('active'),
-            wheelTarget: bodyEl,
-            feedbackTarget: bodyEl,
-        });
-    }
+    playerKeyboardCleanup = attachVideoKeyboardControls(videoEl, {
+        isActive: () => modal.classList.contains('active'),
+        wheelTarget: bodyEl,
+        feedbackTarget: bodyEl,
+    });
     videoEl.focus();
 }
 
@@ -327,10 +328,5 @@ function closeModal(modalId) {
         modal.remove();
     }
 }
-
-window.showPlayerModal = showPlayerModal;
-window.showShareModal = showShareModal;
-window.showMediaDetailsModal = showMediaDetailsModal;
-window.closeModal = closeModal;
 
 export { showPlayerModal, showShareModal, showMediaDetailsModal, closeModal };

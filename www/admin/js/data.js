@@ -3,6 +3,14 @@
  * 视频列表加载、删除、批量删除、标签更新
  */
 
+import { $, el, apiFetch, formatBytes } from '../../shared/common.module.js';
+import { state } from './state.js';
+import { showToast } from './toast.js';
+import { showLoginForm } from './auth.js';
+import { closeModal } from './modals.js';
+import { updateSelectAllCheckbox } from './events.js';
+import { renderFilters, updateSourceDropdownOptions, updateTimeDropdownOptions, updateOwnerDropdownOptions, renderVideoGrid, updateBatchBar } from './render.js';
+
 /**
  * 加载视频列表
  */
@@ -70,20 +78,20 @@ async function loadVideos() {
 
         // 首次加载时渲染整个筛选栏，后续只更新下拉选项（避免搜索框失焦）
         if (!window._filtersRendered) {
-            window.renderFilters();
+            renderFilters();
             window._filtersRendered = true;
         } else {
             // 只更新下拉菜单选项，不重建整个筛选栏
-            window.updateSourceDropdownOptions();
-            window.updateTimeDropdownOptions();
-            window.updateOwnerDropdownOptions();
+            updateSourceDropdownOptions();
+            updateTimeDropdownOptions();
+            updateOwnerDropdownOptions();
         }
 
         // 重新渲染视频网格
-        window.renderVideoGrid();
+        renderVideoGrid();
 
         // 更新批量操作栏
-        window.updateBatchBar();
+        updateBatchBar();
 
     } catch (err) {
         console.error('加载视频列表失败:', err);
@@ -312,12 +320,12 @@ async function handleBatchDelete() {
         successFilenames.forEach(f => state.selectedVideos.delete(f));
 
         // 重新加载视频列表和统计信息
-        await window.loadVideos();
-        await window.loadStats();
+        await loadVideos();
+        await loadStats();
 
         // 更新 UI（在加载新数据后更新）
-        window.updateSelectAllCheckbox();
-        window.updateBatchBar();
+        updateSelectAllCheckbox();
+        updateBatchBar();
 
         // 显示详细的删除结果
         if (failedCount > 0) {
@@ -368,16 +376,5 @@ function goToPage(page) {
     state.pagination.page = page;
     loadVideos();
 }
-
-// 显式挂载到 window，确保全局可见性
-window.loadVideos = loadVideos;
-window.loadStats = loadStats;
-window.loadUserLibrary = loadUserLibrary;
-window.loadRuntimeHealth = loadRuntimeHealth;
-window.loadCookiesStatusData = loadCookiesStatusData;
-window.loadRuntimeLogsData = loadRuntimeLogsData;
-window.handleDeleteVideo = handleDeleteVideo;
-window.showDeleteConfirmModal = showDeleteConfirmModal;
-window.handleBatchDelete = handleBatchDelete;
 
 export { loadVideos, loadStats, loadUserLibrary, loadRuntimeHealth, loadCookiesStatusData, loadRuntimeLogsData, handleDeleteVideo, showDeleteConfirmModal, handleBatchDelete, goToPage };

@@ -3,6 +3,10 @@
  * 提供上传、查看状态、删除 cookies 的功能
  */
 
+import { $, el } from '../../shared/common.module.js';
+import { showToast } from './toast.js';
+import { loadSystemPage } from './system.js';
+
 // ========== Cookie 管理界面 ==========
 
 /**
@@ -287,7 +291,7 @@ function renderUploadArea() {
                 </label>
                 <div class="cookie-upload-row">
                     <input type="file" id="cookies-file-input" accept=".txt" class="cookie-upload-input">
-                    <button class="btn btn-primary" onclick="uploadCookiesFile()" style="white-space: nowrap;">
+                    <button class="btn btn-primary" data-action="upload-cookies-file" style="white-space: nowrap;">
                         上传文件
                     </button>
                 </div>
@@ -298,7 +302,7 @@ function renderUploadArea() {
                     方式二：粘贴 cookies 文本内容（Netscape 格式）
                 </label>
                 <textarea id="cookies-text-input" rows="8" class="cookie-upload-textarea" placeholder="# Netscape HTTP Cookie File&#10;youtube.com	TRUE	/	FALSE	...	__Secure-1PSID	xxx&#10;..."></textarea>
-                <button class="btn btn-primary cookie-upload-submit" onclick="uploadCookiesText()">
+                <button class="btn btn-primary cookie-upload-submit" data-action="upload-cookies-text">
                     提交文本
                 </button>
             </div>
@@ -402,9 +406,7 @@ async function uploadCookiesFile() {
         
         // 刷新状态
         await loadCookiesStatus();
-        if (typeof window.loadSystemPage === 'function') {
-            await window.loadSystemPage(true);
-        }
+        await loadSystemPage(true);
     } catch (error) {
         console.error('上传 cookies 失败:', error);
         showToast(`❌ 上传失败: ${error.message}`, 'error');
@@ -558,9 +560,7 @@ async function uploadCookiesText() {
         
         // 刷新状态
         await loadCookiesStatus();
-        if (typeof window.loadSystemPage === 'function') {
-            await window.loadSystemPage(true);
-        }
+        await loadSystemPage(true);
     } catch (error) {
         console.error('提交 cookies 失败:', error);
         showToast(`❌ 提交失败: ${error.message}`, 'error');
@@ -601,21 +601,11 @@ async function deleteCookies() {
         
         // 刷新状态
         await loadCookiesStatus();
-        if (typeof window.loadSystemPage === 'function') {
-            await window.loadSystemPage(true);
-        }
+        await loadSystemPage(true);
     } catch (error) {
         console.error('删除 cookies 失败:', error);
         showToast(`❌ 删除失败: ${error.message}`, 'error');
     }
 }
-
-// ========== 导出到全局 ==========
-window.showCookiesManagement = showCookiesManagement;
-window.loadCookiesStatus = loadCookiesStatus;
-window.uploadCookiesFile = uploadCookiesFile;
-window.uploadCookiesText = uploadCookiesText;
-window.deleteCookies = deleteCookies;
-window.renderCookiesStatus = renderCookiesStatus;
 
 export { showCookiesManagement, loadCookiesStatus, uploadCookiesFile, uploadCookiesText, deleteCookies, renderCookiesStatus };

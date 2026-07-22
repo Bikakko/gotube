@@ -3,6 +3,9 @@
  * ZIP、JSON、m3u8 导出
  */
 
+import { apiFetch } from '../../shared/common.module.js';
+import { state } from './state.js';
+
 /**
  * 导出 ZIP
  */
@@ -32,32 +35,6 @@ async function handleExportZip() {
     } catch (err) {
         console.error('导出 ZIP 失败:', err);
         alert('导出 ZIP 失败: ' + err.message);
-    }
-}
-
-/**
- * 导出 JSON
- */
-async function handleExportJson() {
-    try {
-        const response = await apiFetch('/export/json', {
-            method: 'POST',
-            rawResponse: true,
-        });
-
-        // 触发下载
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'gotube_metadata.json';
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        a.remove();
-    } catch (err) {
-        console.error('导出 JSON 失败:', err);
-        alert('导出 JSON 失败: ' + err.message);
     }
 }
 
@@ -93,9 +70,4 @@ async function handleExportM3u8() {
     }
 }
 
-// 显式挂载到 window，确保全局可见性
-window.handleExportZip = handleExportZip;
-window.handleExportJson = handleExportJson;
-window.handleExportM3u8 = handleExportM3u8;
-
-export { handleExportZip, handleExportJson, handleExportM3u8 };
+export { handleExportZip, handleExportM3u8 };

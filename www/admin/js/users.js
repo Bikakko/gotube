@@ -3,6 +3,13 @@
  * Load users, edit profiles, toggle status, and inspect user libraries.
  */
 
+import { $, el, apiFetch, formatBytes, session } from '../../shared/common.module.js';
+import { state, invalidateUserCache } from './state.js';
+import { showToast } from './toast.js';
+import { loadStats, loadVideos, loadUserLibrary } from './data.js';
+import { renderNavbar, updateBatchBar } from './render.js';
+import { showPlayerModal, showShareModal, closeModal } from './modals.js';
+
 function refreshNavTabs() {
     document.querySelectorAll('[data-admin-nav]').forEach((btn) => {
         btn.classList.toggle('active', btn.dataset.adminNav === state.nav.current);
@@ -34,11 +41,11 @@ function switchAdminView(view) {
 
     state.nav.current = view;
     state.isTransitioning = false;
-    window.renderNavbar();
+    renderNavbar();
     refreshNavTabs();
 
     if (view === 'media') {
-        window.updateBatchBar();
+        updateBatchBar();
     } else {
         const bar = $('#batch-bar');
         if (bar) bar.classList.remove('active');
@@ -59,14 +66,8 @@ async function showUserManagement() {
 async function showVideoManagement() {
     document.title = 'GoTube Admin - \u5168\u5c40\u5a92\u4f53';
     switchAdminView('media');
-    await window.loadStats();
-    await window.loadVideos();
-}
-
-window._clickOutsideListenerInitialized = false;
-
-function initClickOutsideListener() {
-    return;
+    await loadStats();
+    await loadVideos();
 }
 
 async function loadUsers(forceReload = false) {
@@ -401,7 +402,7 @@ async function showUserLibraryModal(user) {
 
 async function fetchUserLibraryAndRender(userId) {
     try {
-        const data = await window.loadUserLibrary(userId);
+        const data = await loadUserLibrary(userId);
         state.userLibrary.user = data.user;
         state.userLibrary.items = data.items || [];
         state.userLibrary.loading = false;
@@ -454,13 +455,13 @@ function renderUserLibraryModal() {
                 el('button', {
                     className: 'action-btn',
                     textContent: '\u64ad\u653e',
-                    onClick: () => window.showPlayerModal(item),
+                    onClick: () => showPlayerModal(item),
                 }),
                 el('button', {
                     className: 'action-btn share',
                     textContent: '\u5206\u4eab',
                     ...(!item.share_token ? { disabled: true } : {}),
-                    onClick: () => window.showShareModal(item),
+                    onClick: () => showShareModal(item),
                 }),
             ]),
         ]));
@@ -729,7 +730,7 @@ async function handleChangePassword(user) {
 
         if (isSelf) {
             setTimeout(() => {
-                window.GoTubeSession.clearAuthState();
+                session.clearAuthState();
                 window.location.href = '/';
             }, 1500);
         }
@@ -738,13 +739,4 @@ async function handleChangePassword(user) {
     }
 }
 
-window.showUserManagement = showUserManagement;
-window.showVideoManagement = showVideoManagement;
-window.switchAdminView = switchAdminView;
-window.refreshNavTabs = refreshNavTabs;
-window.loadUsers = loadUsers;
-window.showUserLibraryModal = showUserLibraryModal;
-window.renderUsersTable = renderUsersTable;
-window.initClickOutsideListener = initClickOutsideListener;
-
-export { showUserManagement, showVideoManagement, switchAdminView, refreshNavTabs, loadUsers, showUserLibraryModal, renderUsersTable, initClickOutsideListener };
+export { showUserManagement, showVideoManagement, switchAdminView, refreshNavTabs, loadUsers, showUserLibraryModal, renderUsersTable };

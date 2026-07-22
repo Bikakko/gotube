@@ -3,6 +3,8 @@
  * 显示成功、错误、警告、信息提示
  */
 
+import { $, el } from '../../shared/common.module.js';
+
 /**
  * 显示 Toast 提示
  * @param {string} message - 提示内容

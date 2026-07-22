@@ -2,6 +2,12 @@
  * GoTube Admin - 邀请码管理
  */
 
+import { $, el, apiFetch } from '../../shared/common.module.js';
+import { state, invalidateInviteCache } from './state.js';
+import { showToast } from './toast.js';
+import { closeModal } from './modals.js';
+import { switchAdminView } from './users.js';
+
 async function showInviteManagement() {
     if (state.currentUser && state.currentUser.role !== 'admin') {
         showToast('权限不足', 'error');
@@ -14,7 +20,7 @@ async function showInviteManagement() {
     }
 
     document.title = 'GoTube Admin - 邀请码';
-    window.switchAdminView('invites');
+    switchAdminView('invites');
     await loadInvites();
 }
 
@@ -290,9 +296,5 @@ async function handleRevokeInvite(invite) {
         showToast('作废失败: ' + err.message, 'error');
     }
 }
-
-window.showInviteManagement = showInviteManagement;
-window.loadInvites = loadInvites;
-window.renderInvitesTable = renderInvitesTable;
 
 export { showInviteManagement, loadInvites, renderInvitesTable };

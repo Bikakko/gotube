@@ -3,6 +3,12 @@
  * 收口运行健康检查与 Cookie 状态
  */
 
+import { $, el } from '../../shared/common.module.js';
+import { state } from './state.js';
+import { loadRuntimeHealth, loadCookiesStatusData, loadRuntimeLogsData } from './data.js';
+import { renderCookiesStatus } from './cookies.js';
+import { showToast } from './toast.js';
+
 async function loadSystemPage(forceReload = false) {
     if (!forceReload && state.system.ready && state.nav.current === 'system') {
         renderSystemPanels();
@@ -13,10 +19,10 @@ async function loadSystemPage(forceReload = false) {
     renderSystemPanels();
 
     const [runtimeResult, cookieResult, appLogResult, accessLogResult] = await Promise.allSettled([
-        window.loadRuntimeHealth(),
-        window.loadCookiesStatusData(),
-        window.loadRuntimeLogsData('app'),
-        window.loadRuntimeLogsData('access'),
+        loadRuntimeHealth(),
+        loadCookiesStatusData(),
+        loadRuntimeLogsData('app'),
+        loadRuntimeLogsData('access'),
     ]);
 
     state.system.runtimeHealth = runtimeResult.status === 'fulfilled'
@@ -103,11 +109,7 @@ function renderSystemCookieStatus() {
         return;
     }
 
-    if (typeof window.renderCookiesStatus === 'function') {
-        window.renderCookiesStatus(slot, data, { context: 'system' });
-    } else {
-        slot.innerHTML = `<div class="empty-state">${data.has_cookies ? '已检测到 Cookie' : '未配置 Cookie'}</div>`;
-    }
+    renderCookiesStatus(slot, data, { context: 'system' });
     syncSystemCookieActions(data);
 }
 
@@ -195,11 +197,5 @@ async function copySystemLogView() {
         showToast('复制日志失败', 'error');
     }
 }
-
-window.loadSystemPage = loadSystemPage;
-window.renderSystemPanels = renderSystemPanels;
-window.renderRuntimeHealth = renderRuntimeHealth;
-window.switchSystemLogView = switchSystemLogView;
-window.copySystemLogView = copySystemLogView;
 
 export { loadSystemPage, renderSystemPanels, renderRuntimeHealth, switchSystemLogView, copySystemLogView };
