@@ -41,6 +41,7 @@ AGENTS.md
 CLAUDE.md
 .qwen/
 .claude/
+.agents/
 
 # 开发调试工具
 view_debug_log.sh
