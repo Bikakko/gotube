@@ -265,6 +265,15 @@ def _media_thumbnail_url(asset: MediaAsset) -> str:
     return thumbnail
 
 
+def _library_item_thumbnail_url(item: dict[str, Any]) -> str:
+    # /api/me/videos/{id}/thumbnail 有归属校验，管理员看他人视频库会 403，
+    # 故管理端统一改用无用户作用域的 /api/thumbnail/{file_hash}
+    thumbnail = item.get("thumbnail") or ""
+    if thumbnail and not thumbnail.startswith(("http://", "https://")):
+        return f"/api/thumbnail/{item.get('file_hash', '')}"
+    return thumbnail
+
+
 def _library_video_to_admin_dict(row: dict[str, Any], ref_counts: dict[int, int]) -> dict[str, Any]:
     media_asset_id = row.get("media_asset_id")
     source_url = row.get("source_url", "")
@@ -581,6 +590,7 @@ async def get_user_library(
             {
                 **item,
                 "source": _extract_source_from_url(item.get("source_url") or ""),
+                "thumbnail_url": _library_item_thumbnail_url(item),
             }
             for item in items
         ],
