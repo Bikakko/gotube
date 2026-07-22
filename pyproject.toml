@@ -1,6 +1,6 @@
 [project]
 name = "gotube"
-version = "4.8.0"
+version = "4.10.0"
 description = "自托管多平台视频下载工具"
 requires-python = ">=3.13"
 
@@ -13,5 +13,4 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM"]
 ignore = ["E501", "B008"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
 asyncio_mode = "auto"

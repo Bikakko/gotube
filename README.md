@@ -2,14 +2,14 @@
 
 GoTube 是一个以自部署为前提的多平台视频下载与个人视频库工具，当前主线版本为 `4.10.0`。
 
-## 根目录文档与指引
+## 项目文档指引
 
-- [操作说明](操作说明.md) — 4.10.0 完整使用与运维指南
-- [Debian 最小部署](DEPLOYMENT.md) — Linux/Debian 生产环境部署说明
-- [systemd 部署](SYSTEMD-SERVICE.md) — systemd 后台服务配置指南
-- [安全加固](SECURITY-HARDENING.md) — 生产环境安全边界与加固说明
-- [相册首页说明](GALLERY-HOME.md) — 相册伪装与首页入口配置
-- [Windows 开发环境](README-Windows.md) — Windows 环境搭建与调试指南
+- [操作说明](docs/manuals/操作说明.md) — 4.10.0 完整使用与运维指南
+- [Debian 最小部署](docs/manuals/DEPLOYMENT.md) — Linux/Debian 生产环境部署说明
+- [systemd 部署](docs/manuals/SYSTEMD-SERVICE.md) — systemd 后台服务配置指南
+- [安全加固](docs/manuals/SECURITY-HARDENING.md) — 生产环境安全边界与加固说明
+- [相册首页说明](docs/manuals/GALLERY-HOME.md) — 相册伪装与首页入口配置
+- [Windows 开发环境](docs/manuals/README-Windows.md) — Windows 环境搭建与调试指南
 
 ## 关键入口与脚本
 
@@ -29,6 +29,7 @@ GoTube 是一个以自部署为前提的多平台视频下载与个人视频库�
 - `server/`：FastAPI 后端应用与业务逻辑（下载队列、视频库管理、认证鉴权、定时备份）
 - `www/`：前端源码（全页面统一采用标准 ES Module `type="module"` 架构）
 - `www_dist/`：前端生产压缩构建产物（`npm run build` 生成）
+- `docs/manuals/`：使用与运维说明文档目录
 - `docs/superpowers/`：历史设计计划、规格说明与架构演进文档
 
 ## 版本演进与特性
