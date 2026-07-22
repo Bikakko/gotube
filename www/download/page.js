@@ -458,6 +458,10 @@ function isQuotaError(message = '') {
     }
 
     async function submit() {
+        if (!isLoggedIn) {
+            showLoginModal();
+            return;
+        }
         const url = $('#url-input').value.trim();
         clearActionableError();
         if (!url) {
@@ -771,8 +775,10 @@ function isQuotaError(message = '') {
         applyStableDownloadPageLabels();
         bindEventHandlers();
         await checkLoginStatus();
-        await loadTasks();
-        connectWS();
+        if (isLoggedIn) {
+            await loadTasks();
+            connectWS();
+        }
     }
     init();
 
@@ -1285,6 +1291,16 @@ function isQuotaError(message = '') {
         }
         if (profileBtn) profileBtn.hidden = !isLoggedIn;
         if (passwordBtn) passwordBtn.hidden = !isRegularUser();
+        applyAuthGate();
+    }
+
+    // 登录门控：未登录时隐藏下载界面，仅显示全屏登录视图
+    function applyAuthGate() {
+        const gated = !isLoggedIn;
+        document.body.classList.toggle('auth-gated', gated);
+        if (gated) {
+            switchAuthMode('login');
+        }
     }
 
     function handleLogoClick() {
@@ -1432,6 +1448,7 @@ function isQuotaError(message = '') {
     }
 
     function closeLoginModal() {
+        if (!isLoggedIn) return; // 门控态：未登录时不允许关闭登录框
         $('#login-modal').classList.remove('active');
         $('#login-username').value = '';
         $('#login-password').value = '';
@@ -1503,6 +1520,7 @@ function isQuotaError(message = '') {
 
             // 登录后检测是否有游客临时下载。
             await checkAndTransferGuestDownloads();
+            await loadTasks();
             if (isLibraryUser()) {
                 await loadMyLibrary();
                 connectWS();

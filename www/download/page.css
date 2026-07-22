@@ -373,6 +373,19 @@ body {
 .auth-submit.register { background: #238636; }
 .auth-submit.register:hover { background: #2ea043; }
 .auth-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* 登录门控：未登录时隐藏下载界面，登录框全屏展示 */
+body.auth-gated .container,
+body.auth-gated #library-section {
+    display: none;
+}
+body.auth-gated #login-modal {
+    display: flex;
+    background: var(--download-bg);
+}
+body.auth-gated #login-modal .modal-close {
+    display: none;
+}
 @media (max-width: 700px) {
     body {
         padding-top: 64px;

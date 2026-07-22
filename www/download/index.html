@@ -8,6 +8,12 @@
     <link rel="stylesheet" href="/static/download/page.css?v={{ASSET_VERSION}}">
 </head>
 <body>
+    <script>
+        // 登录门控防闪烁：无 token 时先隐藏下载界面，JS 加载后会复核登录态
+        if (!localStorage.getItem('gotube_admin_token')) {
+            document.body.classList.add('auth-gated');
+        }
+    </script>
     <div class="container">
         <div class="logo">🎬 <a href="#" id="logo-link" title="点击登录">GoTube</a></div>
         <div id="session-bar" class="session-bar">
