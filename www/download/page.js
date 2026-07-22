@@ -744,6 +744,7 @@ function isQuotaError(message = '') {
         });
         $('#register-submit-btn')?.addEventListener('click', handleRegister);
         bindEnterShortcut('#register-password', handleRegister);
+        bindEnterShortcut('#register-password-confirm', handleRegister);
         bindEnterShortcut('#register-invite', handleRegister);
 
         $('#refresh-library-btn')?.addEventListener('click', loadMyLibrary);
@@ -1456,6 +1457,7 @@ function isQuotaError(message = '') {
         $('#register-username').value = '';
         $('#register-display-name').value = '';
         $('#register-password').value = '';
+        $('#register-password-confirm').value = '';
         $('#register-invite').value = '';
         $('#register-error').textContent = '';
     }
@@ -1545,6 +1547,7 @@ function isQuotaError(message = '') {
         const username = $('#register-username').value.trim();
         const displayName = $('#register-display-name').value.trim();
         const password = $('#register-password').value.trim();
+        const confirmPassword = $('#register-password-confirm').value.trim();
         const inviteCode = $('#register-invite').value.trim();
         const errorEl = $('#register-error');
         const btn = $('#register-submit-btn');
@@ -1562,6 +1565,11 @@ function isQuotaError(message = '') {
         if (password.length < 6) {
             errorEl.textContent = '密码至少 6 位';
             $('#register-password').focus();
+            return;
+        }
+        if (password !== confirmPassword) {
+            errorEl.textContent = '两次输入的密码不一致';
+            $('#register-password-confirm').focus();
             return;
         }
         if (!inviteCode) {
@@ -1596,13 +1604,12 @@ function isQuotaError(message = '') {
             }
 
             $('#login-username').value = username;
-            $('#login-password').value = '';
+            $('#login-password').value = password;
             switchAuthMode('login');
-            $('#login-error').style.color = '#3fb950';
-            $('#login-error').textContent = '注册成功，请登录';
-            setTimeout(() => {
-                $('#login-error').style.color = '#f85149';
-            }, 3000);
+            await handleLogin();
+            if (isLoggedIn) {
+                showToast('✅ 注册成功', '#3fb950');
+            }
         } catch (err) {
             errorEl.textContent = err.message || '注册失败，请重试';
         } finally {
