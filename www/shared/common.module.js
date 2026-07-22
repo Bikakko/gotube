@@ -143,6 +143,80 @@ export function formatRole(role) {
     return map[role] || role;
 }
 
+export function extractSource(url) {
+    try {
+        const hostname = new URL(url).hostname;
+        if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) return 'YouTube';
+        if (hostname.includes('bilibili.com') || hostname.includes('b23.tv')) return 'Bilibili';
+        if (hostname.includes('twitter.com') || hostname.includes('x.com')) return 'Twitter/X';
+        if (hostname.includes('douyin.com')) return '抖音';
+        if (hostname.includes('acfun.cn')) return 'AcFun';
+        if (hostname.includes('iqiyi.com')) return '爱奇艺';
+        if (hostname.includes('youku.com')) return '优酷';
+        if (hostname.includes('qq.com')) return '腾讯视频';
+        if (hostname.includes('kuaishou.com')) return '快手';
+        return hostname;
+    } catch {
+        return 'Unknown';
+    }
+}
+
+export function getApiBase() {
+    if (window.GOTUBE_HIDDEN_PATH) {
+        return `/${window.GOTUBE_HIDDEN_PATH}/admin/api`;
+    }
+    const pathname = window.location.pathname;
+    if (pathname.includes('/admin')) {
+        const match = pathname.match(/^(\/[^\/]+\/admin)/);
+        if (match) return match[1] + '/api';
+    }
+    return '/api';
+}
+
+export async function apiFetch(endpoint, options = {}) {
+    const token = localStorage.getItem('gotube_admin_token');
+    const headers = {
+        'Content-Type': 'application/json',
+        ...(options.headers || {}),
+    };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(`${getApiBase()}${endpoint}`, {
+        ...options,
+        headers,
+    });
+    if (response.status === 401) {
+        clearAuthState();
+        throw new Error('UNAUTHORIZED');
+    }
+    if (!response.ok) {
+        let errorMsg = '请求失败';
+        try {
+            const errorData = await response.json();
+            errorMsg = errorData.detail || errorData.message || `HTTP ${response.status}`;
+        } catch (e) {
+            errorMsg = `HTTP ${response.status} - ${response.statusText}`;
+        }
+        throw new Error(errorMsg);
+    }
+    if (options.rawResponse) {
+        return response;
+    }
+    return response.json();
+}
+
+export function injectStyles() {
+    if (document.querySelector('link[data-gotube-css]')) return;
+    const link = el('link', {
+        rel: 'stylesheet',
+        type: 'text/css',
+        href: `/static/admin/css/admin.css?v=${Date.now()}`,
+        'data-gotube-css': '',
+    });
+    document.head.appendChild(link);
+}
+
 export function resolveHiddenPath(pathname = window.location.pathname, injectedHiddenPath = window.GOTUBE_HIDDEN_PATH) {
     if (injectedHiddenPath) return injectedHiddenPath;
     const parts = String(pathname || '').split('/').filter(Boolean);

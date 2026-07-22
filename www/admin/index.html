@@ -60,33 +60,7 @@
         </div>
     </div>
 
-    <!-- 基础工具函数 -->
-    <script src="/static/shared/common.js?v={{ASSET_VERSION}}"></script>
-    <!-- 全局状态 -->
-    <script src="/static/admin/js/state.js?v={{ASSET_VERSION}}"></script>
-    <!-- Toast 提示 -->
-    <script src="/static/admin/js/toast.js?v={{ASSET_VERSION}}"></script>
-    <!-- 渲染引擎 -->
-    <script src="/static/admin/js/render.js?v={{ASSET_VERSION}}"></script>
-    <!-- 认证模块 -->
-    <script src="/static/admin/js/auth.js?v={{ASSET_VERSION}}"></script>
-    <!-- 数据操作 -->
-    <script src="/static/admin/js/data.js?v={{ASSET_VERSION}}"></script>
-    <!-- 导出功能 -->
-    <script src="/static/admin/js/export.js?v={{ASSET_VERSION}}"></script>
-    <!-- 事件处理 -->
-    <script src="/static/admin/js/events.js?v={{ASSET_VERSION}}"></script>
-    <!-- 用户管理 -->
-    <script src="/static/admin/js/users.js?v={{ASSET_VERSION}}"></script>
-    <!-- 邀请码管理 -->
-    <script src="/static/admin/js/invites.js?v={{ASSET_VERSION}}"></script>
-    <!-- Cookie 管理 -->
-    <script src="/static/admin/js/cookies.js?v={{ASSET_VERSION}}"></script>
-    <!-- 系统页 -->
-    <script src="/static/admin/js/system.js?v={{ASSET_VERSION}}"></script>
-    <!-- 模态框 -->
-    <script src="/static/admin/js/modals.js?v={{ASSET_VERSION}}"></script>
-    <!-- 主入口 -->
-    <script src="/static/admin/js/admin.js?v={{ASSET_VERSION}}"></script>
+    <!-- 前端统一为 ES Module：入口先加载全局兼容层，再按序加载各业务模块 -->
+    <script type="module" src="/static/admin/js/main.js?v={{ASSET_VERSION}}"></script>
 </body>
 </html>
