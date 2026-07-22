@@ -38,7 +38,9 @@ data/
 # AI 助手配置 - 开发专用
 QWEN.md
 AGENTS.md
+CLAUDE.md
 .qwen/
+.claude/
 
 # 开发调试工具
 view_debug_log.sh
