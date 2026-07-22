@@ -181,6 +181,13 @@ def _ensure_schema(engine: Engine, conn) -> None:
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_invite_codes_code_hash ON invite_codes (code_hash)"))
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_invite_codes_created_by_user_id ON invite_codes (created_by_user_id)"))
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_invite_codes_is_active ON invite_codes (is_active)"))
+
+    if "invite_codes" in tables:
+        invite_columns = {column["name"] for column in inspector.get_columns("invite_codes")}
+        if "code_plain" not in invite_columns:
+            conn.execute(text("ALTER TABLE invite_codes ADD COLUMN code_plain VARCHAR(64)"))
+        if "storage_quota_mb" not in invite_columns:
+            conn.execute(text("ALTER TABLE invite_codes ADD COLUMN storage_quota_mb INTEGER"))
     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_display_name_key ON users (display_name_key)"))
 
 

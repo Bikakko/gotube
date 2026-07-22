@@ -759,12 +759,13 @@ async def create_invite_code(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> dict:
-    """管理员创建邀请码；明文 code 只在本次响应返回。"""
+    """管理员创建邀请码；明文 code 在创建响应和列表中均返回。"""
     result = create_invite(
         db,
         admin,
         max_uses=body.max_uses,
         expires_hours=body.expires_hours,
+        storage_quota_mb=body.storage_quota_mb,
     )
     db.commit()
     return result
@@ -775,7 +776,7 @@ async def get_invite_codes(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> list[dict]:
-    """管理员查看邀请码列表，不返回明文 code。"""
+    """管理员查看邀请码列表，含明文 code（前端遮挡显示）。"""
     return list_invites(db)
 
 

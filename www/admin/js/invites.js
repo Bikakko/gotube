@@ -118,8 +118,10 @@ function renderInvitesTable() {
                 el('thead', {}, [
                     el('tr', {}, [
                         el('th', { textContent: 'ID' }),
+                        el('th', { textContent: '邀请码' }),
                         el('th', { textContent: '状态' }),
                         el('th', { textContent: '使用次数' }),
+                        el('th', { textContent: '配额' }),
                         el('th', { textContent: '过期时间' }),
                         el('th', { textContent: '创建时间' }),
                         el('th', { className: 'invite-actions-head', textContent: '操作' }),
@@ -127,6 +129,7 @@ function renderInvitesTable() {
                 ]),
                 el('tbody', {}, filteredInvites.map((invite) => el('tr', {}, [
                     el('td', { textContent: invite.id }),
+                    el('td', { className: 'invite-code-cell' }, renderInviteCodeCell(invite)),
                     el('td', {}, [
                         el('span', {
                             className: `status-badge ${invite.status === 'active' ? 'active' : 'inactive'}`,
@@ -134,6 +137,7 @@ function renderInvitesTable() {
                         }),
                     ]),
                     el('td', { textContent: `${invite.used_count || 0} / ${invite.max_uses}` }),
+                    el('td', { textContent: invite.storage_quota_mb ? `${invite.storage_quota_mb} MB` : '默认' }),
                     el('td', {
                         textContent: invite.expires_at ? new Date(invite.expires_at).toLocaleString('zh-CN') : '永不过期',
                     }),
@@ -156,6 +160,22 @@ function renderInvitesTable() {
 
     slot.innerHTML = '';
     slot.appendChild(container);
+}
+
+function renderInviteCodeCell(invite) {
+    if (!invite.code) {
+        return [el('span', { className: 'invite-code-placeholder', textContent: '—' })];
+    }
+    const masked = invite.code.slice(0, 4) + '••••' + invite.code.slice(-4);
+    return [
+        el('span', { className: 'invite-code-masked', textContent: masked }),
+        el('button', {
+            className: 'action-btn-sm invite-copy-btn',
+            textContent: '📋',
+            title: '复制邀请码',
+            onClick: () => copyInviteCode(invite.code),
+        }),
+    ];
 }
 
 function formatInviteStatus(status) {
@@ -194,6 +214,15 @@ function showCreateInviteModal() {
                         placeholder: '留空表示永不过期',
                     }),
                 ]),
+                el('div', { className: 'form-group' }, [
+                    el('label', { textContent: '视频库空间 (MB)' }),
+                    el('input', {
+                        type: 'number',
+                        id: 'invite-storage-quota',
+                        min: '1',
+                        placeholder: '留空使用默认配额',
+                    }),
+                ]),
             ]),
             el('div', { className: 'modal-footer' }, [
                 el('button', {
@@ -217,6 +246,8 @@ async function handleCreateInvite() {
     const maxUses = Number.parseInt($('#invite-max-uses').value, 10);
     const expiresRaw = $('#invite-expires-hours').value.trim();
     const expiresHours = expiresRaw === '' ? null : Number.parseInt(expiresRaw, 10);
+    const quotaRaw = $('#invite-storage-quota').value.trim();
+    const storageQuota = quotaRaw === '' ? null : Number.parseInt(quotaRaw, 10);
 
     if (!Number.isInteger(maxUses) || maxUses < 1) {
         showToast('最大使用次数必须为正整数', 'warning');
@@ -228,10 +259,15 @@ async function handleCreateInvite() {
         return;
     }
 
+    if (quotaRaw !== '' && (!Number.isInteger(storageQuota) || storageQuota < 1)) {
+        showToast('视频库空间必须为空或正整数', 'warning');
+        return;
+    }
+
     try {
         const invite = await apiFetch('/invites', {
             method: 'POST',
-            body: JSON.stringify({ max_uses: maxUses, expires_hours: expiresHours }),
+            body: JSON.stringify({ max_uses: maxUses, expires_hours: expiresHours, storage_quota_mb: storageQuota }),
         });
         invalidateInviteCache();
         await loadInvites(true);
@@ -254,7 +290,7 @@ function showInviteCodeModal(code) {
                 }),
             ]),
             el('div', { className: 'modal-body' }, [
-                el('p', { className: 'info-text', textContent: '邀请码明文只显示这一次。' }),
+                el('p', { className: 'info-text', textContent: '邀请码可在列表中随时查看和复制。' }),
                 el('input', { type: 'text', id: 'new-invite-code', value: code || '', readOnly: true }),
             ]),
             el('div', { className: 'modal-footer' }, [

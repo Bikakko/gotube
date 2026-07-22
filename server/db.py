@@ -136,12 +136,14 @@ class InviteCode(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     code_hash = Column(String(128), unique=True, nullable=False, index=True)
+    code_plain = Column(String(64), nullable=True)
     created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     max_uses = Column(Integer, nullable=False, default=1)
     used_count = Column(Integer, nullable=False, default=0)
     expires_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, nullable=False, default=True, index=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    storage_quota_mb = Column(Integer, nullable=True)
 
 
 # ── 数据库初始化 ──

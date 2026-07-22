@@ -150,6 +150,7 @@ class CreateInviteRequest(BaseModel):
 
     max_uses: int = 1
     expires_hours: int | None = None
+    storage_quota_mb: int | None = None
 
 
 class InviteResponse(BaseModel):
@@ -163,3 +164,4 @@ class InviteResponse(BaseModel):
     created_at: str | None
     status: str
     code: str | None = None
+    storage_quota_mb: int | None = None

@@ -20,7 +20,7 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9_-]{3,32}$")
 
 
 def generate_invite_code() -> str:
-    """Generate the one-time-visible invite code plaintext."""
+    """Generate invite code plaintext."""
     return secrets.token_urlsafe(16)
 
 
@@ -35,6 +35,7 @@ def create_invite(
     *,
     max_uses: int = 1,
     expires_hours: int | None = None,
+    storage_quota_mb: int | None = None,
 ) -> dict[str, Any]:
     """Create an invite code and return the plaintext once."""
     if admin.role != "admin":
@@ -43,17 +44,21 @@ def create_invite(
         raise HTTPException(status_code=422, detail="邀请码使用次数必须在 1 到 100 之间")
     if expires_hours is not None and (expires_hours < 1 or expires_hours > 24 * 365):
         raise HTTPException(status_code=422, detail="过期时间必须在 1 小时到 365 天之间")
+    if storage_quota_mb is not None and storage_quota_mb < 0:
+        raise HTTPException(status_code=422, detail="视频库空间不能为负数")
 
     code = generate_invite_code()
     now = datetime.now(UTC)
     invite = InviteCode(
         code_hash=hash_invite_code(code),
+        code_plain=code,
         created_by_user_id=admin.id,
         max_uses=max_uses,
         used_count=0,
         expires_at=now + timedelta(hours=expires_hours) if expires_hours else None,
         is_active=True,
         created_at=now,
+        storage_quota_mb=storage_quota_mb,
     )
     session.add(invite)
     session.flush()
@@ -61,7 +66,7 @@ def create_invite(
 
 
 def list_invites(session: Session) -> list[dict[str, Any]]:
-    """List invite code metadata without plaintext codes."""
+    """List invite codes with plaintext (for admin masked display)."""
     invites = session.query(InviteCode).order_by(InviteCode.created_at.desc()).all()
     return [_invite_to_dict(invite) for invite in invites]
 
@@ -125,7 +130,7 @@ def register_user_with_invite(
     if session.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
 
-    consume_invite(session, invite_code)
+    invite = consume_invite(session, invite_code)
 
     password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
     user = User(
@@ -135,6 +140,7 @@ def register_user_with_invite(
         password_hash=password_hash,
         role="user",
         is_active=True,
+        storage_quota_mb=invite.storage_quota_mb,
     )
     session.add(user)
     session.flush()
@@ -169,7 +175,9 @@ def _invite_to_dict(invite: InviteCode, include_code: str | None = None) -> dict
         "is_active": invite.is_active,
         "created_at": invite.created_at.isoformat() if invite.created_at else None,
         "status": _invite_status(invite),
+        "storage_quota_mb": invite.storage_quota_mb,
     }
-    if include_code is not None:
-        data["code"] = include_code
+    code = include_code or invite.code_plain
+    if code:
+        data["code"] = code
     return data
