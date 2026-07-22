@@ -58,11 +58,6 @@ let state = {
     isTransitioning: false,
 };
 
-function goToPage(page) {
-    state.pagination.page = page;
-    window.loadVideos();
-}
-
 function invalidateVideoCache() {
     state.videos = [];
     state.filteredVideos = [];
@@ -91,3 +86,5 @@ window.state = state;
 window.invalidateVideoCache = invalidateVideoCache;
 window.invalidateUserCache = invalidateUserCache;
 window.invalidateInviteCache = invalidateInviteCache;
+
+export { state, invalidateVideoCache, invalidateUserCache, invalidateInviteCache };

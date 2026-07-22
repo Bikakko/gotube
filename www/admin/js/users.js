@@ -746,3 +746,5 @@ window.loadUsers = loadUsers;
 window.showUserLibraryModal = showUserLibraryModal;
 window.renderUsersTable = renderUsersTable;
 window.initClickOutsideListener = initClickOutsideListener;
+
+export { showUserManagement, showVideoManagement, switchAdminView, refreshNavTabs, loadUsers, showUserLibraryModal, renderUsersTable, initClickOutsideListener };

@@ -294,3 +294,5 @@ async function handleRevokeInvite(invite) {
 window.showInviteManagement = showInviteManagement;
 window.loadInvites = loadInvites;
 window.renderInvitesTable = renderInvitesTable;
+
+export { showInviteManagement, loadInvites, renderInvitesTable };

@@ -617,3 +617,5 @@ window.uploadCookiesFile = uploadCookiesFile;
 window.uploadCookiesText = uploadCookiesText;
 window.deleteCookies = deleteCookies;
 window.renderCookiesStatus = renderCookiesStatus;
+
+export { showCookiesManagement, loadCookiesStatus, uploadCookiesFile, uploadCookiesText, deleteCookies, renderCookiesStatus };

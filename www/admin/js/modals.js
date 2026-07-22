@@ -332,3 +332,5 @@ window.showPlayerModal = showPlayerModal;
 window.showShareModal = showShareModal;
 window.showMediaDetailsModal = showMediaDetailsModal;
 window.closeModal = closeModal;
+
+export { showPlayerModal, showShareModal, showMediaDetailsModal, closeModal };

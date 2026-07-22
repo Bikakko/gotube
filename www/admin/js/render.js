@@ -806,3 +806,5 @@ window.setCustomDropdownValue = setCustomDropdownValue;
 window.updateSourceDropdownOptions = updateSourceDropdownOptions;
 window.updateTimeDropdownOptions = updateTimeDropdownOptions;
 window.updateOwnerDropdownOptions = updateOwnerDropdownOptions;
+
+export { renderPage, renderNavbar, renderMainLayout, renderOverviewSection, renderSystemSection, renderStatsPanel, toggleStatsPanel, renderFilters, renderVideoGrid, renderVideoCard, renderPagination, renderBatchBar, updateBatchBar, ensureViewContainerVisible, toggleCustomDropdown, hideAllCustomDropdowns, setCustomDropdownValue, updateSourceDropdownOptions, updateTimeDropdownOptions, updateOwnerDropdownOptions };

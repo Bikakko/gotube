@@ -97,3 +97,5 @@ async function handleExportM3u8() {
 window.handleExportZip = handleExportZip;
 window.handleExportJson = handleExportJson;
 window.handleExportM3u8 = handleExportM3u8;
+
+export { handleExportZip, handleExportJson, handleExportM3u8 };

@@ -201,3 +201,5 @@ window.renderSystemPanels = renderSystemPanels;
 window.renderRuntimeHealth = renderRuntimeHealth;
 window.switchSystemLogView = switchSystemLogView;
 window.copySystemLogView = copySystemLogView;
+
+export { loadSystemPage, renderSystemPanels, renderRuntimeHealth, switchSystemLogView, copySystemLogView };

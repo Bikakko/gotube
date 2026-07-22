@@ -239,3 +239,5 @@ window.clearSelection = clearSelection;
 window.toggleDropdown = toggleDropdown;
 window.hideAllDropdowns = hideAllDropdowns;
 window.bindAdminShellEvents = bindAdminShellEvents;
+
+export { handleKeywordChange, handleSourceChange, handleTimeChange, handleOwnerChange, handleOwnerSearchInput, handlePerPageChange, toggleVideoSelection, toggleSelectAll, updateSelectAllCheckbox, clearSelection, toggleDropdown, hideAllDropdowns, bindAdminShellEvents };

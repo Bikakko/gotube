@@ -214,3 +214,5 @@ window.showLoginForm = showLoginForm;
 window.hideLoginForm = hideLoginForm;
 window.handleLogin = handleLogin;
 window.handleLogout = handleLogout;
+
+export { checkAuth, showLoginForm, hideLoginForm, handleLogin, handleLogout };

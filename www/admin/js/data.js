@@ -363,6 +363,12 @@ async function handleBatchDelete() {
     }
 }
 
+// 分页跳转（原在 state.js，移入 data.js 以切断 state↔data 循环依赖）
+function goToPage(page) {
+    state.pagination.page = page;
+    loadVideos();
+}
+
 // 显式挂载到 window，确保全局可见性
 window.loadVideos = loadVideos;
 window.loadStats = loadStats;
@@ -373,3 +379,5 @@ window.loadRuntimeLogsData = loadRuntimeLogsData;
 window.handleDeleteVideo = handleDeleteVideo;
 window.showDeleteConfirmModal = showDeleteConfirmModal;
 window.handleBatchDelete = handleBatchDelete;
+
+export { loadVideos, loadStats, loadUserLibrary, loadRuntimeHealth, loadCookiesStatusData, loadRuntimeLogsData, handleDeleteVideo, showDeleteConfirmModal, handleBatchDelete, goToPage };
