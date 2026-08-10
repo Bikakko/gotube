@@ -1,19 +1,28 @@
+# GoTube systemd 服务模板
+#
+# 使用前请把下面占位符全部替换为实际部署目录（模板不写死任何安装路径）：
+#   <GOTUBE_DIR>  实际部署目录，如 /root/gotube
+#
+# 说明：
+# - 采用 Type=simple + venv 内 python 直跑 uvicorn（依赖装在项目 venv，
+#   不用系统 python）；server 会自行读取部署目录下的 .env，host/port
+#   等配置无需写在 ExecStart 里。
+# - 生产环境启停一律 systemctl start/stop/restart gotube，
+#   不要手动 ./gotube.sh start（脚本检测到本服务 active 时会拒绝启动，
+#   防止 kill 掉 systemd 托管进程后裸起野进程）。
+
 [Unit]
 Description=GoTube Service
 After=network.target
 
 [Service]
-Type=forking
+Type=simple
 User=root
 Group=root
-WorkingDirectory=/opt/gotube
-ExecStart=/opt/gotube/gotube.sh start
-ExecStop=/opt/gotube/gotube.sh stop
-ExecReload=/opt/gotube/gotube.sh restart
-PIDFile=/opt/gotube/.server.pid
+WorkingDirectory=<GOTUBE_DIR>
+ExecStart=<GOTUBE_DIR>/venv/bin/python -m uvicorn server.main:app
 Restart=on-failure
 RestartSec=5
-TimeoutStartSec=120
 TimeoutStopSec=30
 
 [Install]

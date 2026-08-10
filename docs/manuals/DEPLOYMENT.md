@@ -70,10 +70,15 @@ GOTUBE_ADMINS=admin:你的超级安全密码
 
 ### 4. 启动与验证
 
+非 systemd 部署（开发/临时环境）：
+
 ```bash
 ./gotube.sh restart
 ./gotube.sh status
 ```
+
+> ⚠ 生产环境建议接入 systemd 托管（见 [systemd 服务托管](SYSTEMD-SERVICE.md)），
+> 托管后启停一律 `systemctl start/stop/restart gotube`，不要再手动 `./gotube.sh restart`（会裸起野进程）。
 
 自检访问：`http://服务器IP:8000/health`，若返回 JSON 健康状态说明服务正常运行。
 
@@ -81,13 +86,21 @@ GOTUBE_ADMINS=admin:你的超级安全密码
 
 ## 三、 日常更新流程
 
-代码或依赖更新时：
+代码或依赖更新时（推荐，systemd 托管环境会自动走 `systemctl restart`）：
+
+```bash
+cd /你的部署目录/gotube
+./gotube.sh upgrade
+```
+
+手动分步时：
 
 ```bash
 cd /你的部署目录/gotube
 git pull --ff-only
 ./gotube.sh init
-./gotube.sh restart
+./gotube.sh restart        # 非 systemd 部署
+# systemd 托管环境改用: sudo systemctl restart gotube
 ```
 
 > 仅升级下载引擎 (`yt-dlp`)：执行 `./gotube.sh update` 即可。

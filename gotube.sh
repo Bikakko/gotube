@@ -27,6 +27,9 @@ usage() {
     echo "  $0 status   查看服务器状态"
     echo "  $0 update   更新 yt-dlp 到最新版本"
     echo "  $0 upgrade  一键升级 (备份数据库 → 拉取代码 → 更新依赖 → 重建前端 → 自动重启)"
+    echo ""
+    echo "  ⚠ 生产环境(systemd 托管)启停一律 systemctl start/stop/restart gotube，"
+    echo "    本脚本的 start/stop/restart 仅限非 systemd 部署；upgrade/doctor/status 不受限。"
     exit 1
 }
 
@@ -96,7 +99,27 @@ force_kill_port() {
     return 1
 }
 
+# 检测当前是否由 systemd 托管（gotube.service active）。
+# 生产约定：systemd 托管下启停一律走 systemctl，手动跑本脚本的
+# start/stop 会 kill 掉 systemd 进程并裸起野进程，造成孤儿进程事故。
+systemd_managed() {
+    [ "${GOTUBE_ALLOW_SYSTEMD_OVERRIDE:-0}" = "1" ] && return 1
+    command -v systemctl &>/dev/null || return 1
+    systemctl is-active --quiet gotube 2>/dev/null
+}
+
+systemd_guard() {
+    if systemd_managed; then
+        echo -e "${RED}✗ 检测到 gotube 服务正由 systemd 托管${NC}"
+        echo -e "${YELLOW}生产环境启停请改用: systemctl ${1:-restart} gotube${NC}"
+        echo -e "  手动 ./gotube.sh ${2:-start} 会杀掉 systemd 进程并裸起野进程（曾导致 502 事故）"
+        echo -e "  确需绕过时: GOTUBE_ALLOW_SYSTEMD_OVERRIDE=1 $0 ${2:-start}"
+        exit 1
+    fi
+}
+
 start() {
+    systemd_guard restart start
     runtime_load_common_config
     local PORT="$GOTUBE_PORT"
 
@@ -163,6 +186,7 @@ start() {
 }
 
 stop() {
+    systemd_guard stop stop
     runtime_load_common_config
     local PORT="$GOTUBE_PORT"
 
@@ -206,6 +230,14 @@ stop() {
 status() {
     runtime_load_common_config
     local PORT="$GOTUBE_PORT"
+
+    # systemd 托管时无 .server.pid 文件，直接按服务状态展示，避免误报残留进程
+    if systemd_managed; then
+        echo -e "${GREEN}● 服务器运行中（systemd 托管）${NC}"
+        echo -e "  访问地址: http://$GOTUBE_HOST:$PORT"
+        echo -e "  详情/日志: systemctl status gotube / journalctl -u gotube -f"
+        return
+    fi
 
     if is_running; then
         local pid=$(cat "$GOTUBE_PID_FILE")
@@ -307,11 +339,21 @@ upgrade() {
 
     # [6/6] 升级前在运行则自动重启
     echo -e "${YELLOW}[6/6] 完成收尾...${NC}"
-    if [ "$was_running" = "1" ]; then
+    if systemd_managed; then
+        echo "  检测到 systemd 托管，使用 systemctl 重启..."
+        if systemctl restart gotube; then
+            echo -e "${GREEN}✓ 服务已由 systemd 重启${NC}"
+        else
+            echo -e "${RED}✗ systemctl restart gotube 失败，请检查: systemctl status gotube${NC}"
+            exit 1
+        fi
+    elif [ "$was_running" = "1" ]; then
         echo "  检测到服务运行中，自动重启..."
         stop
         sleep 1
         start
+    elif command -v systemctl &>/dev/null && systemctl list-unit-files gotube.service 2>/dev/null | grep -q gotube.service; then
+        echo -e "${YELLOW}提示: 检测到 gotube.service（当前未运行），执行 systemctl start gotube 启动${NC}"
     else
         echo -e "${YELLOW}提示: 执行 $0 start 启动服务${NC}"
     fi

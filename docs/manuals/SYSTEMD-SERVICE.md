@@ -13,6 +13,11 @@
 
 而 Python 虚拟环境、依赖初始化及前端编译构建依然由 `./gotube.sh` 脚本统一掌控。
 
+> ⚠ **生产约定（重要，防孤儿进程事故）**：systemd 托管后，启停一律走
+> `systemctl start/stop/restart gotube`，**禁止**手动 `./gotube.sh start/restart`——
+> 它会强杀 systemd 托管进程再裸起一个不受管理的野进程（曾因此引发 502 事故）。
+> `gotube.sh` 检测到服务 active 时会直接拒绝启停；`upgrade`/`doctor`/`status` 不受限。
+
 ---
 
 ## 二、 配置步骤
@@ -27,28 +32,32 @@ sudo cp deploy/gotube.service.example /etc/systemd/system/gotube.service
 
 ### 2. 编辑配置文件
 
-编辑 `/etc/systemd/system/gotube.service`，确认或调整路径与用户组：
+编辑 `/etc/systemd/system/gotube.service`，把模板中的 `<GOTUBE_DIR>` 占位符
+替换为实际部署目录（如 `/root/gotube`，模板不写死任何安装路径）：
 
 ```ini
 [Unit]
-Description=GoTube Video Downloader & Library Service
+Description=GoTube Service
 After=network.target
 
 [Service]
-Type=forking
-WorkingDirectory=/你的实际部署目录/gotube
-ExecStart=/你的实际部署目录/gotube/gotube.sh start
-ExecStop=/你的实际部署目录/gotube/gotube.sh stop
-ExecReload=/你的实际部署目录/gotube/gotube.sh restart
-PIDFile=/你的实际部署目录/gotube/.server.pid
+Type=simple
 User=运行用户
 Group=运行用户组
+WorkingDirectory=<GOTUBE_DIR>
+ExecStart=<GOTUBE_DIR>/venv/bin/python -m uvicorn server.main:app
 Restart=on-failure
-RestartSec=5s
+RestartSec=5
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target
 ```
+
+要点说明：
+- 用项目 `venv` 内的 python 直跑 uvicorn（依赖装在 venv，不用系统 python），
+  对应 `Type=simple`；server 自行读取部署目录下的 `.env`，host/port 无需写在 ExecStart。
+- 旧版 `Type=forking` + `gotube.sh start` 的写法已废弃，不要从 git 历史/旧文档照搬。
 
 ### 3. 重载并开启开机自启
 
@@ -72,6 +81,13 @@ sudo journalctl -u gotube -f     # 实时查看控制台输出日志
 ---
 
 ## 四、 更新流程
+
+```bash
+cd /你的部署目录/gotube
+./gotube.sh upgrade   # 备份数据库 → 拉代码 → 更新依赖 → 重建前端 → 自动 systemctl restart gotube
+```
+
+手动分步时：
 
 ```bash
 cd /你的部署目录/gotube
