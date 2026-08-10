@@ -1,6 +1,6 @@
 /**
  * GoTube Admin - 认证模块
- * 登录、登出、Token 管理
+ * 登录、登出，登录态由 HttpOnly Cookie 维持
  */
 
 import { $, el, apiFetch, getApiBase, session } from '../../shared/common.module.js';
@@ -12,48 +12,40 @@ function clearDownloadPageSession() {
 }
 
 /**
- * 检查当前是否有有效 token
+ * 检查当前是否有有效登录态（HttpOnly Cookie 由浏览器自动携带）
  * @returns {Promise<boolean>} 是否认证通过
  */
 async function checkAuth() {
-    const token = localStorage.getItem('gotube_admin_token');
-
-    if (!token) {
-        // 没有 token，直接显示登录表单
-        showLoginForm();
-        return false;
-    }
-
     // 增加重试机制，避免网络波动导致误踢
     const maxRetries = 2;
     let lastError = null;
-    
+
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            // 有 token，验证是否有效
+            // Cookie 无法在 JS 中读取，直接请求后端验证登录态
             const data = await apiFetch('/auth/check');
-            // token 有效，保存用户信息
+            // 登录态有效，保存用户信息
             state.currentUser = data.user;
             return true;
         } catch (err) {
             lastError = err;
-            console.warn(`Token 验证失败 (尝试 ${attempt + 1}/${maxRetries + 1}):`, err.message);
-            
+            console.warn(`登录态验证失败 (尝试 ${attempt + 1}/${maxRetries + 1}):`, err.message);
+
             // 如果不是 UNAUTHORIZED 错误，可能是网络问题，等待后重试
             if (err.message !== 'UNAUTHORIZED' && attempt < maxRetries) {
                 // 等待 500ms 后重试
                 await new Promise(resolve => setTimeout(resolve, 500));
                 continue;
             }
-            
+
             // UNAUTHORIZED 错误或达到最大重试次数，停止重试
             break;
         }
     }
 
-    // 所有重试都失败了，清除 token 并显示登录表单
-    console.error('Token 验证最终失败:', lastError?.message);
-    localStorage.removeItem('gotube_admin_token');
+    // 未登录或登录已失效，显示登录表单
+    console.error('登录态验证最终失败:', lastError?.message);
+    session.clearAuthState();
     clearDownloadPageSession();
     showLoginForm();
     return false;
@@ -157,12 +149,11 @@ async function handleLogin() {
 
         const data = await response.json();
 
-        if (!data.token) {
+        if (!data.user) {
             throw new Error('❌ 登录响应异常，请重试');
         }
 
-        // 登录成功
-        localStorage.setItem('gotube_admin_token', data.token);
+        // 登录成功，登录 Cookie 已由服务端下发
         clearDownloadPageSession();
         state.currentUser = data.user;  // 立即更新用户状态
         hideLoginForm();
@@ -197,17 +188,14 @@ async function handleLogin() {
 async function handleLogout() {
     if (!confirm('确定要退出管理页面吗？')) return;
 
-    // 尝试调用后端登出 API，使 token 失效
-    const token = localStorage.getItem('gotube_admin_token');
-    if (token) {
-        try {
-            await apiFetch('/auth/logout', { method: 'POST' });
-        } catch (err) {
-            console.warn('登出 API 调用失败:', err.message);
-        }
+    // 调用后端登出 API，使 token 失效并清除登录 Cookie
+    try {
+        await apiFetch('/auth/logout', { method: 'POST' });
+    } catch (err) {
+        console.warn('登出 API 调用失败:', err.message);
     }
 
-    localStorage.removeItem('gotube_admin_token');
+    session.clearAuthState();
     clearDownloadPageSession();
     window.location.href = '/';
 }

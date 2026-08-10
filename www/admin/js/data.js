@@ -96,9 +96,9 @@ async function loadVideos() {
     } catch (err) {
         console.error('加载视频列表失败:', err);
 
-        // 如果是 UNAUTHORIZED 错误，尝试刷新 token 或提示用户重新登录
+        // 如果是 UNAUTHORIZED 错误，提示用户重新登录
         if (err.message === 'UNAUTHORIZED') {
-            // 清除无效 token
+            // 清理旧版遗留的 localStorage token（登录态已改用 HttpOnly Cookie）
             localStorage.removeItem('gotube_admin_token');
 
             // 显示友好的提示，而不是直接踢出

@@ -20,11 +20,19 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from starlette.background import BackgroundTask
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .auth import get_current_user, get_db, require_admin
+from .auth import (
+    SESSION_TTL_SECONDS,
+    clear_session_cookie,
+    get_current_user,
+    get_db,
+    get_session_token,
+    require_admin,
+    set_session_cookie,
+)
 from .config import settings
 from .cookie_store import (
     delete_uploaded_cookies_file,
@@ -76,9 +84,9 @@ def _raise_internal_admin_error(user_message: str, exc: Exception) -> None:
 # ── Token 管理 ──
 
 
-# Token 有效期：约 100 年，等效于永不过期（仅主动登出失效）。
+# Token 有效期：7 天滑动过期，由 auth.SESSION_TTL_SECONDS 统一定义。
 # 写入真实远未来日期而非 NULL，以兼容历史 NOT NULL 约束的数据库，无需迁移。
-_TOKEN_TTL_SECONDS = 100 * 365 * 24 * 3600
+_TOKEN_TTL_SECONDS = SESSION_TTL_SECONDS
 
 
 def generate_token(db: Session, user_id: int, username: str, role: str) -> str:
@@ -490,10 +498,10 @@ async def admin_login(
     db.commit()
 
     token = generate_token(db, user.id, user.username, user.role)
-    return {
-        "token": token,
-        "user": build_user_identity(user),
-    }
+    # 登录态通过 HttpOnly Cookie 下发，不再在响应体中返回 token
+    response = JSONResponse({"user": build_user_identity(user)})
+    set_session_cookie(response, token)
+    return response
 
 
 @router.get("/auth/check")
@@ -512,25 +520,26 @@ async def auth_logout(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> dict:
+) -> Response:
     """
-    登出，使当前 token 失效。
+    登出，使当前 token 失效并清除登录 Cookie。
     """
-    auth_header = request.headers.get("Authorization", "")
-    token = auth_header[7:].strip() if auth_header.startswith("Bearer ") else None
-    
+    token = get_session_token(request)
+
     if token:
         auth_token = db.query(AuthToken).filter(
             AuthToken.token == token,
             AuthToken.is_active == True,
         ).first()
-        
+
         if auth_token:
             auth_token.is_active = False
             db.commit()
             logger.info("用户 %s 主动登出", current_user.username)
-    
-    return {"success": True}
+
+    response = JSONResponse({"success": True})
+    clear_session_cookie(response)
+    return response
 
 
 # ── 用户管理 API ──

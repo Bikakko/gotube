@@ -22,6 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from .api import get_queue_manager
 from .api import router as api_router
 from .admin_api import router as admin_api_router
+from .auth import SESSION_COOKIE_NAME, set_session_cookie
 from .backup import backup_loop
 from .config import settings
 from .db import init_db, get_session, sync_admins_from_env
@@ -162,6 +163,17 @@ async def harden_requests(request: Request, call_next) -> Response:
 
     for header, value in SECURITY_HEADERS.items():
         response.headers.setdefault(header, value)
+    return response
+
+
+@app.middleware("http")
+async def refresh_session_cookie(request: Request, call_next) -> Response:
+    """滑动续期：认证依赖触发 token 续期后，同步刷新 Cookie 过期时间。"""
+    response = await call_next(request)
+    if getattr(request.state, "session_cookie_refreshed", False):
+        token = request.cookies.get(SESSION_COOKIE_NAME)
+        if token:
+            set_session_cookie(response, token)
     return response
 
 # 挂载 API 路由器

@@ -59,22 +59,9 @@ async function loadCookiesStatus() {
     const container = $('#cookies-status-card');
     if (!container) return;
 
-    const token = localStorage.getItem('gotube_admin_token');
-    if (!token) {
-        container.innerHTML = `
-            <div style="padding: 15px; background: rgba(244, 67, 54, 0.1); border-radius: 8px; color: var(--error);">
-                ⚠️ 未登录，请先登录
-            </div>
-        `;
-        return;
-    }
-
+    // 登录态由 HttpOnly Cookie 携带，前端无需手动附加凭证
     try {
-        const response = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies/status`, {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            },
-        });
+        const response = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies/status`);
 
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}`);
@@ -343,12 +330,6 @@ async function uploadCookiesFile() {
         return;
     }
 
-    const token = localStorage.getItem('gotube_admin_token');
-    if (!token) {
-        showToast('请先登录', 'error');
-        return;
-    }
-
     try {
         // 先读取文件内容用于预检查
         const content = await readFileAsText(file);
@@ -363,7 +344,6 @@ async function uploadCookiesFile() {
         const checkResponse = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies/check_merge`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ content }),
@@ -390,9 +370,6 @@ async function uploadCookiesFile() {
 
         const response = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies/upload?mode=merge`, {
             method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            },
             body: formData,
         });
 
@@ -501,12 +478,6 @@ async function uploadCookiesText() {
         return;
     }
 
-    const token = localStorage.getItem('gotube_admin_token');
-    if (!token) {
-        showToast('请先登录', 'error');
-        return;
-    }
-
     const content = textarea.value.trim();
 
     try {
@@ -516,7 +487,6 @@ async function uploadCookiesText() {
         const checkResponse = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies/check_merge`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ content }),
@@ -541,7 +511,6 @@ async function uploadCookiesText() {
         const response = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies/upload?mode=merge`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({ content }),
@@ -575,20 +544,11 @@ async function deleteCookies() {
         return;
     }
 
-    const token = localStorage.getItem('gotube_admin_token');
-    if (!token) {
-        showToast('请先登录', 'error');
-        return;
-    }
-
     try {
         showToast('正在删除 cookies...', 'info');
 
         const response = await fetch(`/${GOTUBE_HIDDEN_PATH}/admin/api/cookies`, {
             method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            },
         });
 
         const data = await response.json();

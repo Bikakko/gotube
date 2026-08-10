@@ -68,6 +68,7 @@ export function wasAuthenticatedClient() {
 }
 
 export function clearAuthState({ resetDownloadClient: shouldResetDownloadClient = false } = {}) {
+    // 登录态已改为 HttpOnly Cookie，这里仅清理旧版遗留的 localStorage token
     localStorage.removeItem(AUTH_TOKEN_KEY);
     clearAuthenticatedClient();
     if (shouldResetDownloadClient) {
@@ -174,14 +175,11 @@ export function getApiBase() {
 }
 
 export async function apiFetch(endpoint, options = {}) {
-    const token = localStorage.getItem('gotube_admin_token');
+    // 登录态由 HttpOnly Cookie 自动携带，无需手动附加凭证
     const headers = {
         'Content-Type': 'application/json',
         ...(options.headers || {}),
     };
-    if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-    }
     const response = await fetch(`${getApiBase()}${endpoint}`, {
         ...options,
         headers,

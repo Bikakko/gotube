@@ -9,10 +9,9 @@
 </head>
 <body>
     <script>
-        // 登录门控防闪烁：无 token 时先隐藏下载界面，JS 加载后会复核登录态
-        if (!localStorage.getItem('gotube_admin_token')) {
-            document.body.classList.add('auth-gated');
-        }
+        // 登录门控防闪烁：登录 Cookie 为 HttpOnly 无法在 JS 中读取，
+        // 默认先隐藏下载界面，JS 加载后复核登录态再决定是否显示
+        document.body.classList.add('auth-gated');
     </script>
     <div class="container">
         <div class="logo">🎬 <a href="#" id="logo-link" title="点击登录">GoTube</a></div>

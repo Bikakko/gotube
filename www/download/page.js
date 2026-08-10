@@ -30,8 +30,8 @@ let libraryTotalItems = 0;
 let modalVideoKeyboardCleanup = null;
 
 function authHeaders(extra = {}) {
-    const token = localStorage.getItem('gotube_admin_token');
-    return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
+    // 登录态由 HttpOnly Cookie 自动携带，此处保留签名兼容既有调用
+    return { ...extra };
 }
 
 function isRegularUser() {
@@ -1168,8 +1168,24 @@ function isQuotaError(message = '') {
     // ========== 登录相关功能 ==========
 
     async function checkLoginStatus() {
-        const token = localStorage.getItem('gotube_admin_token');
-        if (!token) {
+        const apiBase = `/${hiddenPath}/admin/api`;
+        let response;
+        try {
+            // 登录 Cookie 由浏览器自动携带，直接请求后端验证登录态
+            response = await fetch(`${apiBase}/auth/check`);
+        } catch (err) {
+            console.debug('Check auth failed:', err.message);
+            clientId = session.clearAuthState({ resetDownloadClient: true });
+            clearTasks();
+            isLoggedIn = false;
+            currentUser = null;
+            updateLogoStyle();
+            renderMyLibrary();
+            return;
+        }
+
+        if (!response.ok) {
+            // 无有效登录 Cookie，按未登录处理（保留游客 session 以便登录后转存）
             if (session.wasAuthenticatedClient()) {
                 session.clearAuthenticatedClient();
                 resetClientSession();
@@ -1181,33 +1197,14 @@ function isQuotaError(message = '') {
             return;
         }
 
-        try {
-            const apiBase = `/${hiddenPath}/admin/api`;
-            const response = await fetch(`${apiBase}/auth/check`, {
-                headers: { 'Authorization': `Bearer ${token}` },
-            });
-
-            if (!response.ok) {
-                throw new Error('Token 无效');
-            }
-
-            const data = await response.json();
-            isLoggedIn = data.valid && data.user;
-            currentUser = data.user || null;
-            if (isLoggedIn) {
-                session.markAuthenticatedClient();
-            }
-            updateLogoStyle();
-            await loadMyLibrary();
-        } catch (err) {
-            console.debug('Check auth failed:', err.message);
-            clientId = session.clearAuthState({ resetDownloadClient: true });
-            clearTasks();
-            isLoggedIn = false;
-            currentUser = null;
-            updateLogoStyle();
-            renderMyLibrary();
+        const data = await response.json();
+        isLoggedIn = data.valid && data.user;
+        currentUser = data.user || null;
+        if (isLoggedIn) {
+            session.markAuthenticatedClient();
         }
+        updateLogoStyle();
+        await loadMyLibrary();
     }
 
     function formatIdentityText(user) {
@@ -1406,13 +1403,9 @@ function isQuotaError(message = '') {
             }
         }
 
-        const token = localStorage.getItem('gotube_admin_token');
-        if (token) {
-            await fetch(`/${hiddenPath}/admin/api/auth/logout`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` },
-            }).catch(() => {});
-        }
+        await fetch(`/${hiddenPath}/admin/api/auth/logout`, {
+            method: 'POST',
+        }).catch(() => {});
         session.clearAuthState();
         isLoggedIn = false;
         currentUser = null;
@@ -1510,7 +1503,7 @@ function isQuotaError(message = '') {
 
             const data = await response.json();
             const previousUserId = currentUser && currentUser.id;
-            localStorage.setItem('gotube_admin_token', data.token);
+            // 登录 Cookie 已由服务端下发，前端不再保存 token
             session.markAuthenticatedClient();
             isLoggedIn = true;
             currentUser = data.user || null;
@@ -1643,10 +1636,8 @@ function isQuotaError(message = '') {
             setStatus('🔄 正在转移视频到视频库...', '#58a6ff');
 
             // 调用转移 API
-            const token = localStorage.getItem('gotube_admin_token');
             const transferRes = await fetch(`/api/guest-downloads/${guestSessionId}/transfer?client_id=${clientId}`, {
                 method: 'POST',
-                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
             });
 
             if (!transferRes.ok) {
