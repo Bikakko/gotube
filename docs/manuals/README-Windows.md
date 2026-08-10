@@ -39,13 +39,13 @@ pip install -r requirements.txt
 
 ### 3. 启动本地开发服务
 
-可以使用便捷批处理脚本 `st.bat`：
+可以使用便捷批处理脚本 `dev.bat`：
 
 ```powershell
-.\st.bat         # 启动开发服务器（前台带热重载）
-.\st.bat stop    # 停止服务
-.\st.bat restart # 重启服务
-.\st.bat status  # 查看状态
+.\dev.bat         # 启动开发服务器（前台带热重载）
+.\dev.bat stop    # 停止服务
+.\dev.bat restart # 重启服务
+.\dev.bat status  # 查看状态
 ```
 
 或使用直接命令行启动：
@@ -80,7 +80,7 @@ gotube/
 ├── .env                 # 环境配置文件
 ├── .env.example         # 配置模板
 ├── requirements.txt     # Python 依赖
-├── st.bat               # Windows 启动脚本
+├── dev.bat               # Windows 启动脚本
 ├── downloads/           # 下载视频存储目录
 ├── data/
 │   └── cookies.txt      # 浏览器 Cookies 文件

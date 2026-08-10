@@ -7,6 +7,7 @@
 
 import json
 import logging
+import os
 import secrets
 import shutil
 import tempfile
@@ -194,68 +195,122 @@ def _read_meta_from_dir(dir_path: Path) -> dict:
         return {}
 
 
+# 目录扫描缓存：download_dir -> (签名, 扫描结果, 缓存时间)
+_video_scan_cache: dict[str, tuple[tuple, list[dict[str, Any]], float]] = {}
+# 部分文件系统 mtime 精度仅到秒，同秒内变更无法被签名感知，
+# 用 TTL 兑底限制最大陈旧时间
+_VIDEO_SCAN_CACHE_TTL = 30.0
+
+
+def _dir_scan_signature(download_dir: Path) -> tuple | None:
+    """计算轻量级目录签名，用于扫描缓存失效判断。
+
+    签名 = 下载目录自身 mtime + 顶层各子目录 (名称, mtime_ns)。
+    目录增删、meta.json 写入、文件删除均会改变相应目录 mtime，
+    缓存因此自动失效，无需手工钩子。目录不可读时返回 None（不缓存）。
+    """
+    try:
+        root_stat = download_dir.stat()
+    except OSError:
+        return None
+    entries: list[tuple[str, int]] = []
+    try:
+        with os.scandir(download_dir) as it:
+            for entry in it:
+                try:
+                    if entry.is_dir(follow_symlinks=False):
+                        entries.append((entry.name, entry.stat(follow_symlinks=False).st_mtime_ns))
+                except OSError:
+                    continue
+    except OSError:
+        return None
+    return (root_stat.st_mtime_ns, tuple(sorted(entries)))
+
+
 def _list_all_videos(download_dir: Path) -> list[dict[str, Any]]:
     """
     扫描下载目录，返回所有视频信息列表。
+
+    采用两层 scandir 遍历（目录结构固定为 download_dir/<视频目录>/<文件>），
+    并带目录 mtime 签名缓存，同一时间窗口内多个接口
+    （/videos、export、/stats）复用同一份扫描结果。
     """
     from .downloader import VIDEO_EXTENSIONS
-    
+
+    signature = _dir_scan_signature(download_dir)
+    if signature is not None:
+        cached = _video_scan_cache.get(str(download_dir))
+        if cached is not None and cached[0] == signature:
+            if time.monotonic() - cached[2] < _VIDEO_SCAN_CACHE_TTL:
+                return cached[1]
+
     videos = []
 
-    for video_file in download_dir.rglob("*"):
-        if not video_file.is_file():
-            continue
-        if video_file.suffix.lower() not in VIDEO_EXTENSIONS:
+    try:
+        with os.scandir(download_dir) as album_it:
+            album_entries = [e for e in album_it if e.is_dir(follow_symlinks=False)]
+    except OSError:
+        album_entries = []
+
+    for album_entry in album_entries:
+        # 跳过 guest 临时目录
+        if album_entry.name == "temp_guest":
             continue
 
-        # 跳过 guest 临时文件
-        try:
-            rel = video_file.relative_to(download_dir)
-            rel_str = str(rel)
-            if rel_str.startswith("temp_guest/") or rel_str.startswith("temp_guest\\"):
-                continue
-        except ValueError:
-            pass
-
-        meta = _read_meta_from_dir(video_file.parent)
+        album_dir = Path(album_entry.path)
+        meta = _read_meta_from_dir(album_dir)
         if not meta:
             continue
-        
-        stat = video_file.stat()
-        dir_name = video_file.parent.name
-        
+
+        try:
+            with os.scandir(album_dir) as file_it:
+                video_files = [
+                    Path(e.path)
+                    for e in file_it
+                    if e.is_file(follow_symlinks=False)
+                    and Path(e.name).suffix.lower() in VIDEO_EXTENSIONS
+                ]
+        except OSError:
+            continue
+
+        dir_name = album_dir.name
         # 从目录名提取 hash（格式：标题_hash）
         file_hash = meta.get("file_hash", "")
         if not file_hash and "_" in dir_name:
             file_hash = dir_name.rsplit("_", 1)[-1]
-        
+
         # 提取来源
         url = meta.get("url", "")
         source = _extract_source_from_url(url)
-        
+
         # 缩略图处理
         thumbnail = meta.get("thumbnail", "")
         if thumbnail and not thumbnail.startswith(("http://", "https://")):
             # 本地缩略图，转换为 API URL
             thumbnail = f"/api/thumbnail/{file_hash}"
-        
-        videos.append({
-            "filename": str(video_file.relative_to(download_dir)),
-            "filepath": str(video_file.resolve()),
-            "title": meta.get("title", ""),
-            "thumbnail": thumbnail,
-            "video_id": meta.get("video_id", ""),
-            "duration": meta.get("duration", 0),
-            "file_hash": file_hash,
-            "url": url,
-            "source": source,
-            "size": stat.st_size,
-            "created_at": meta.get("created_at", datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat()),
-            "tags": meta.get("tags", []),
-        })
-    
+
+        for video_file in video_files:
+            stat = video_file.stat()
+            videos.append({
+                "filename": str(video_file.relative_to(download_dir)),
+                "filepath": str(video_file.resolve()),
+                "title": meta.get("title", ""),
+                "thumbnail": thumbnail,
+                "video_id": meta.get("video_id", ""),
+                "duration": meta.get("duration", 0),
+                "file_hash": file_hash,
+                "url": url,
+                "source": source,
+                "size": stat.st_size,
+                "created_at": meta.get("created_at", datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat()),
+                "tags": meta.get("tags", []),
+            })
+
     # 按创建时间倒序
     videos.sort(key=lambda x: x["created_at"], reverse=True)
+
+    if signature is not None:
+        _video_scan_cache[str(download_dir)] = (signature, videos, time.monotonic())
     return videos
 
 
@@ -370,6 +425,8 @@ def _update_meta_in_dir(dir_path: Path, updates: dict) -> None:
         
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
+        # 原地覆写 meta.json 不会更新父目录 mtime，签名无法感知，主动失效扫描缓存
+        _video_scan_cache.pop(str(dir_path.parent), None)
     except (json.JSONDecodeError, OSError) as e:
         logger.error("更新元数据失败 %s: %s", meta_path, e)
 
@@ -860,7 +917,11 @@ async def get_videos(
     # 分页
     start = (page - 1) * per_page
     end = start + per_page
-    page_videos = videos[start:end]
+    # 剥离服务器绝对路径，避免在 API 响应中泄露文件系统结构
+    page_videos = [
+        {k: v for k, v in video.items() if k != "filepath"}
+        for video in videos[start:end]
+    ]
 
     # 获取所有来源列表
     all_sources = list({v["source"] for v in videos})

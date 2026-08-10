@@ -1,16 +1,24 @@
-# GoTube Debian / Linux 最小部署指南 (v4.10.0)
+# GoTube Debian / Linux 最小部署指南 (v4.11.0)
 
-本文指南面向 Debian 12 / 13 及主流 Linux 发行版，说明如何使用 `./wk.sh + .env` 完成服务的首次部署与日常更新。
+本文指南面向 Debian 12 / 13 及主流 Linux 发行版，说明如何使用 `./gotube.sh + .env` 完成服务的首次部署与日常更新。
 
 ---
 
 ## 一、 前置依赖
 
-首先在服务器安装基础环境依赖：
+最简单的方式是直接运行一键安装脚本（自动处理依赖、配置与初始化，见《操作说明》4.1）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Bikakko/gotube/master/scripts/install.sh | bash
+```
+
+若偏好手动安装，先装基础环境依赖：
 
 ```bash
 sudo apt update
-sudo apt install -y git python3 python3-venv ffmpeg nodejs npm
+sudo apt install -y git python3 python3-venv ffmpeg
+# 若已有 Node.js (如 NodeSource 版本) 则跳过下面这行，Debian 的 npm 与 NodeSource nodejs 存在冲突
+sudo apt install -y nodejs npm
 ```
 
 ---
@@ -56,15 +64,15 @@ GOTUBE_ADMINS=admin:你的超级安全密码
 ### 3. 环境自检与依赖初始化
 
 ```bash
-./wk.sh doctor   # 启动前自检（检查依赖环境与路径）
-./wk.sh init     # 初始化 Python venv，自动安装依赖并编译压缩 www 前端资源
+./gotube.sh doctor   # 启动前自检（检查依赖环境与路径）
+./gotube.sh init     # 初始化 Python venv，自动安装依赖并编译压缩 www 前端资源
 ```
 
 ### 4. 启动与验证
 
 ```bash
-./wk.sh restart
-./wk.sh status
+./gotube.sh restart
+./gotube.sh status
 ```
 
 自检访问：`http://服务器IP:8000/health`，若返回 JSON 健康状态说明服务正常运行。
@@ -78,11 +86,11 @@ GOTUBE_ADMINS=admin:你的超级安全密码
 ```bash
 cd /你的部署目录/gotube
 git pull --ff-only
-./wk.sh init
-./wk.sh restart
+./gotube.sh init
+./gotube.sh restart
 ```
 
-> 仅升级下载引擎 (`yt-dlp`)：执行 `./wk.sh update` 即可。
+> 仅升级下载引擎 (`yt-dlp`)：执行 `./gotube.sh update` 即可。
 
 ---
 

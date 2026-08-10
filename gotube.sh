@@ -26,6 +26,7 @@ usage() {
     echo "  $0 restart  重启服务器"
     echo "  $0 status   查看服务器状态"
     echo "  $0 update   更新 yt-dlp 到最新版本"
+    echo "  $0 upgrade  一键升级 (备份数据库 → 拉取代码 → 更新依赖 → 重建前端 → 自动重启)"
     exit 1
 }
 
@@ -246,6 +247,78 @@ update_ytdlp() {
     fi
 }
 
+# 一键升级：备份 → 拉取代码 → 依赖 → 前端 → yt-dlp → 自动重启
+upgrade() {
+    runtime_load_common_config
+    cd "$PROJECT_DIR"
+
+    local old_ver
+    old_ver="$(cat VERSION 2>/dev/null || echo '未知')"
+    local was_running=0
+    is_running && was_running=1
+
+    echo -e "${GREEN}GoTube 升级流程 (当前版本: ${YELLOW}v${old_ver}${GREEN})${NC}"
+
+    # [1/6] 升级前数据库备份
+    echo -e "${YELLOW}[1/6] 备份数据库...${NC}"
+    if runtime_activate_venv 2>/dev/null && \
+        python -c "from server.backup import perform_backup; b = perform_backup(); print('  备份文件:', b if b else '无')" 2>/dev/null; then
+        echo -e "${GREEN}✓ 数据库备份完成${NC}"
+    else
+        echo -e "${YELLOW}⚠ 数据库备份跳过 (虚拟环境或备份模块不可用)${NC}"
+    fi
+
+    # [2/6] 拉取最新代码
+    echo -e "${YELLOW}[2/6] 拉取最新代码...${NC}"
+    if [ -d .git ]; then
+        if ! git pull --ff-only; then
+            echo -e "${RED}✗ 代码拉取失败（存在本地未提交改动或分叉），升级中止${NC}"
+            echo -e "${YELLOW}提示: 提交/暂存本地改动后重试，或 git pull --rebase${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${YELLOW}⚠ 当前非 git 部署，跳过代码拉取${NC}"
+    fi
+
+    local new_ver
+    new_ver="$(cat VERSION 2>/dev/null || echo '未知')"
+
+    # [3/6] 更新 Python 依赖
+    echo -e "${YELLOW}[3/6] 更新 Python 依赖...${NC}"
+    runtime_ensure_python_deps prod || exit 1
+
+    # [4/6] 重建前端 (仅当开启 GOTUBE_BUILD_FRONTEND=1)
+    echo -e "${YELLOW}[4/6] 检查前端资源...${NC}"
+    if [ "$GOTUBE_BUILD_FRONTEND" = "1" ]; then
+        runtime_install_node_deps || exit 1
+        GOTUBE_BUILD_FRONTEND=1 runtime_build_frontend || exit 1
+    else
+        echo "  GOTUBE_BUILD_FRONTEND!=1，跳过前端构建"
+    fi
+
+    # [5/6] 更新 yt-dlp 至最新版
+    echo -e "${YELLOW}[5/6] 更新 yt-dlp...${NC}"
+    runtime_activate_venv || exit 1
+    if pip install --upgrade yt-dlp >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ yt-dlp: $(yt-dlp --version 2>/dev/null || echo '未知')${NC}"
+    else
+        echo -e "${YELLOW}⚠ yt-dlp 更新失败 (网络异常?)，沿用当前版本继续${NC}"
+    fi
+
+    # [6/6] 升级前在运行则自动重启
+    echo -e "${YELLOW}[6/6] 完成收尾...${NC}"
+    if [ "$was_running" = "1" ]; then
+        echo "  检测到服务运行中，自动重启..."
+        stop
+        sleep 1
+        start
+    else
+        echo -e "${YELLOW}提示: 执行 $0 start 启动服务${NC}"
+    fi
+
+    echo -e "${GREEN}✓ 升级完成: v${old_ver} → v${new_ver}${NC}"
+}
+
 # 主逻辑
 case "${1:-start}" in
     init)
@@ -270,6 +343,9 @@ case "${1:-start}" in
         ;;
     update)
         update_ytdlp
+        ;;
+    upgrade)
+        upgrade
         ;;
     *)
         usage

@@ -11,7 +11,7 @@
 - 进程挂掉后自动拉起恢复
 - 使用 `journalctl` 统一下发日志查阅
 
-而 Python 虚拟环境、依赖初始化及前端编译构建依然由 `./wk.sh` 脚本统一掌控。
+而 Python 虚拟环境、依赖初始化及前端编译构建依然由 `./gotube.sh` 脚本统一掌控。
 
 ---
 
@@ -37,9 +37,9 @@ After=network.target
 [Service]
 Type=forking
 WorkingDirectory=/你的实际部署目录/gotube
-ExecStart=/你的实际部署目录/gotube/wk.sh start
-ExecStop=/你的实际部署目录/gotube/wk.sh stop
-ExecReload=/你的实际部署目录/gotube/wk.sh restart
+ExecStart=/你的实际部署目录/gotube/gotube.sh start
+ExecStop=/你的实际部署目录/gotube/gotube.sh stop
+ExecReload=/你的实际部署目录/gotube/gotube.sh restart
 PIDFile=/你的实际部署目录/gotube/.server.pid
 User=运行用户
 Group=运行用户组
@@ -76,6 +76,6 @@ sudo journalctl -u gotube -f     # 实时查看控制台输出日志
 ```bash
 cd /你的部署目录/gotube
 git pull --ff-only
-./wk.sh init
+./gotube.sh init
 sudo systemctl restart gotube
 ```
