@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Any
 
+import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from starlette.background import BackgroundTask
 from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
@@ -56,6 +57,7 @@ from .models import (
     UserResponse,
 )
 from .invites import create_invite, list_invites, revoke_invite
+from .rate_limit import LoginThrottle, get_client_ip
 from .user_profile import build_user_identity, display_name_key, validate_display_name, validate_new_password
 from .video_library import (
     admin_delete_media_asset,
@@ -68,6 +70,11 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 _BATCH_DELETE_LIMIT = 100
+
+# 登录防暴力破解：5 分钟内失败 5 次即锁定 15 分钟（按 IP 与用户名分别计数）
+_login_throttle = LoginThrottle(max_failures=5, window_seconds=300.0, lockout_seconds=900.0)
+# 用户不存在时用于对齐 bcrypt 耗时，避免通过响应时间枚举用户名
+_DUMMY_PASSWORD_HASH = bcrypt.hashpw(b"gotube-dummy-password", bcrypt.gensalt()).decode("utf-8")
 
 
 def get_local_timezone() -> ZoneInfo | timezone:
@@ -534,21 +541,30 @@ def _get_video_local_time(created_at: datetime | str) -> datetime:
 @router.post("/login")
 async def admin_login(
     body: LoginRequest,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> dict:
     """
     管理页面登录。
     """
-    import bcrypt
+    client_ip = get_client_ip(request)
+    ip_key = f"ip:{client_ip}"
+    user_key = f"user:{body.username}"
+    # 锁定检查：失败过多时直接拒绝，不暴露是 IP 还是用户名被锁
+    _login_throttle.check(ip_key, user_key)
 
     user = db.query(User).filter(User.username == body.username).first()
-    if not user or not user.is_active:
+
+    # 验证密码（用户不存在时也执行 bcrypt，保持耗时一致）
+    password_hash = user.password_hash if user and user.password_hash else _DUMMY_PASSWORD_HASH
+    password_ok = bcrypt.checkpw(body.password.encode('utf-8'), password_hash.encode('utf-8'))
+
+    if not user or not user.is_active or not password_ok:
+        _login_throttle.record_failure(ip_key, user_key)
         raise HTTPException(status_code=401, detail="用户名或密码错误")
 
-    # 验证密码
-    if not bcrypt.checkpw(body.password.encode('utf-8'), user.password_hash.encode('utf-8')):
-        raise HTTPException(status_code=401, detail="用户名或密码错误")
-
+    # 登录成功，清除失败计数
+    _login_throttle.clear(ip_key, user_key)
 
     # 更新最后登录时间
     user.last_login = datetime.now(UTC)

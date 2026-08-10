@@ -16,19 +16,20 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .api import get_queue_manager
 from .api import router as api_router
 from .admin_api import router as admin_api_router
-from .auth import SESSION_COOKIE_NAME, set_session_cookie
+from .auth import SESSION_COOKIE_NAME, set_session_cookie, verify_token
 from .backup import backup_loop
 from .config import settings
 from .db import init_db, get_session, sync_admins_from_env
 from .downloader import Downloader, DownloadTask
 from .http_media import build_video_stream_response
 from .queue_manager import QueueManager
+from .rate_limit import SlidingWindowLimiter, get_client_ip
 from .security import validate_guest_session_id, validate_hash_id
 from .video_library import resolve_share_token
 
@@ -138,9 +139,10 @@ app = FastAPI(
     description="自托管多平台视频下载工具",
     version=settings.version,
     lifespan=lifespan,
-    docs_url="/docs" if settings.debug else None,
-    redoc_url="/redoc" if settings.debug else None,
-    openapi_url="/openapi.json" if settings.debug else None,
+    # 生产环境不暴露 API 文档（/docs、/redoc、/openapi.json 均禁用）
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 # CORS 中间件（明确来源，不使用 * + credentials）
@@ -151,6 +153,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# 全局 API 速率限制：按客户端 IP 滑动窗口（每 IP 每分钟 N 次，0=不限制）
+_api_rate_limiter = (
+    SlidingWindowLimiter(settings.rate_limit, window_seconds=60.0)
+    if settings.rate_limit > 0 else None
+)
+_ADMIN_API_PREFIX = f"/{settings.hidden_path}/admin/api"
+
+
+@app.middleware("http")
+async def rate_limit_requests(request: Request, call_next) -> Response:
+    """对 API 类路径按 IP 限流，超限返回 429。"""
+    path = request.url.path
+    if _api_rate_limiter is not None and (
+        path.startswith("/api/") or path == "/api" or path.startswith(_ADMIN_API_PREFIX)
+    ):
+        if not _api_rate_limiter.allow(get_client_ip(request)):
+            logger.warning("API 限流触发: ip=%s path=%s", get_client_ip(request), path)
+            response = JSONResponse(status_code=429, content={"detail": "请求过于频繁，请稍后再试"})
+            for header, value in SECURITY_HEADERS.items():
+                response.headers.setdefault(header, value)
+            return response
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -364,6 +390,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     """
     WebSocket 端点，用于实时推送下载进度。
 
+    连接需具备身份：游客携带合法 session_id，或已登录（携带有效会话 Cookie）。
     客户端连接后会被注册到 queue_manager，
     之后所有该客户端的任务进度变更都会通过此连接推送。
     匿名用户断开时会清理临时文件。
@@ -377,6 +404,17 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             session_id = validate_guest_session_id(session_id)
         except HTTPException:
             await websocket.send_json({"type": "error", "error": "invalid_session"})
+            await websocket.close(code=1008)
+            return
+    else:
+        # 非游客连接：必须携带有效登录会话 Cookie
+        token = (websocket.cookies.get(SESSION_COOKIE_NAME) or "").strip() or None
+        user_payload = None
+        if token:
+            with get_session() as db:
+                user_payload = verify_token(db, token)
+        if not user_payload:
+            await websocket.send_json({"type": "error", "error": "unauthorized"})
             await websocket.close(code=1008)
             return
     queue_mgr = _get_queue_manager()

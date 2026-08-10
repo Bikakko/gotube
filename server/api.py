@@ -765,18 +765,42 @@ def _download_filename(title: str, path: Path) -> str:
 
 
 def _thumbnail_response(thumbnail: str, video_dir: Path) -> FileResponse:
-    thumb_name = thumbnail or ""
+    thumb_path = _resolve_safe_thumbnail(thumbnail, video_dir)
+    ext = thumb_path.suffix.lower()
+    return FileResponse(thumb_path, media_type=_IMAGE_MIME_MAP.get(ext, "image/jpeg"))
+
+
+# 允许的缩略图扩展名白名单
+_IMAGE_MIME_MAP = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".webp": "image/webp", ".gif": "image/gif",
+}
+
+
+def _resolve_safe_thumbnail(thumbnail: str, video_dir: Path) -> Path:
+    """
+    沙箱解析缩略图路径，防止路径穿越读取任意文件。
+
+    meta.json 中的 thumbnail 字段来自下载元数据，不可信：
+    解析后必须仍位于 video_dir 内，且扩展名在图片白名单内。
+    """
+    thumb_name = (thumbnail or "").strip()
     if not thumb_name or thumb_name.startswith(("http://", "https://")):
         raise HTTPException(status_code=404, detail="缩略图不可用")
 
-    thumb_path = video_dir / thumb_name
-    if not thumb_path.is_file():
+    candidate = (video_dir / thumb_name).resolve()
+    sandbox = video_dir.resolve()
+    if not candidate.is_relative_to(sandbox):
+        # 路径穿越（如 ../），一律拒绝
+        raise HTTPException(status_code=404, detail="缩略图不可用")
+
+    if candidate.suffix.lower() not in _IMAGE_MIME_MAP:
+        raise HTTPException(status_code=404, detail="缩略图不可用")
+
+    if not candidate.is_file():
         raise HTTPException(status_code=404, detail="缩略图文件不存在")
 
-    ext = thumb_path.suffix.lower()
-    mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-                ".webp": "image/webp", ".gif": "image/gif"}
-    return FileResponse(thumb_path, media_type=mime_map.get(ext, "image/jpeg"))
+    return candidate
 
 
 @router.get("/video/{hash_id}/info")
@@ -829,23 +853,11 @@ async def get_thumbnail(
     if matched_file is None or not matched_file.is_file():
         raise HTTPException(status_code=404, detail="视频不存在")
 
-    # 读取 meta.json 获取本地缩略图路径
+    # 读取 meta.json 获取本地缩略图路径（带沙箱校验，防路径穿越）
     meta = _read_meta_from_dir(matched_file.parent)
-    thumb_name = meta.get("thumbnail", "")
-    if not thumb_name or thumb_name.startswith(("http://", "https://")):
-        raise HTTPException(status_code=404, detail="缩略图不可用")
+    thumb_path = _resolve_safe_thumbnail(meta.get("thumbnail", ""), matched_file.parent)
 
-    thumb_path = matched_file.parent / thumb_name
-    if not thumb_path.is_file():
-        raise HTTPException(status_code=404, detail="缩略图文件不存在")
-
-    # 根据扩展名确定 MIME 类型
-    ext = thumb_path.suffix.lower()
-    mime_map = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
-                ".webp": "image/webp", ".gif": "image/gif"}
-    media_type = mime_map.get(ext, "image/jpeg")
-
-    return FileResponse(thumb_path, media_type=media_type)
+    return FileResponse(thumb_path, media_type=_IMAGE_MIME_MAP.get(thumb_path.suffix.lower(), "image/jpeg"))
 
 
 @router.delete("/downloads/{filename:path}")

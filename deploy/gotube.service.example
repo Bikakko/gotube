@@ -5,8 +5,10 @@
 #
 # 说明：
 # - 采用 Type=simple + venv 内 python 直跑 uvicorn（依赖装在项目 venv，
-#   不用系统 python）；server 会自行读取部署目录下的 .env，host/port
-#   等配置无需写在 ExecStart 里。
+#   不用系统 python）；server 自行读取部署目录下的 .env 业务配置，
+#   但 uvicorn 的监听地址必须显式传入：通过 EnvironmentFile 引入 .env
+#   后在 ExecStart 中用 ${GOTUBE_HOST}/${GOTUBE_PORT} 展开，否则
+#   uvicorn 默认只监听 127.0.0.1:8000，外部无法访问。
 # - 生产环境启停一律 systemctl start/stop/restart gotube，
 #   不要手动 ./gotube.sh start（脚本检测到本服务 active 时会拒绝启动，
 #   防止 kill 掉 systemd 托管进程后裸起野进程）。
@@ -20,7 +22,8 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=<GOTUBE_DIR>
-ExecStart=<GOTUBE_DIR>/venv/bin/python -m uvicorn server.main:app
+EnvironmentFile=<GOTUBE_DIR>/.env
+ExecStart=<GOTUBE_DIR>/venv/bin/python -m uvicorn server.main:app --host ${GOTUBE_HOST} --port ${GOTUBE_PORT}
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30

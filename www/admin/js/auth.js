@@ -142,6 +142,12 @@ async function handleLogin() {
             throw new Error('❌ ' + (error.detail || '用户名或密码错误'));
         }
 
+        if (response.status === 429) {
+            // 失败次数过多，已被临时锁定
+            const error = await response.json().catch(() => ({ detail: '失败次数过多，请稍后再试' }));
+            throw new Error('⏳ ' + (error.detail || '失败次数过多，请稍后再试'));
+        }
+
         if (!response.ok) {
             // 其他服务器错误
             throw new Error('❌ 服务器错误，请稍后重试');

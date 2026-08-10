@@ -7,6 +7,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from .config import settings
 from .db import AuthToken, User, get_session
 from .user_profile import build_user_identity
 
@@ -107,7 +108,7 @@ def get_session_token(request: Request) -> str | None:
 
 
 def set_session_cookie(response, token: str) -> None:
-    """在响应上下发登录 Cookie（HttpOnly + SameSite=Lax）。"""
+    """在响应上下发登录 Cookie（HttpOnly + SameSite=Lax，Secure 由配置决定）。"""
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=token,
@@ -115,7 +116,7 @@ def set_session_cookie(response, token: str) -> None:
         path="/",
         httponly=True,
         samesite="lax",
-        secure=False,
+        secure=settings.cookie_secure,
     )
 
 

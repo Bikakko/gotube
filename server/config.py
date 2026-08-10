@@ -114,6 +114,27 @@ _backup_retention: int = _i("GOTUBE_BACKUP_RETENTION", default=3, min_val=1)
 # 解析管理员账号列表（格式：用户名1:密码1,用户名2:密码2）
 _raw_admins: str = _s("GOTUBE_ADMINS", required=True)
 _admins: list[dict[str, str]] = []
+
+# 常见弱密码黑名单（小写比对）
+_WEAK_PASSWORDS = {
+    "admin", "admin123", "admin888", "administrator", "root", "password",
+    "password123", "passw0rd", "changeme", "qwerty", "abc123", "a123456",
+    "123456", "12345678", "123456789", "1234567890", "111111", "000000",
+    "666666", "888888", "123123", "112233", "iloveyou", "letmein",
+}
+
+
+def _validate_admin_password(username: str, password: str) -> str | None:
+    """校验管理员密码强度，返回错误描述；通过返回 None。"""
+    if len(password) < 8:
+        return "密码长度至少 8 位"
+    if password.lower() in _WEAK_PASSWORDS:
+        return "密码过于常见，请更换"
+    if password.lower() == username.lower():
+        return "密码不能与用户名相同"
+    return None
+
+
 if _raw_admins:
     for pair in _raw_admins.split(","):
         pair = pair.strip()
@@ -123,12 +144,20 @@ if _raw_admins:
         if len(parts) != 2 or not parts[0] or not parts[1]:
             _errors.append(f"  GOTUBE_ADMINS = '{pair}' (格式错误，应为 用户名:密码)")
         else:
-            _admins.append({"username": parts[0], "password": parts[1]})
+            pwd_error = _validate_admin_password(parts[0], parts[1])
+            if pwd_error:
+                _errors.append(f"  GOTUBE_ADMINS = '{parts[0]}' ({pwd_error})")
+            else:
+                _admins.append({"username": parts[0], "password": parts[1]})
 
 if not _admins:
     _errors.append("  GOTUBE_ADMINS = (至少需要配置一个管理员账号)")
 _debug: bool = _b("GOTUBE_DEBUG", False)
 _log_level: str = _s("GOTUBE_LOG_LEVEL", default="ERROR").upper()
+# 登录 Cookie 是否携带 Secure 标记（HTTPS 部署应开启）
+_cookie_secure: bool = _b("GOTUBE_COOKIE_SECURE", False)
+# 全局 API 速率限制：每 IP 每分钟最大请求数（0=不限制）
+_rate_limit: int = _i("GOTUBE_RATE_LIMIT", default=300, min_val=0)
 _allow_guest_download: bool = _b("GOTUBE_ALLOW_GUEST_DOWNLOAD", True)
 _allow_playlist_download: bool = _b("GOTUBE_ALLOW_PLAYLIST_DOWNLOAD", False)
 _max_video_size_mb: int = _i("GOTUBE_MAX_VIDEO_SIZE_MB", required=False, default=0, min_val=0)
@@ -228,6 +257,16 @@ class _Settings:
     @property
     def debug(self) -> bool:
         return _debug
+
+    @property
+    def cookie_secure(self) -> bool:
+        """登录 Cookie 是否携带 Secure 标记（仅 HTTPS 传输）"""
+        return _cookie_secure
+
+    @property
+    def rate_limit(self) -> int:
+        """全局 API 速率限制（每 IP 每分钟请求数，0=不限制）"""
+        return _rate_limit
 
     @property
     def log_level(self) -> str:
