@@ -610,13 +610,17 @@ async def update_my_video_share(
     return result
 
 
-@router.get("/me/videos/{item_id}/download")
+@router.api_route("/me/videos/{item_id}/download", methods=["GET", "HEAD"])
 async def download_my_video(
     item_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FileResponse:
-    """下载当前用户自己的视频库条目，不按 filename 暴露主库路径。"""
+    """下载当前用户自己的视频库条目，不按 filename 暴露主库路径。
+
+    同时支持 HEAD：前端在触发原生导航下载前做轻量预检
+    （鉴权/存在性），HEAD 响应不发送文件体。
+    """
     _item, asset = get_user_video_asset_for_download(db, current_user, item_id)
     path = Path(asset.filepath)
     return FileResponse(

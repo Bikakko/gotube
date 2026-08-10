@@ -1077,42 +1077,31 @@ function isQuotaError(message = '') {
         const itemId = video.id || video.user_video_item_id;
         if (!itemId) return;
         try {
-            const res = await fetch(`/api/me/videos/${itemId}/download`, {
+            // 轻量预检：原生导航下载无法捕获错误响应体，提前给出提示
+            const check = await fetch(`/api/me/videos/${itemId}/download`, {
+                method: 'HEAD',
                 headers: authHeaders(),
             });
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.detail || '下载失败');
+            if (check.status === 401) {
+                throw new Error('登录已过期，请重新登录');
             }
-            const blob = await res.blob();
-            const filename = filenameFromDisposition(res.headers.get('content-disposition')) || filenameWithExtension(video.title, video.filename);
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            if (!check.ok) {
+                throw new Error(`下载失败（HTTP ${check.status}）`);
+            }
         } catch (err) {
             showToast('❌ ' + err.message, '#f85149');
+            return;
         }
-    }
 
-    function filenameFromDisposition(disposition) {
-        if (!disposition) return '';
-        const utfMatch = disposition.match(/filename\*=UTF-8''([^;]+)/i);
-        if (utfMatch) return decodeURIComponent(utfMatch[1]);
-        const match = disposition.match(/filename="?([^"]+)"?/i);
-        return match ? match[1] : '';
-    }
-
-    function filenameWithExtension(title, filename) {
-        let base = (title || 'video').trim() || 'video';
-        if (base.length > 40) base = base.slice(0, 40);
-        const extMatch = (filename || '').match(/\.[A-Za-z0-9]{2,5}$/);
-        const ext = extMatch ? extMatch[0] : '.mp4';
-        return base.toLowerCase().endsWith(ext.toLowerCase()) ? base : base + ext;
+        // 走浏览器原生导航下载：服务端返回 attachment + 文件名（仅标题，
+        // 不含物理路径），链接只含库条目 ID，立即弹框且流式写盘，
+        // 无需像 fetch+blob 那样把整个文件缓冲到内存
+        const a = document.createElement('a');
+        a.href = `/api/me/videos/${itemId}/download`;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
     }
 
     async function setAuthorizedImage(img, url) {
