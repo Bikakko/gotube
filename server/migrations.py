@@ -27,6 +27,7 @@ def run_v4_migrations(engine: Engine, download_dir: Path) -> None:
     with engine.begin() as conn:
         _ensure_schema(engine, conn)
         _backfill_media_sources(conn)
+        _rebase_media_asset_paths(conn, download_dir)
 
         if not _migration_exists(conn, V4_SCHEMA_VERSION):
             _migrate_readonly_users(conn)
@@ -226,6 +227,44 @@ def _backfill_user_display_names(conn) -> int:
             },
         )
         updated += 1
+    return updated
+
+
+def _rebase_media_asset_paths(conn, download_dir: Path) -> int:
+    """修复因安装目录变更而失效的媒体绝对路径。
+
+    media_assets.filepath 存的是下载时快照的绝对路径，目录迁移（如
+    /root/gotubeweb → /root/gotube）后会全部失效；而 filename 是相对
+    下载目录的相对路径，不受迁移影响。因此每次启动幂等校验：旧绝对
+    路径指向的文件不存在、但 下载目录/filename 存在时，重建 filepath。
+    """
+    if not download_dir.exists():
+        return 0
+
+    rows = conn.execute(text("SELECT id, filename, filepath FROM media_assets")).mappings().all()
+    updated = 0
+    for row in rows:
+        old_path = Path(str(row["filepath"] or ""))
+        if old_path.is_file():
+            continue
+        relative_name = str(row["filename"] or "").strip()
+        if not relative_name or Path(relative_name).is_absolute():
+            continue
+        rebased = (download_dir / relative_name).resolve()
+        if not rebased.is_file():
+            continue
+        # 确保重建后的路径仍在下载目录内
+        try:
+            rebased.relative_to(download_dir.resolve())
+        except ValueError:
+            continue
+        conn.execute(
+            text("UPDATE media_assets SET filepath = :filepath WHERE id = :asset_id"),
+            {"filepath": str(rebased), "asset_id": row["id"]},
+        )
+        updated += 1
+    if updated:
+        logger.info("媒体路径重定位完成，修复失效 filepath %d 条", updated)
     return updated
 
 

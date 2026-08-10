@@ -10,8 +10,17 @@
 <body>
     <script>
         // 登录门控防闪烁：登录 Cookie 为 HttpOnly 无法在 JS 中读取，
-        // 默认先隐藏下载界面，JS 加载后复核登录态再决定是否显示
-        document.body.classList.add('auth-gated');
+        // 默认先隐藏下载界面，JS 加载后复核登录态再决定是否显示。
+        // 例外：本标签页此前已登录（sessionStorage 有已认证标记）时不预置门控，
+        // 避免已登录用户每次进入/返回页面都闪现登录界面；
+        // 若复核失败，JS 会重新加上门控。
+        try {
+            if (sessionStorage.getItem('gotube_authenticated_client') !== '1') {
+                document.body.classList.add('auth-gated');
+            }
+        } catch (e) {
+            document.body.classList.add('auth-gated');
+        }
     </script>
     <div class="container">
         <div class="logo">🎬 <a href="#" id="logo-link" title="点击登录">GoTube</a></div>
