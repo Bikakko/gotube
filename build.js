@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const fs = require("fs/promises");
 const path = require("path");
 
@@ -93,10 +94,37 @@ async function walk(currentDir, relativeDir = "") {
   }
 }
 
+async function collectFiles(currentDir, collected = []) {
+  const entries = await fs.readdir(currentDir, { withFileTypes: true });
+  for (const entry of entries) {
+    const fullPath = path.join(currentDir, entry.name);
+    if (entry.isDirectory()) {
+      await collectFiles(fullPath, collected);
+    } else {
+      collected.push(fullPath);
+    }
+  }
+  return collected;
+}
+
+async function writeAssetHash() {
+  // 依据全部构建产物内容计算哈希，写入 ASSET_HASH；
+  // 服务端用它替换 HTML 中的 {{ASSET_VERSION}} 作为静态资源
+  // 缓存破坏参数——内容一变 URL 必变，彻底避免 CDN/浏览器旧缓存。
+  const files = (await collectFiles(OUT_DIR)).sort();
+  const hash = crypto.createHash("sha256");
+  for (const file of files) {
+    hash.update(path.relative(OUT_DIR, file));
+    hash.update(await fs.readFile(file));
+  }
+  await fs.writeFile(path.join(OUT_DIR, "ASSET_HASH"), hash.digest("hex").slice(0, 12), "utf8");
+}
+
 async function main() {
   await removeDir(OUT_DIR);
   await ensureDir(OUT_DIR);
   await walk(SRC_DIR);
+  await writeAssetHash();
   console.log(`Built ${SRC_DIR} -> ${OUT_DIR}`);
 }
 

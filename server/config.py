@@ -171,6 +171,14 @@ for origin in _split_csv(_raw_cors_allow_origins):
         _errors.append(f"  GOTUBE_CORS_ALLOW_ORIGINS = '{origin}' ({exc})")
 _version: str = (_project_root / "VERSION").read_text(encoding="utf-8").strip() or "0.0.0"
 
+# 静态资源缓存破坏参数：优先用构建产物内容哈希（build.js 生成），
+# 内容一变 URL 必变，避免 CDN/浏览器旧缓存；无构建产物时回退版本号
+_asset_hash_file = _project_root / _www_dir / "ASSET_HASH"
+try:
+    _asset_version: str = _asset_hash_file.read_text(encoding="utf-8").strip() or _version
+except OSError:
+    _asset_version = _version
+
 _china_domains: list[str] = [
     "bilibili.com", "b23.tv", "acfun.cn", "iqiyi.com",
     "youku.com", "qq.com", "douyin.com", "kuaishou.com",
@@ -299,6 +307,10 @@ class _Settings:
     @property
     def version(self) -> str:
         return _version
+
+    @property
+    def asset_version(self) -> str:
+        return _asset_version
 
     @property
     def cors_allow_origins(self) -> list[str]:

@@ -223,7 +223,7 @@ def _serve_html(filename: str) -> HTMLResponse:
         content = filepath.read_text(encoding="utf-8")
         # 注入配置变量，供前端 JS 使用
         content = content.replace("{{HIDDEN_PATH}}", settings.hidden_path)
-        content = content.replace("{{ASSET_VERSION}}", settings.version)
+        content = content.replace("{{ASSET_VERSION}}", settings.asset_version)
         return HTMLResponse(content)
     except Exception as e:
         logger.error("读取 HTML 失败: %s, 错误: %s", filepath, e)
