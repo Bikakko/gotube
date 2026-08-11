@@ -84,14 +84,7 @@ sudo journalctl -u gotube -f     # 实时查看控制台输出日志
 
 ```bash
 cd /你的部署目录/gotube
-./gotube.sh upgrade   # 备份数据库 → 拉代码 → 更新依赖 → 重建前端 → 自动 systemctl restart gotube
+./gotube.sh upgrade   # 备份数据库 → 同步纯代码 → 更新依赖 → 重建前端 → 自动 systemctl restart gotube
 ```
 
-手动分步时：
-
-```bash
-cd /你的部署目录/gotube
-git pull --ff-only
-./gotube.sh init
-sudo systemctl restart gotube
-```
+升级的代码同步由脚本从远端仓库完成，生产目录不保留 `.git`，无需也不应手动 `git pull`。

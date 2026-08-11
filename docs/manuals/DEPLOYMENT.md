@@ -25,12 +25,19 @@ sudo apt install -y nodejs npm
 
 ## 二、 首次部署流程
 
-### 1. 拉取代码
+### 1. 获取代码
+
+推荐一键安装（目标目录为纯代码，不含 `.git`）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Bikakko/gotube/master/scripts/install.sh | bash
+```
+
+或手动克隆后执行安装脚本（安装完成后目录内同样不保留 `.git`）：
 
 ```bash
 git clone https://github.com/Bikakko/gotube.git
-cd gotube
-git checkout master
+cd gotube && ./scripts/install.sh
 ```
 
 ### 2. 初始化环境配置文件
@@ -86,21 +93,11 @@ GOTUBE_ADMINS=admin:你的超级安全密码
 
 ## 三、 日常更新流程
 
-代码或依赖更新时（推荐，systemd 托管环境会自动走 `systemctl restart`）：
+代码或依赖更新时（systemd 托管环境会自动走 `systemctl restart`）。升级一律走 `./gotube.sh upgrade`（从远端同步纯代码，生产目录不保留 `.git`），不要在生产目录里手动 `git pull`：
 
 ```bash
 cd /你的部署目录/gotube
 ./gotube.sh upgrade
-```
-
-手动分步时：
-
-```bash
-cd /你的部署目录/gotube
-git pull --ff-only
-./gotube.sh init
-./gotube.sh restart        # 非 systemd 部署
-# systemd 托管环境改用: sudo systemctl restart gotube
 ```
 
 > 仅升级下载引擎 (`yt-dlp`)：执行 `./gotube.sh update` 即可。

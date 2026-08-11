@@ -26,7 +26,7 @@ usage() {
     echo "  $0 restart  重启服务器"
     echo "  $0 status   查看服务器状态"
     echo "  $0 update   更新 yt-dlp 到最新版本"
-    echo "  $0 upgrade  一键升级 (备份数据库 → 拉取代码 → 更新依赖 → 重建前端 → 自动重启)"
+    echo "  $0 upgrade  一键升级 (备份数据库 → 同步代码 → 更新依赖 → 重建前端 → 自动重启)"
     echo ""
     echo "  ⚠ 生产环境(systemd 托管)启停一律 systemctl start/stop/restart gotube，"
     echo "    本脚本的 start/stop/restart 仅限非 systemd 部署；upgrade/doctor/status 不受限。"
@@ -279,7 +279,36 @@ update_ytdlp() {
     fi
 }
 
-# 一键升级：备份 → 拉取代码 → 依赖 → 前端 → yt-dlp → 自动重启
+# 纯代码同步：从远端仓库浅克隆到临时目录，仅同步代码文件到生产目录，
+# 生产目录不保留 .git（.env/数据库/downloads 等运行时文件不在仓库内，不受影响）
+sync_code_from_remote() {
+    local repo_url="${GOTUBE_REPO_URL:-}"
+    local branch="${GOTUBE_BRANCH:-}"
+    if [ -z "$repo_url" ] && [ -f .env ]; then
+        repo_url="$(sed -n 's/^GOTUBE_REPO_URL=//p' .env | tail -n1)"
+        branch="${branch:-$(sed -n 's/^GOTUBE_BRANCH=//p' .env | tail -n1)}"
+    fi
+    repo_url="${repo_url:-https://github.com/Bikakko/gotube.git}"
+
+    command -v git >/dev/null 2>&1 || { echo -e "${RED}✗ 未安装 git，无法同步代码${NC}"; return 1; }
+
+    local tmp_dir
+    tmp_dir="$(mktemp -d /tmp/gotube-upgrade.XXXXXX)" || return 1
+    echo "  仓库: $repo_url${branch:+ 分支: $branch}"
+    if ! git clone --quiet --depth 1 ${branch:+--branch "$branch"} "$repo_url" "$tmp_dir/src"; then
+        rm -rf "$tmp_dir"
+        echo -e "${RED}✗ 代码克隆失败（网络或仓库地址异常），升级中止${NC}"
+        return 1
+    fi
+
+    # 覆盖同步全部仓库文件；随后移除 .git，保证生产目录为纯代码
+    cp -a "$tmp_dir/src/." "$PROJECT_DIR/"
+    rm -rf "$tmp_dir" "$PROJECT_DIR/.git"
+    echo -e "${GREEN}✓ 代码同步完成（纯代码部署，不含 .git）${NC}"
+    echo -e "  提示: 远端已删除的文件不会自动清理，如需彻底一致可手动比对"
+}
+
+# 一键升级：备份 → 同步代码 → 依赖 → 前端 → yt-dlp → 自动重启
 upgrade() {
     runtime_load_common_config
     cd "$PROJECT_DIR"
@@ -300,17 +329,21 @@ upgrade() {
         echo -e "${YELLOW}⚠ 数据库备份跳过 (虚拟环境或备份模块不可用)${NC}"
     fi
 
-    # [2/6] 拉取最新代码
-    echo -e "${YELLOW}[2/6] 拉取最新代码...${NC}"
+    # [2/6] 同步最新代码（纯代码部署，生产目录不保留 .git）
+    echo -e "${YELLOW}[2/6] 同步最新代码...${NC}"
     if [ -d .git ]; then
-        if ! git pull --ff-only; then
-            echo -e "${RED}✗ 代码拉取失败（存在本地未提交改动或分叉），升级中止${NC}"
-            echo -e "${YELLOW}提示: 提交/暂存本地改动后重试，或 git pull --rebase${NC}"
+        diff_rc=0
+        git diff --quiet HEAD -- >/dev/null 2>&1 || diff_rc=$?
+        if [ "$diff_rc" -eq 1 ]; then
+            echo -e "${RED}✗ 检测到本地未提交改动，升级中止${NC}"
+            echo -e "${YELLOW}提示: 生产目录不应有本地改动；如需保留请手动备份后 git checkout . 再重试${NC}"
             exit 1
+        elif [ "$diff_rc" -gt 1 ]; then
+            echo -e "${YELLOW}⚠ 无法检查本地改动 (git 不可用/无权限)，继续同步${NC}"
         fi
-    else
-        echo -e "${YELLOW}⚠ 当前非 git 部署，跳过代码拉取${NC}"
+        echo "  检测到旧式 git 部署，本次升级后自动转为纯代码部署..."
     fi
+    sync_code_from_remote || exit 1
 
     local new_ver
     new_ver="$(cat VERSION 2>/dev/null || echo '未知')"

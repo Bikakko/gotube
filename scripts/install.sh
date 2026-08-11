@@ -67,26 +67,36 @@ else
     echo "  检测到已有 node $(node -v) / npm $(npm -v 2>/dev/null)，跳过安装"
 fi
 
-# 2. 获取代码：已在代码目录内则拉取更新，否则克隆
-if [ -f "gotube.sh" ] && [ -d "server" ]; then
-    echo "[2/4] 检测到已有安装，执行更新流程（.env 配置将保留）..."
-    if [ -d .git ]; then
-        git pull --ff-only || echo "警告: 代码拉取失败（存在本地改动），继续使用当前代码"
+# 2. 获取代码：纯代码部署，目标目录不保留 .git
+#    新装：浅克隆到临时目录后同步代码；已有安装：走 gotube.sh upgrade 完整升级链
+sync_code_into() {
+    # $1 = 目标目录；克隆远端仓库并仅同步代码文件（不含 .git）
+    local dest="$1"
+    local tmp_dir
+    tmp_dir="$(mktemp -d /tmp/gotube-install.XXXXXX)" || return 1
+    if ! git clone --quiet --depth 1 ${GOTUBE_BRANCH:+--branch "$GOTUBE_BRANCH"} "$GOTUBE_REPO_URL" "$tmp_dir/src"; then
+        rm -rf "$tmp_dir"
+        echo "✗ 代码克隆失败（网络或仓库地址异常）"
+        return 1
     fi
+    mkdir -p "$dest"
+    cp -a "$tmp_dir/src/." "$dest/"
+    rm -rf "$tmp_dir" "$dest/.git"
+}
+
+if [ -f "gotube.sh" ] && [ -d "server" ]; then
+    echo "[2/4] 检测到已有安装，执行更新流程（.env 配置将保留，并转为纯代码部署）..."
+    ./gotube.sh upgrade
+elif [ -f "${GOTUBE_INSTALL_DIR:-gotube}/gotube.sh" ] && [ -d "${GOTUBE_INSTALL_DIR:-gotube}/server" ]; then
+    INSTALL_DIR="${GOTUBE_INSTALL_DIR:-gotube}"
+    echo "[2/4] 检测到已有目录 $INSTALL_DIR，执行更新流程（.env 配置将保留）..."
+    cd "$INSTALL_DIR"
+    ./gotube.sh upgrade
 else
     INSTALL_DIR="${GOTUBE_INSTALL_DIR:-gotube}"
-    if [ ! -d "$INSTALL_DIR" ]; then
-        echo "[2/4] 克隆 GoTube 代码库: $GOTUBE_REPO_URL"
-        git clone "$GOTUBE_REPO_URL" "$INSTALL_DIR"
-        cd "$INSTALL_DIR"
-        if [ -n "${GOTUBE_BRANCH:-}" ]; then
-            git checkout "$GOTUBE_BRANCH"
-        fi
-    else
-        echo "[2/4] 检测到已有目录 $INSTALL_DIR，进入并拉取更新..."
-        cd "$INSTALL_DIR"
-        git pull --ff-only || echo "警告: 代码拉取失败（存在本地改动），继续使用当前代码"
-    fi
+    echo "[2/4] 获取 GoTube 代码（纯代码部署，不含 .git）: $GOTUBE_REPO_URL"
+    sync_code_into "$INSTALL_DIR" || exit 1
+    cd "$INSTALL_DIR"
 fi
 
 # 3. 配置生成
