@@ -8,12 +8,25 @@ const AUTH_CLIENT_KEY = 'gotube_authenticated_client';
 const GUEST_KEY = 'gotube_guest_session_id';
 const AUTH_TOKEN_KEY = 'gotube_admin_token';
 
+function randomToken(hexLength) {
+    const bytes = new Uint8Array(Math.max(1, Math.ceil(hexLength / 2)));
+    const cryptoObj = globalThis.crypto;
+    if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+        cryptoObj.getRandomValues(bytes);
+    } else {
+        for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('').slice(0, hexLength);
+}
+
 function newClientId() {
-    return 'c_' + Math.random().toString(36).substr(2, 9);
+    // 96-bit 密码学随机标识，避免可预测导致他人取消/删除/窥视本客户端的任务
+    return 'c_' + randomToken(24);
 }
 
 function newGuestSessionId() {
-    return 'guest_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
+    // guest_<6hex>_<16hex>：符合服务端 GUEST_SESSION_RE，且不可预测
+    return 'guest_' + randomToken(6) + '_' + randomToken(16);
 }
 
 export function getDownloadClientId() {

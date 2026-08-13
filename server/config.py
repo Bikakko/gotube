@@ -156,6 +156,8 @@ _debug: bool = _b("GOTUBE_DEBUG", False)
 _log_level: str = _s("GOTUBE_LOG_LEVEL", default="ERROR").upper()
 # 登录 Cookie 是否携带 Secure 标记（HTTPS 部署应开启）
 _cookie_secure: bool = _b("GOTUBE_COOKIE_SECURE", False)
+# 是否信任反向代理传入的 X-Forwarded-For（仅部署在受信反代之后才应开启）
+_trust_proxy: bool = _b("GOTUBE_TRUST_PROXY", False)
 # 全局 API 速率限制：每 IP 每分钟最大请求数（0=不限制）
 _rate_limit: int = _i("GOTUBE_RATE_LIMIT", default=300, min_val=0)
 _allow_guest_download: bool = _b("GOTUBE_ALLOW_GUEST_DOWNLOAD", True)
@@ -270,6 +272,11 @@ class _Settings:
     def cookie_secure(self) -> bool:
         """登录 Cookie 是否携带 Secure 标记（仅 HTTPS 传输）"""
         return _cookie_secure
+
+    @property
+    def trust_proxy(self) -> bool:
+        """是否信任反向代理传入的 X-Forwarded-For 头"""
+        return _trust_proxy
 
     @property
     def rate_limit(self) -> int:

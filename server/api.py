@@ -5,9 +5,9 @@ REST API 路由
 通过 app.state 注入 QueueManager，避免全局可变状态。
 """
 
+import asyncio
 import logging
 from pathlib import Path
-from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse
@@ -24,7 +24,7 @@ from .path_utils import resolve_inside
 from .quota import get_effective_quota_bytes, refresh_user_storage_usage
 from .queue_manager import QueueManager
 from .config import settings
-from .security import validate_guest_session_id, validate_hash_id
+from .security import validate_guest_session_id, validate_hash_id, validate_public_http_url
 from .url_normalizer import normalize_media_url
 from .user_profile import build_user_identity, display_name_key, validate_display_name, validate_new_password
 from .video_library import (
@@ -112,28 +112,17 @@ async def register(
 # ── URL 验证 ──
 
 
-def _validate_url_format(url: str) -> None:
+async def _validate_url_format(url: str) -> None:
     """
-    验证 URL 格式是否合法。
+    验证 URL 格式是否合法，并拒绝内网/本地地址（SSRF 防护）。
 
-    必须是 http:// 或 https:// 协议，且有有效的主机名。
+    必须是 http:// 或 https:// 协议，有有效的主机名，且主机解析后的
+    所有地址均为公网地址。DNS 解析在独立线程执行，避免阻塞事件循环。
 
     Raises:
-        HTTPException: 如果 URL 格式不合法。
+        HTTPException: 如果 URL 格式不合法或指向内网/本地地址。
     """
-    try:
-        parsed = urlparse(url)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="URL 格式无效") from e
-
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(
-            status_code=400,
-            detail="URL 必须使用 http:// 或 https:// 协议",
-        )
-
-    if not parsed.hostname:
-        raise HTTPException(status_code=400, detail="URL 缺少主机名")
+    await asyncio.to_thread(validate_public_http_url, url)
 
 
 # ── 依赖注入 ──
@@ -323,14 +312,15 @@ async def add_task(
         raise HTTPException(status_code=400, detail="请输入有效的视频链接地址")
 
     # 验证 URL 格式（必须 http/https 开头）
-    _validate_url_format(req.url)
+    await _validate_url_format(req.url)
     normalized_url = normalize_media_url(req.url)
     source_url = normalized_url.canonical_url or req.url
 
-    # 未登录用户使用 guest session；普通用户进入个人视频库流程；管理员下载不绑定个人库。
-    is_guest = current_user is None and bool(req.session_id)
-    if is_guest and not settings.allow_guest_download:
+    # 未登录用户使用 guest session；已登录用户（含管理员）进入个人视频库流程，绑定本人视频库。
+    # 只要未登录就受 allow_guest_download 约束，避免通过“不传 session_id”绕过禁用开关。
+    if current_user is None and not settings.allow_guest_download:
         raise HTTPException(status_code=403, detail="匿名用户下载功能已禁用")
+    is_guest = current_user is None
     if is_guest:
         req.session_id = validate_guest_session_id(req.session_id)
         existing_asset = get_asset_from_existing_source(db, source_url)
@@ -575,7 +565,7 @@ async def get_my_videos(
     """返回当前登录用户的视频库。"""
     page = int(_normalize_route_value(page, 1) or 1)
     per_page = int(_normalize_route_value(per_page, 50) or 50)
-    owner_user_id = current_user.id if current_user.role != "admin" else current_user.id
+    owner_user_id = current_user.id
     return list_user_video_items_page(
         db,
         current_user,

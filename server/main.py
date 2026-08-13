@@ -28,10 +28,11 @@ from .config import settings
 from .db import init_db, get_session, sync_admins_from_env
 from .downloader import Downloader, DownloadTask
 from .http_media import build_video_stream_response
+from .path_utils import resolve_inside
 from .queue_manager import QueueManager
 from .rate_limit import SlidingWindowLimiter, get_client_ip
 from .security import validate_guest_session_id, validate_hash_id
-from .video_library import resolve_share_token
+from .video_library import is_hash_shareable, resolve_share_token
 
 logger = logging.getLogger(__name__)
 
@@ -323,8 +324,14 @@ async def watch_unified(
         matched_file: Path | None = hash_index.get(hash_id)
 
         if matched_file is not None and matched_file.is_file():
-            logger.info("[/watch] returning video: path=%s, size=%d", matched_file, matched_file.stat().st_size)
-            return build_video_stream_response(request, matched_file, filename=matched_file.name)
+            # hash 访问同样受分享开关约束，避免用户关闭分享后仍可通过 /watch 播放
+            with get_session() as session:
+                if not is_hash_shareable(session, hash_id):
+                    logger.warning("[/watch] hash 未开启分享: %s", hash_id)
+                    matched_file = None
+            if matched_file is not None:
+                logger.info("[/watch] returning video: path=%s, size=%d", matched_file, matched_file.stat().st_size)
+                return build_video_stream_response(request, matched_file, filename=matched_file.name)
         else:
             logger.warning("[/watch] file not found: v=%s, matched=%s", hash_id, matched_file)
 
@@ -372,8 +379,11 @@ async def catch_all(
         ".webp",
     }
     if ext in static_extensions:
-        filepath = WWW_DIR / filename
-        if filepath.exists():
+        try:
+            filepath = resolve_inside(WWW_DIR, filename)
+        except HTTPException:
+            raise HTTPException(status_code=404, detail="Not Found")
+        if filepath.is_file():
             return FileResponse(filepath)
 
     raise HTTPException(status_code=404, detail="Not Found")

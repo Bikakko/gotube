@@ -15,14 +15,21 @@ from collections import deque
 
 from fastapi import HTTPException
 
+from .config import settings
+
 
 def get_client_ip(request) -> str:
-    """提取客户端 IP：优先 X-Forwarded-For 首跳（反向代理场景），否则取连接地址。"""
-    forwarded = request.headers.get("x-forwarded-for", "")
-    for part in forwarded.split(","):
-        candidate = part.strip()
-        if candidate:
-            return candidate
+    """提取客户端 IP。
+
+    仅在明确配置 GOTUBE_TRUST_PROXY=1（部署在受信反向代理之后）时才信任
+    X-Forwarded-For 首跳，否则取直连地址，避免伪造 XFF 绕过限流/登录锁定。
+    """
+    if settings.trust_proxy:
+        forwarded = request.headers.get("x-forwarded-for", "")
+        for part in forwarded.split(","):
+            candidate = part.strip()
+            if candidate:
+                return candidate
     client = getattr(request, "client", None)
     return client.host if client else "unknown"
 

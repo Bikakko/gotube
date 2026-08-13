@@ -615,6 +615,29 @@ def resolve_share_token(session: Session, share_token: str) -> tuple[UserVideoIt
     return item, asset
 
 
+def is_hash_shareable(session: Session, file_hash: str) -> bool:
+    """Return True when a hash id maps to an asset with at least one active share.
+
+    Legacy/unindexed assets (not present in media_assets) keep their prior
+    public behavior; tracked assets now require an active, share-enabled owner.
+    """
+    asset = session.query(MediaAsset).filter(MediaAsset.file_hash == file_hash).first()
+    if asset is None:
+        return True
+    return (
+        session.query(UserVideoItem)
+        .join(User, User.id == UserVideoItem.owner_user_id)
+        .filter(
+            UserVideoItem.media_asset_id == asset.id,
+            UserVideoItem.deleted_at.is_(None),
+            UserVideoItem.share_enabled == True,
+            User.is_active == True,
+        )
+        .first()
+        is not None
+    )
+
+
 def _get_visible_item_asset(
     session: Session,
     user: User,

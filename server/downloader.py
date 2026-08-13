@@ -1,12 +1,12 @@
 """
 yt-dlp 下载器封装层
 
-使用文件 SHA256 前 16 位作为文件指纹，确保唯一性。
+使用文件 SHA-256 前 32 位（128-bit）作为文件指纹，确保唯一性。
 下载完成后计算 hash，同 hash 文件自动去重。
 """
 
 import asyncio
-import binascii
+import hashlib
 import ipaddress
 import json
 import logging
@@ -326,7 +326,7 @@ class Downloader:
             新创建的 DownloadTask 对象。
         """
         self._cleanup_stale_tasks()
-        task_id = str(uuid.uuid4())[:8]
+        task_id = uuid.uuid4().hex
         task = DownloadTask(task_id, url, client_id)
         self._tasks[task_id] = task
         return task
@@ -350,25 +350,25 @@ class Downloader:
     @staticmethod
     def compute_file_hash(filepath: str, chunk_size: int = 65536) -> str:
         """
-        计算文件 CRC32，返回 8 位十六进制字符串。
+        计算文件 SHA-256 前 32 位（128-bit），返回 32 位十六进制字符串。
 
-        64KB 分块读取，内存占用极小，计算速度快。
+        64KB 分块读取，内存占用极小，128-bit 强度足以避免误判重复。
 
         Args:
             filepath: 文件路径。
             chunk_size: 每次读取的字节数。
 
         Returns:
-            8 位 CRC32 十六进制字符串。
+            32 位 SHA-256 十六进制字符串。
         """
-        crc = 0
+        digest = hashlib.sha256()
         with open(filepath, "rb") as f:
             while True:
                 chunk = f.read(chunk_size)
                 if not chunk:
                     break
-                crc = binascii.crc32(chunk, crc) & 0xFFFFFFFF
-        return f"{crc:08x}"
+                digest.update(chunk)
+        return digest.hexdigest()[:32]
 
     def _build_file_index_cache(self) -> list[dict]:
         """
@@ -464,7 +464,7 @@ class Downloader:
         根据 hash 前缀从索引中查找已存在的文件。
 
         Args:
-            file_hash: 8 位 hash 前缀。
+            file_hash: 32 位 SHA-256 指纹（兼容旧 8 位 CRC32）。
 
         Returns:
             匹配的文件路径，未找到返回 None。
