@@ -63,39 +63,48 @@ body {
     justify-content: start;
 }
 
-.album-card {
+.card-item {
     position: relative;
-    overflow: visible;
+    display: block;
+    overflow: hidden;
     padding: 10px;
     aspect-ratio: 6 / 4;
     cursor: pointer;
+    text-decoration: none;
     border: 1px solid rgba(214, 228, 255, 0.16);
     border-radius: 40px;
-    background: linear-gradient(180deg, rgba(18, 34, 72, 0.14), rgba(7, 14, 30, 0.1));
+    background: linear-gradient(180deg, rgba(18, 34, 72, 0.18), rgba(7, 14, 30, 0.12));
     box-shadow:
         0 18px 36px rgba(2, 6, 23, 0.14),
         0 0 18px rgba(222, 232, 255, 0.08),
         inset 0 0 0 1px rgba(255, 255, 255, 0.03);
     backdrop-filter: blur(16px) saturate(1.04);
-    transition: transform 0.22s ease, box-shadow 0.22s ease;
+    transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.24s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.24s ease;
 }
 
-.album-card:hover {
-    transform: translateY(-3px) scale(1.012);
+.card-item:hover,
+.card-item:focus-visible {
+    transform: translateY(-4px) scale(1.018);
+    border-color: rgba(214, 228, 255, 0.32);
     box-shadow:
-        0 22px 42px rgba(2, 6, 23, 0.16),
-        0 0 26px rgba(222, 232, 255, 0.12),
-        inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        0 24px 48px rgba(2, 6, 23, 0.24),
+        0 0 28px rgba(222, 232, 255, 0.16),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
-.album-card::before,
-.album-card::after {
+.card-item:focus-visible {
+    outline: 2px solid rgba(147, 197, 253, 0.8);
+    outline-offset: 4px;
+}
+
+.card-item::before,
+.card-item::after {
     content: "";
     position: absolute;
     pointer-events: none;
 }
 
-.album-card::before {
+.card-item::before {
     inset: -18px;
     z-index: -1;
     border-radius: 52px;
@@ -107,102 +116,37 @@ body {
     opacity: 0.72;
 }
 
-.album-card::after {
+.card-item::after {
     inset: 0;
     border-radius: inherit;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(226, 232, 240, 0.03) 26%, rgba(8, 17, 37, 0.12) 100%);
 }
 
-.album-cover {
+.card-media {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 30px;
+    overflow: hidden;
+}
+
+.card-cover {
     width: 100%;
     height: 100%;
     display: block;
     object-fit: cover;
     border-radius: 30px;
+    transition: transform 0.3s ease;
+}
+
+.card-item:hover .card-cover {
+    transform: scale(1.03);
 }
 
 .home-empty {
     padding: 28px 0;
     text-align: center;
     color: #d4def3;
-}
-
-.gallery-modal[hidden] {
-    display: none;
-}
-
-.gallery-modal {
-    position: fixed;
-    inset: 0;
-    z-index: 20;
-}
-
-.gallery-modal-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(4, 10, 21, 0.76);
-    backdrop-filter: blur(20px);
-}
-
-.gallery-modal-panel {
-    position: relative;
-    width: min(1040px, calc(100vw - 28px));
-    margin: 28px auto;
-    padding: 14px;
-    border-radius: 42px;
-    border: 1px solid rgba(220, 232, 255, 0.14);
-    background: linear-gradient(180deg, rgba(14, 27, 58, 0.28), rgba(7, 14, 30, 0.16));
-    box-shadow:
-        0 24px 58px rgba(2, 6, 23, 0.22),
-        0 0 26px rgba(226, 232, 240, 0.12);
-    backdrop-filter: blur(18px);
-}
-
-.modal-stage {
-    display: grid;
-    grid-template-columns: 56px 1fr 56px;
-    gap: 12px;
-    align-items: center;
-}
-
-.modal-image-shell {
-    min-height: min(76vh, 780px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 10px;
-}
-
-.modal-image {
-    width: 100%;
-    max-height: min(76vh, 780px);
-    display: block;
-    object-fit: contain;
-    border-radius: 30px;
-}
-
-.modal-nav,
-.modal-close {
-    border: 1px solid rgba(220, 232, 255, 0.14);
-    border-radius: 18px;
-    background: rgba(18, 34, 72, 0.16);
-    color: #edf3ff;
-    cursor: pointer;
-}
-
-.modal-nav {
-    height: 56px;
-    font-size: 34px;
-}
-
-.modal-close {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 38px;
-    height: 38px;
-    font-size: 24px;
-    line-height: 1;
 }
 
 .secret-entry {
@@ -265,32 +209,14 @@ body {
         width: 100%;
     }
 
-    .album-card {
+    .card-item {
         border-radius: 30px;
         padding: 8px;
     }
 
-    .album-cover {
+    .card-media,
+    .card-cover {
         border-radius: 22px;
-    }
-
-    .gallery-modal-panel {
-        width: min(100vw - 18px, 1040px);
-        margin: 16px auto;
-        border-radius: 30px;
-    }
-
-    .modal-stage {
-        grid-template-columns: 44px 1fr 44px;
-    }
-
-    .modal-nav {
-        height: 44px;
-        font-size: 28px;
-    }
-
-    .modal-image {
-        border-radius: 20px;
     }
 
     .secret-entry img {

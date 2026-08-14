@@ -22,25 +22,11 @@
             </a>
         </header>
 
-        <section class="home-preview" aria-label="Album preview">
-            <div id="albums-grid" class="home-grid"></div>
-            <div id="albums-empty" class="home-empty" hidden>No public images yet.</div>
+        <section class="home-preview" aria-label="Navigation Cards">
+            <div id="cards-grid" class="home-grid"></div>
+            <div id="cards-empty" class="home-empty" hidden>No cards yet.</div>
         </section>
     </main>
-
-    <div id="gallery-modal" class="gallery-modal" hidden>
-        <div class="gallery-modal-backdrop" data-modal-close></div>
-        <div class="gallery-modal-panel" role="dialog" aria-modal="true" aria-label="Image viewer">
-            <button type="button" class="modal-close" id="gallery-modal-close" aria-label="Close">&times;</button>
-            <div class="modal-stage">
-                <button type="button" class="modal-nav prev" id="gallery-prev" aria-label="Previous image">&#8249;</button>
-                <div class="modal-image-shell">
-                    <img id="gallery-modal-image" class="modal-image" alt="">
-                </div>
-                <button type="button" class="modal-nav next" id="gallery-next" aria-label="Next image">&#8250;</button>
-            </div>
-        </div>
-    </div>
 
     <script type="module" src="/static/home/page.js?v={{ASSET_VERSION}}"></script>
 </body>

@@ -1,105 +1,52 @@
 import * as THREE from "/static/shared/vendor/three.module.min.js";
+import { SITE_CONFIG } from "/static/home/config.js";
 
 (function () {
     const goTube = window.GoTube = window.GoTube || {};
     goTube.home = goTube.home || {};
 
-    const state = {
-        albums: [],
-        currentAlbum: null,
-        currentImageIndex: 0,
-    };
-
     const sceneHost = document.getElementById("home-scene");
-    const albumsGrid = document.getElementById("albums-grid");
-    const albumsEmpty = document.getElementById("albums-empty");
-    const modal = document.getElementById("gallery-modal");
-    const modalImage = document.getElementById("gallery-modal-image");
-    const modalClose = document.getElementById("gallery-modal-close");
-    const modalBackdrop = document.querySelector("[data-modal-close]");
-    const prevButton = document.getElementById("gallery-prev");
-    const nextButton = document.getElementById("gallery-next");
+    const cardsGrid = document.getElementById("cards-grid");
+    const cardsEmpty = document.getElementById("cards-empty");
     const secretEntry = document.getElementById("secret-entry");
     const secretEntryImage = document.getElementById("secret-entry-image");
 
     let disposeScene = null;
 
-    async function loadAlbums() {
-        const response = await fetch("/api/gallery/albums");
-        if (!response.ok) {
-            throw new Error("Albums unavailable");
-        }
-        const data = await response.json();
-        state.albums = data.albums || [];
-        renderAlbumCards();
-    }
-
-    function renderAlbumCards() {
-        if (!albumsGrid) return;
-        albumsGrid.replaceChildren();
-        const hasAlbums = state.albums.length > 0;
-        if (albumsEmpty) {
-            albumsEmpty.hidden = hasAlbums;
+    function renderCards() {
+        if (!cardsGrid) return;
+        const cards = SITE_CONFIG.cards || [];
+        if (cardsEmpty) {
+            cardsEmpty.hidden = cards.length > 0;
         }
 
-        state.albums.forEach((album) => {
-            const button = document.createElement("button");
-            button.type = "button";
-            button.className = "album-card";
-            button.addEventListener("click", () => openAlbum(album.slug));
+        cardsGrid.replaceChildren();
+        cards.forEach((card) => {
+            const link = document.createElement("a");
+            link.className = "card-item";
+            link.href = card.linkUrl || "#";
+            link.target = card.target || "_self";
+            if (card.target === "_blank") {
+                link.rel = "noopener noreferrer";
+            }
+            link.setAttribute("aria-label", card.title || "Card Link");
 
-            const image = document.createElement("img");
-            image.className = "album-cover";
-            image.src = album.cover_url;
-            image.alt = "";
+            const media = document.createElement("div");
+            media.className = "card-media";
 
-            button.appendChild(image);
-            albumsGrid.appendChild(button);
+            const cover = document.createElement("img");
+            cover.className = "card-cover";
+            cover.src = card.imageUrl;
+            cover.alt = card.title || "";
+            cover.loading = "lazy";
+
+            media.appendChild(cover);
+            link.appendChild(media);
+            cardsGrid.appendChild(link);
         });
     }
 
-    async function openAlbum(slug) {
-        const response = await fetch(`/api/gallery/albums/${encodeURIComponent(slug)}`);
-        if (!response.ok) {
-            throw new Error("Album unavailable");
-        }
-        state.currentAlbum = await response.json();
-        state.currentImageIndex = 0;
-        renderModalImage();
-        modal.hidden = false;
-        document.body.style.overflow = "hidden";
-    }
-
-    function renderModalImage() {
-        if (!state.currentAlbum || !state.currentAlbum.images?.length) {
-            return;
-        }
-        const currentImage = state.currentAlbum.images[state.currentImageIndex];
-        modalImage.src = currentImage.url;
-        modalImage.alt = "";
-    }
-
-    function showNextImage() {
-        if (!state.currentAlbum?.images?.length) return;
-        state.currentImageIndex = (state.currentImageIndex + 1) % state.currentAlbum.images.length;
-        renderModalImage();
-    }
-
-    function showPrevImage() {
-        if (!state.currentAlbum?.images?.length) return;
-        state.currentImageIndex =
-            (state.currentImageIndex - 1 + state.currentAlbum.images.length) % state.currentAlbum.images.length;
-        renderModalImage();
-    }
-
-    function closeModal() {
-        if (!modal) return;
-        modal.hidden = true;
-        document.body.style.overflow = "";
-    }
-
     goTube.home.ensureScene = ensureScene;
-    goTube.home.closeGalleryModal = closeModal;
     goTube.home.bootstrap = bootstrapHomePage;
 
     function bindSecretEntryImage() {
@@ -108,19 +55,6 @@ import * as THREE from "/static/shared/vendor/three.module.min.js";
             if (fallback && secretEntryImage.src !== fallback) {
                 secretEntryImage.src = fallback;
             }
-        });
-    }
-
-    function bindModalEvents() {
-        modalClose?.addEventListener("click", closeModal);
-        modalBackdrop?.addEventListener("click", closeModal);
-        prevButton?.addEventListener("click", showPrevImage);
-        nextButton?.addEventListener("click", showNextImage);
-        document.addEventListener("keydown", (event) => {
-            if (!modal || modal.hidden) return;
-            if (event.key === "Escape") closeModal();
-            if (event.key === "ArrowLeft") showPrevImage();
-            if (event.key === "ArrowRight") showNextImage();
         });
     }
 
@@ -137,13 +71,8 @@ import * as THREE from "/static/shared/vendor/three.module.min.js";
 
     function bootstrapHomePage() {
         bindSecretEntryImage();
-        bindModalEvents();
         bindSceneLifecycle();
-        loadAlbums().catch(() => {
-            if (albumsEmpty) {
-                albumsEmpty.hidden = false;
-            }
-        });
+        renderCards();
     }
 
     function ensureScene() {
