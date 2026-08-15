@@ -1883,13 +1883,11 @@ a { color: inherit; text-decoration: none; }
 .admin-section,
 .users-container,
 .admin-video-count,
-.admin-topbar,
 .system-log-panel,
 .cookie-status-panel,
 .cookie-upload-panel,
 .detail-section,
 .detail-hero-copy,
-.batch-bar,
 .overview-card,
 .system-panel-card,
 .modal-content,
@@ -1899,11 +1897,17 @@ a { color: inherit; text-decoration: none; }
 .empty-state-card,
 .loading-card,
 .error-card,
-.dropdown-menu,
-.custom-dropdown-menu,
 .user-identity-card,
 .video-card {
     position: relative;
+    isolation: isolate;
+}
+/* 已自带定位(sticky/fixed/absolute)的玻璃组件：只补 isolation，
+   不覆盖 position，否则会破坏下拉菜单浮层与顶栏吸顶布局 */
+.admin-topbar,
+.dropdown-menu,
+.custom-dropdown-menu,
+.batch-bar {
     isolation: isolate;
 }
 .filters::before,
