@@ -54,7 +54,7 @@
     --chip-bg: rgba(222, 232, 255, 0.04);
     --chip-bg-hover: rgba(222, 232, 255, 0.09);
     --chip-border: rgba(222, 232, 255, 0.10);
-    --input-bg: rgba(8, 14, 28, 0.62);
+    --input-bg: rgba(8, 14, 28, 0.88);
     --veil-bg: rgba(8, 14, 28, 0.74);
     --card-a: rgba(16, 24, 44, 0.92);
     --card-b: rgba(10, 16, 32, 0.92);
@@ -113,6 +113,10 @@
     --code-bg: rgba(6, 12, 24, 0.86);
     --code-text: var(--text);
     --thumb-placeholder: #2b3452;
+
+    /* 性能优化：按钮/分页等小件的实心基色，替代原 半透明背景+backdrop-filter */
+    --chip-solid: #1a2444;
+    --chip-solid-hover: #253258;
 }
 
 :root[data-theme="light"] {
@@ -150,12 +154,12 @@
     --chip-bg: rgba(255, 255, 255, 0.45);
     --chip-bg-hover: rgba(255, 255, 255, 0.72);
     --chip-border: rgba(255, 255, 255, 0.70);
-    --input-bg: rgba(255, 255, 255, 0.62);
+    --input-bg: rgba(255, 255, 255, 0.90);
     --veil-bg: rgba(255, 255, 255, 0.78);
-    --card-a: rgba(255, 255, 255, 0.62);
-    --card-b: rgba(255, 255, 255, 0.44);
-    --card-a-hover: rgba(255, 255, 255, 0.74);
-    --card-b-hover: rgba(255, 255, 255, 0.55);
+    --card-a: rgba(255, 255, 255, 0.90);
+    --card-b: rgba(255, 255, 255, 0.86);
+    --card-a-hover: rgba(255, 255, 255, 0.93);
+    --card-b-hover: rgba(255, 255, 255, 0.89);
     --thumb-a: #e6ecfa;
     --thumb-b: #d7e0f4;
     --thumb-empty-a: #eef2fc;
@@ -209,6 +213,10 @@
     --code-bg: rgba(38, 48, 84, 0.9);
     --code-text: #e8edfb;
     --thumb-placeholder: #cdd7ee;
+
+    /* 性能优化：按钮/分页等小件的实心基色，替代原 半透明背景+backdrop-filter */
+    --chip-solid: #ffffff;
+    --chip-solid-hover: #e9eefb;
 }
 
 /* ───────────────────────── 基础 ───────────────────────── */
@@ -238,7 +246,6 @@ body::before {
         radial-gradient(34% 38% at 2% 46%, var(--blob-5), transparent 70%),
         radial-gradient(36% 40% at 98% 42%, var(--blob-6), transparent 70%);
     filter: blur(56px);
-    animation: ambientDrift 26s ease-in-out infinite alternate;
 }
 /* 全局细噪点：让磨砂玻璃的颗粒感可被感知 */
 body::after {
@@ -249,10 +256,6 @@ body::after {
     pointer-events: none;
     background-image: var(--noise);
     opacity: var(--grain-opacity);
-}
-@keyframes ambientDrift {
-    from { transform: translate3d(0, 0, 0) scale(1); }
-    to { transform: translate3d(0, -26px, 0) scale(1.06); }
 }
 a { color: inherit; text-decoration: none; }
 
@@ -301,8 +304,6 @@ a { color: inherit; text-decoration: none; }
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s ease;
-    -webkit-backdrop-filter: blur(14px) saturate(1.5);
-    backdrop-filter: blur(14px) saturate(1.5);
     box-shadow: inset 0 1px 0 var(--glass-highlight);
 }
 .btn-primary {
@@ -316,21 +317,21 @@ a { color: inherit; text-decoration: none; }
     color: var(--primary-btn-text);
 }
 .btn-secondary {
-    background: var(--surface);
+    background: var(--chip-solid);
     color: var(--text);
     border: 1px solid var(--border);
 }
 .btn-secondary:hover {
-    background: var(--surface-hover);
+    background: var(--chip-solid-hover);
     border-color: var(--border-strong);
 }
 .nav-tab.active { border-color: var(--accent-soft); color: var(--accent); background: var(--accent-tint); }
 .btn-danger {
-    background: var(--danger-bg);
+    background: linear-gradient(var(--danger-bg), var(--danger-bg)), var(--chip-solid);
     color: var(--danger);
     border-color: rgba(255, 107, 120, 0.28);
 }
-.btn-danger:hover { background: rgba(255, 107, 120, 0.22); }
+.btn-danger:hover { background: linear-gradient(rgba(255, 107, 120, 0.22), rgba(255, 107, 120, 0.22)), var(--chip-solid); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ───────────────────────── 筛选栏 ───────────────────────── */
@@ -388,8 +389,6 @@ a { color: inherit; text-decoration: none; }
     border-radius: var(--radius-sm);
     font-size: 14px;
     min-width: 200px;
-    -webkit-backdrop-filter: blur(10px) saturate(1.4);
-    backdrop-filter: blur(10px) saturate(1.4);
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .filter-select:focus,
@@ -447,8 +446,6 @@ a { color: inherit; text-decoration: none; }
     transition: transform 0.28s var(--motion-snappy), box-shadow 0.28s var(--motion-smooth), border-color 0.28s var(--motion-smooth), background 0.28s var(--motion-smooth);
     position: relative;
     box-shadow: var(--shadow-md), inset 0 1px 0 var(--glass-highlight);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.8) brightness(1.03);
-    backdrop-filter: blur(var(--glass-blur)) saturate(1.8) brightness(1.03);
     cursor: pointer;
 }
 .video-card:hover {
@@ -471,8 +468,6 @@ a { color: inherit; text-decoration: none; }
     font-weight: 600;
     line-height: 1;
     border: 1px solid rgba(255, 255, 255, 0.16);
-    -webkit-backdrop-filter: blur(8px) saturate(1.4);
-    backdrop-filter: blur(8px) saturate(1.4);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
 }
 .empty-thumb { width: 100%; height: 100%; background: linear-gradient(180deg, var(--thumb-empty-a), var(--thumb-empty-b)); display: flex; align-items: center; justify-content: center; font-size: 36px; }
@@ -532,8 +527,6 @@ a { color: inherit; text-decoration: none; }
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    -webkit-backdrop-filter: blur(14px) saturate(1.5);
-    backdrop-filter: blur(14px) saturate(1.5);
     transition: background 0.22s var(--motion-smooth), border-color 0.22s var(--motion-smooth), color 0.22s var(--motion-smooth), transform 0.22s var(--motion-snappy);
 }
 .video-select-toggle:hover {
@@ -571,17 +564,15 @@ a { color: inherit; text-decoration: none; }
 .page-btn {
     padding: 8px 12px;
     border: 1px solid var(--border);
-    background: var(--surface);
+    background: var(--chip-solid);
     color: var(--text);
     border-radius: var(--radius-sm);
     cursor: pointer;
-    -webkit-backdrop-filter: blur(12px) saturate(1.5);
-    backdrop-filter: blur(12px) saturate(1.5);
     box-shadow: inset 0 1px 0 var(--glass-highlight);
     transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s var(--motion-snappy);
 }
-.page-btn:hover { background: var(--surface-hover); transform: translateY(-1px); }
-.page-btn.active { background: var(--accent-tint); border-color: var(--accent-tint-border); color: var(--accent); }
+.page-btn:hover { background: var(--chip-solid-hover); transform: translateY(-1px); }
+.page-btn.active { background: linear-gradient(var(--accent-tint), var(--accent-tint)), var(--chip-solid); border-color: var(--accent-tint-border); color: var(--accent); }
 .page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 .page-info { font-size: 13px; color: var(--text-sec); }
 
@@ -593,7 +584,7 @@ a { color: inherit; text-decoration: none; }
 /* ───────────────────────── 模态框 ───────────────────────── */
 .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--overlay); z-index: 1000; align-items: center; justify-content: center; -webkit-backdrop-filter: blur(16px) saturate(1.4); backdrop-filter: blur(16px) saturate(1.4); animation: modalFadeIn 0.28s var(--motion-smooth); }
 .modal.active { display: flex; }
-.modal-content { width: 90%; max-width: 1000px; background: var(--surface-strong); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; max-height: 90vh; display: flex; flex-direction: column; box-shadow: var(--shadow-lg), inset 0 1px 0 var(--glass-highlight); -webkit-backdrop-filter: blur(34px) saturate(1.8) brightness(1.03); backdrop-filter: blur(34px) saturate(1.8) brightness(1.03); animation: modalContentIn 0.32s var(--motion-snappy); transform-origin: center top; }
+.modal-content { width: 90%; max-width: 1000px; background: var(--surface-strong); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; max-height: 90vh; display: flex; flex-direction: column; box-shadow: var(--shadow-lg), inset 0 1px 0 var(--glass-highlight); animation: modalContentIn 0.32s var(--motion-snappy); transform-origin: center top; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--hairline); }
 .modal-title { font-size: 16px; flex: 1; margin-right: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .modal-close { background: var(--chip-bg); border: 1px solid var(--chip-border); color: var(--text); font-size: 24px; cursor: pointer; padding: 0 8px; border-radius: var(--radius-sm); transition: background 0.2s ease, color 0.2s ease; }
