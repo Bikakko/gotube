@@ -30,7 +30,7 @@ echo "      GoTube v${GT_VERSION} 一键安装脚本        "
 echo "========================================="
 
 # 1. 检查并安装依赖
-echo "[1/4] 检查并安装系统依赖 (git, python3, ffmpeg, nodejs)..."
+echo "[1/5] 检查并安装系统依赖 (git, python3, ffmpeg, nodejs)..."
 install_pkgs() {
     if command -v apt-get >/dev/null 2>&1; then
         run_sudo apt-get install -y -qq "$@"
@@ -85,23 +85,24 @@ sync_code_into() {
 }
 
 if [ -f "gotube.sh" ] && [ -d "server" ]; then
-    echo "[2/4] 检测到已有安装，执行更新流程（.env 配置将保留，并转为纯代码部署）..."
+    echo "[2/5] 检测到已有安装，执行更新流程（.env 配置将保留，并转为纯代码部署）..."
     ./gotube.sh upgrade
 elif [ -f "${GOTUBE_INSTALL_DIR:-gotube}/gotube.sh" ] && [ -d "${GOTUBE_INSTALL_DIR:-gotube}/server" ]; then
     INSTALL_DIR="${GOTUBE_INSTALL_DIR:-gotube}"
-    echo "[2/4] 检测到已有目录 $INSTALL_DIR，执行更新流程（.env 配置将保留）..."
+    echo "[2/5] 检测到已有目录 $INSTALL_DIR，执行更新流程（.env 配置将保留）..."
     cd "$INSTALL_DIR"
     ./gotube.sh upgrade
 else
     INSTALL_DIR="${GOTUBE_INSTALL_DIR:-gotube}"
-    echo "[2/4] 获取 GoTube 代码（纯代码部署，不含 .git）: $GOTUBE_REPO_URL"
+    NEW_INSTALL=1
+    echo "[2/5] 获取 GoTube 代码（纯代码部署，不含 .git）: $GOTUBE_REPO_URL"
     sync_code_into "$INSTALL_DIR" || exit 1
     cd "$INSTALL_DIR"
 fi
 
 # 3. 配置生成
 if [ ! -f .env ]; then
-    echo "[3/4] 首次运行，生成初始配置 (.env)..."
+    echo "[3/5] 首次运行，生成初始配置 (.env)..."
     cp .env.example .env
     # 随机生成初始管理员密码
     RAND_PASS=$(LC_ALL=C tr -dc A-Za-z0-9 </dev/urandom | head -c 12 2>/dev/null || echo "admin123456")
@@ -117,8 +118,55 @@ if [ ! -f .env ]; then
 fi
 
 # 4. 初始化运行环境
-echo "[4/4] 初始化 Python 虚拟环境与编译前端..."
+echo "[4/5] 初始化 Python 虚拟环境与编译前端..."
 ./gotube.sh init
+
+# 5. 服务托管：新装默认用户级 systemd 服务（日常 systemctl --user 管理，无需 root）；
+#    已有安装保持原托管方式不变，仅在检测到旧式 root 系统服务时打印迁移提示
+echo "[5/5] 配置服务托管..."
+if [ "${NEW_INSTALL:-0}" = "1" ]; then
+    if command -v systemctl &>/dev/null && systemctl --user daemon-reload 2>/dev/null; then
+        USER_UNIT_DIR="$HOME/.config/systemd/user"
+        mkdir -p "$USER_UNIT_DIR"
+        cat > "$USER_UNIT_DIR/gotube.service" <<EOF
+# GoTube systemd 用户服务 —— 由 scripts/install.sh 生成，以当前用户运行
+[Unit]
+Description=GoTube Service (user)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$(pwd)
+EnvironmentFile=$(pwd)/.env
+ExecStart=$(pwd)/venv/bin/python -m uvicorn server.main:app --host \${GOTUBE_HOST} --port \${GOTUBE_PORT}
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
+EOF
+        # linger 保证开机自启且注销后服务不退出（开启需要一次 sudo）
+        if ! loginctl show-user "$(id -un)" 2>/dev/null | grep -q 'Linger=yes'; then
+            run_sudo loginctl enable-linger "$(id -un)" || echo "警告: enable-linger 失败，注销后服务会停止；可稍后手动执行: sudo loginctl enable-linger $(id -un)"
+        fi
+        if systemctl --user daemon-reload && systemctl --user enable --now gotube.service; then
+            echo "  ✓ 用户级服务已启动并设为开机自启: systemctl --user status gotube"
+        else
+            echo "  ✗ 用户服务启动失败，查看日志: journalctl --user -u gotube -n 50；也可手动 ./gotube.sh start"
+        fi
+    else
+        echo "  未检测到可用的 systemd 用户会话，跳过服务安装；可手动 ./gotube.sh start"
+    fi
+else
+    echo "  已有安装：保持现有服务托管方式不变"
+    if command -v systemctl &>/dev/null \
+        && systemctl list-unit-files gotube.service 2>/dev/null | grep -q gotube.service \
+        && ! systemctl --user list-unit-files gotube.service 2>/dev/null | grep -q gotube.service; then
+        echo "  提示: 检测到旧式系统级 gotube.service（root 运行）。如需收归当前用户，"
+        echo "        参考 deploy/gotube.service.example 中的迁移说明（需一次 sudo）"
+    fi
+fi
 
 GT_VERSION="$(cat VERSION 2>/dev/null || echo "$GT_VERSION")"
 echo "========================================="
@@ -126,9 +174,16 @@ echo "🎉 GoTube v${GT_VERSION} 安装完成！"
 echo ""
 echo "常用操作命令："
 echo "  进项目目录: cd ${INSTALL_DIR:-.}"
-echo "  启动服务  : ./gotube.sh start"
-echo "  停止服务  : ./gotube.sh stop"
-echo "  查看状态  : ./gotube.sh status"
+if [ "${NEW_INSTALL:-0}" = "1" ]; then
+    echo "  启动服务  : systemctl --user start gotube"
+    echo "  停止服务  : systemctl --user stop gotube"
+    echo "  查看状态  : systemctl --user status gotube"
+    echo "  查看日志  : journalctl --user -u gotube -f"
+else
+    echo "  启动服务  : ./gotube.sh start"
+    echo "  停止服务  : ./gotube.sh stop"
+    echo "  查看状态  : ./gotube.sh status"
+fi
 echo ""
 echo "后续更新（任选其一）："
 echo "  ./gotube.sh upgrade                # 备份→拉取→依赖→自动重启"

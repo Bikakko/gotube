@@ -5,7 +5,7 @@
 import { $ } from '../../shared/common.module.js';
 import { state } from './state.js';
 import { loadVideos } from './data.js';
-import { updateOwnerDropdownOptions, renderVideoGrid, updateBatchBar, renderOverviewSection, renderSystemSection, setCustomDropdownValue, hideAllCustomDropdowns } from './render.js';
+import { updateOwnerDropdownOptions, updateBatchBar, renderOverviewSection, renderSystemSection, setCustomDropdownValue, hideAllCustomDropdowns } from './render.js';
 import { switchAdminView, showVideoManagement, showUserManagement } from './users.js';
 import { showInviteManagement } from './invites.js';
 import { loadSystemPage } from './system.js';
@@ -62,6 +62,18 @@ function toggleVideoSelection(filename, selected) {
     updateBatchBar();
 }
 
+/**
+ * 就地同步所有卡片的"选择"按钮样式。
+ * 性能优化：全选/清空只改按钮文案与 class，不再销毁重建整个视频网格。
+ */
+function syncVideoSelectToggles() {
+    document.querySelectorAll('.video-select-toggle').forEach((btn) => {
+        const selected = state.selectedVideos.has(btn.dataset.filename);
+        btn.textContent = selected ? '已选中' : '选择';
+        btn.classList.toggle('selected', selected);
+    });
+}
+
 function toggleSelectAll(selectAll) {
     if (selectAll) {
         state.filteredVideos.forEach(video => {
@@ -74,7 +86,7 @@ function toggleSelectAll(selectAll) {
     }
     updateSelectAllCheckbox();
     updateBatchBar();
-    renderVideoGrid();
+    syncVideoSelectToggles();
 }
 
 function updateSelectAllCheckbox() {
@@ -103,7 +115,7 @@ function clearSelection() {
     state.selectedVideos.clear();
     updateSelectAllCheckbox();
     updateBatchBar();
-    renderVideoGrid();
+    syncVideoSelectToggles();
 }
 
 function toggleDropdown(menuId) {

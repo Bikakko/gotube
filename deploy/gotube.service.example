@@ -1,7 +1,14 @@
-# GoTube systemd 服务模板
+# GoTube systemd 服务模板（用户级，推荐）
 #
-# 使用前请把下面占位符全部替换为实际部署目录（模板不写死任何安装路径）：
-#   <GOTUBE_DIR>  实际部署目录，如 /root/gotube
+# 以部署用户身份运行，日常管理全程无需 root：
+#   systemctl --user start/stop/restart/status gotube
+#   journalctl --user -u gotube -f
+#
+# 手动安装步骤（以部署用户执行，把 <GOTUBE_DIR> 替换为实际部署目录）：
+#   1. mkdir -p ~/.config/systemd/user
+#   2. 将本模板替换占位符后保存为 ~/.config/systemd/user/gotube.service
+#   3. sudo loginctl enable-linger $(id -un)   # 一次性：开机自启且注销后不退出
+#   4. systemctl --user daemon-reload && systemctl --user enable --now gotube
 #
 # 说明：
 # - 采用 Type=simple + venv 内 python 直跑 uvicorn（依赖装在项目 venv，
@@ -9,18 +16,23 @@
 #   但 uvicorn 的监听地址必须显式传入：通过 EnvironmentFile 引入 .env
 #   后在 ExecStart 中用 ${GOTUBE_HOST}/${GOTUBE_PORT} 展开，否则
 #   uvicorn 默认只监听 127.0.0.1:8000，外部无法访问。
-# - 生产环境启停一律 systemctl start/stop/restart gotube，
+# - scripts/install.sh 全新安装时会自动完成上述服务安装；手动部署才需要本模板。
+# - 生产环境启停一律 systemctl --user start/stop/restart gotube，
 #   不要手动 ./gotube.sh start（脚本检测到本服务 active 时会拒绝启动，
 #   防止 kill 掉 systemd 托管进程后裸起野进程）。
+#
+# ── 从旧式 root 系统服务迁移（/etc/systemd/system/gotube.service, User=root）──
+#   sudo systemctl disable --now gotube                       # 停用旧服务（短暂下线）
+#   sudo rm /etc/systemd/system/gotube.service && sudo systemctl daemon-reload
+#   sudo chown -R <部署用户>:<部署用户组> <GOTUBE_DIR>          # 收回被 root 写入的文件
+#   然后按上面的手动安装步骤 1-4 装用户级服务
 
 [Unit]
-Description=GoTube Service
+Description=GoTube Service (user)
 After=network.target
 
 [Service]
 Type=simple
-User=root
-Group=root
 WorkingDirectory=<GOTUBE_DIR>
 EnvironmentFile=<GOTUBE_DIR>/.env
 ExecStart=<GOTUBE_DIR>/venv/bin/python -m uvicorn server.main:app --host ${GOTUBE_HOST} --port ${GOTUBE_PORT}
@@ -29,4 +41,4 @@ RestartSec=5
 TimeoutStopSec=30
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target

@@ -75,6 +75,7 @@ dist/
 build/
 node_modules/
 www_dist/
+www_dist_root_old/
 desktop/
 
 # 操作系统文件

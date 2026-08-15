@@ -99,19 +99,29 @@ force_kill_port() {
     return 1
 }
 
-# 检测当前是否由 systemd 托管（gotube.service active）。
+# 检测当前是否由 systemd 托管（系统或用户级 gotube.service active）。
 # 生产约定：systemd 托管下启停一律走 systemctl，手动跑本脚本的
 # start/stop 会 kill 掉 systemd 进程并裸起野进程，造成孤儿进程事故。
 systemd_managed() {
     [ "${GOTUBE_ALLOW_SYSTEMD_OVERRIDE:-0}" = "1" ] && return 1
     command -v systemctl &>/dev/null || return 1
-    systemctl is-active --quiet gotube 2>/dev/null
+    systemctl is-active --quiet gotube 2>/dev/null && return 0
+    systemctl --user is-active --quiet gotube 2>/dev/null
+}
+
+# 返回当前托管 gotube 的 systemctl 命令前缀（用户级服务优先，其次系统级）
+systemctl_cmd() {
+    if systemctl --user list-unit-files gotube.service 2>/dev/null | grep -q '^gotube\.service'; then
+        echo "systemctl --user"
+    else
+        echo "systemctl"
+    fi
 }
 
 systemd_guard() {
     if systemd_managed; then
         echo -e "${RED}✗ 检测到 gotube 服务正由 systemd 托管${NC}"
-        echo -e "${YELLOW}生产环境启停请改用: systemctl ${1:-restart} gotube${NC}"
+        echo -e "${YELLOW}生产环境启停请改用: $(systemctl_cmd) ${1:-restart} gotube${NC}"
         echo -e "  手动 ./gotube.sh ${2:-start} 会杀掉 systemd 进程并裸起野进程（曾导致 502 事故）"
         echo -e "  确需绕过时: GOTUBE_ALLOW_SYSTEMD_OVERRIDE=1 $0 ${2:-start}"
         exit 1
@@ -235,7 +245,11 @@ status() {
     if systemd_managed; then
         echo -e "${GREEN}● 服务器运行中（systemd 托管）${NC}"
         echo -e "  访问地址: http://$GOTUBE_HOST:$PORT"
-        echo -e "  详情/日志: systemctl status gotube / journalctl -u gotube -f"
+        if [ "$(systemctl_cmd)" = "systemctl" ]; then
+            echo -e "  详情/日志: systemctl status gotube / journalctl -u gotube -f"
+        else
+            echo -e "  详情/日志: systemctl --user status gotube / journalctl --user -u gotube -f"
+        fi
         return
     fi
 
@@ -373,11 +387,13 @@ upgrade() {
     # [6/6] 升级前在运行则自动重启
     echo -e "${YELLOW}[6/6] 完成收尾...${NC}"
     if systemd_managed; then
-        echo "  检测到 systemd 托管，使用 systemctl 重启..."
-        if systemctl restart gotube; then
+        local ctl
+        ctl="$(systemctl_cmd)"
+        echo "  检测到 systemd 托管，使用 ${ctl} 重启..."
+        if ${ctl} restart gotube; then
             echo -e "${GREEN}✓ 服务已由 systemd 重启${NC}"
         else
-            echo -e "${RED}✗ systemctl restart gotube 失败，请检查: systemctl status gotube${NC}"
+            echo -e "${RED}✗ ${ctl} restart gotube 失败，请检查: ${ctl} status gotube${NC}"
             exit 1
         fi
     elif [ "$was_running" = "1" ]; then
@@ -385,8 +401,8 @@ upgrade() {
         stop
         sleep 1
         start
-    elif command -v systemctl &>/dev/null && systemctl list-unit-files gotube.service 2>/dev/null | grep -q gotube.service; then
-        echo -e "${YELLOW}提示: 检测到 gotube.service（当前未运行），执行 systemctl start gotube 启动${NC}"
+    elif command -v systemctl &>/dev/null && { systemctl list-unit-files gotube.service 2>/dev/null | grep -q gotube.service || systemctl --user list-unit-files gotube.service 2>/dev/null | grep -q gotube.service; }; then
+        echo -e "${YELLOW}提示: 检测到 gotube.service（当前未运行），执行 $(systemctl_cmd) start gotube 启动${NC}"
     else
         echo -e "${YELLOW}提示: 执行 $0 start 启动服务${NC}"
     fi
