@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GoTube 视频库</title>
+    <script>
+        // 主题引导：在样式生效前应用已保存的主题，避免闪烁（默认夜幕玻璃）
+        (function () {
+            var theme = 'dark';
+            try { theme = localStorage.getItem('gotube_admin_theme') === 'light' ? 'light' : 'dark'; } catch (e) {}
+            document.documentElement.dataset.theme = theme;
+        })();
+    </script>
     <link rel="icon" href="/static/home/favicon.jpg" type="image/jpeg">
     <link rel="stylesheet" href="/static/admin/css/admin.css?v={{ASSET_VERSION}}">
     <script>
@@ -15,7 +23,10 @@
         <header class="admin-topbar">
             <div class="admin-topbar-inner">
                 <a href="#" id="admin-home-link" class="admin-brand" title="返回下载页">GoTube Admin</a>
-                <div id="admin-user-brief" class="admin-user-brief"></div>
+                <div class="admin-topbar-side">
+                    <button type="button" id="admin-theme-toggle" class="admin-theme-btn" aria-label="切换明暗主题"><span id="admin-theme-icon">☾</span></button>
+                    <div id="admin-user-brief" class="admin-user-brief"></div>
+                </div>
             </div>
             <nav class="admin-topnav" aria-label="后台导航">
                 <button type="button" class="admin-topnav-btn" data-admin-nav="overview">概览</button>
