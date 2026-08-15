@@ -18,6 +18,7 @@ from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 
 from .api import get_queue_manager
 from .api import router as api_router
@@ -193,6 +194,46 @@ async def harden_requests(request: Request, call_next) -> Response:
     return response
 
 
+# 静态资源强缓存时长（1 年）。静态资源 URL 均带 ?v={{ASSET_VERSION}} 内容哈希
+# 作为缓存破坏参数，内容一变 URL 即变，因此可安全地长缓存/标记 immutable。
+STATIC_IMMUTABLE_MAX_AGE = 365 * 24 * 60 * 60
+
+
+@app.middleware("http")
+async def cache_control_requests(request: Request, call_next) -> Response:
+    """按资源类型设置 Cache-Control，减少重复访问的传输与磁盘开销。
+
+    - 带版本静态资源（/static/*?v=hash）：长期不可变缓存（immutable）
+    - 无版本静态资源（/static/*）：短缓存，配合 Starlette 的 ETag 协商
+    - HTML 页面：no-cache，每次回源校验，保证发布更新即时生效
+    - API 响应：no-store，避免敏感数据落入浏览器/代理缓存
+    - 音视频流：不干预，避免影响 Range 分段加载与拖动 Seek
+    """
+    response = await call_next(request)
+    # 处理方已显式决定缓存策略时不覆盖
+    if "cache-control" in response.headers:
+        return response
+    # 错误响应不设置缓存头
+    if response.status_code >= 400:
+        return response
+
+    path = request.url.path
+    media_type = (response.headers.get("content-type") or "").partition(";")[0].strip().lower()
+
+    if path.startswith("/api/") or path == "/api" or path.startswith(_ADMIN_API_PREFIX):
+        response.headers["Cache-Control"] = "no-store"
+    elif media_type.startswith("video/") or media_type.startswith("audio/"):
+        pass  # 不干预媒体流
+    elif path.startswith("/static/"):
+        if request.query_params.get("v"):
+            response.headers["Cache-Control"] = f"public, max-age={STATIC_IMMUTABLE_MAX_AGE}, immutable"
+        else:
+            response.headers["Cache-Control"] = "public, max-age=300"
+    elif media_type == "text/html":
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 @app.middleware("http")
 async def refresh_session_cookie(request: Request, call_next) -> Response:
     """滑动续期：认证依赖触发 token 续期后，同步刷新 Cookie 过期时间。"""
@@ -202,6 +243,13 @@ async def refresh_session_cookie(request: Request, call_next) -> Response:
         if token:
             set_session_cookie(response, token)
     return response
+
+# GZip 压缩（纯 ASGI 实现，不经 BaseHTTPMiddleware，避免额外缓冲层）。
+# Starlette 默认排除 video/*、audio/* 与 206 Range 响应，因此不影响视频流媒体；
+# 仅压缩 HTML/CSS/JS/JSON 等文本响应，显著降低首屏传输体积。
+# 必须在所有 @app.middleware 装饰器之后注册，使其位于中间件栈最外层，
+# 从而对最终响应体进行压缩。
+app.add_middleware(GZipMiddleware, minimum_size=512, compresslevel=6)
 
 # 挂载 API 路由器
 app.include_router(api_router, prefix="/api")
@@ -213,22 +261,37 @@ app.include_router(admin_api_router, prefix=f"/{settings.hidden_path}/admin/api"
 # ── 辅助函数 ──
 
 
+# 内存缓存：已渲染的 HTML 模板（文件名 -> (mtime, 渲染后内容)）。
+# {{HIDDEN_PATH}}/{{ASSET_VERSION}} 替换结果在进程生命周期内不变，缓存可避免
+# 每次请求重复读盘与字符串替换。以文件 mtime 作为失效键，开发阶段修改
+# www/*.html 仍能即时生效（生产 www_dist 在发布间保持不变）。
+_html_template_cache: dict[str, tuple[float, str]] = {}
+
+
 def _serve_html(filename: str) -> HTMLResponse:
-    """读取并返回 HTML 内容，支持简单的模板变量替换"""
+    """读取并返回 HTML 内容，支持简单的模板变量替换（带内存缓存）"""
     filepath = WWW_DIR / filename
-    if not filepath.exists():
+    try:
+        mtime = filepath.stat().st_mtime
+    except OSError:
         logger.error("HTML 文件不存在: %s", filepath)
         return HTMLResponse("<h1>404 Not Found</h1>", status_code=404)
-    
+
+    cached = _html_template_cache.get(filename)
+    if cached is not None and cached[0] == mtime:
+        return HTMLResponse(cached[1])
+
     try:
         content = filepath.read_text(encoding="utf-8")
         # 注入配置变量，供前端 JS 使用
         content = content.replace("{{HIDDEN_PATH}}", settings.hidden_path)
         content = content.replace("{{ASSET_VERSION}}", settings.asset_version)
-        return HTMLResponse(content)
     except Exception as e:
         logger.error("读取 HTML 失败: %s, 错误: %s", filepath, e)
         return HTMLResponse("<h1>500 Internal Server Error</h1>", status_code=500)
+
+    _html_template_cache[filename] = (mtime, content)
+    return HTMLResponse(content)
 
 
 def _get_queue_manager() -> QueueManager:
