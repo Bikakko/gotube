@@ -1307,7 +1307,9 @@ function isQuotaError(message = '') {
                 position: fixed;
                 inset: 0;
                 z-index: 10001;
-                background: rgba(0, 0, 0, 0.62);
+                background: var(--overlay);
+                -webkit-backdrop-filter: blur(16px) saturate(1.4);
+                backdrop-filter: blur(16px) saturate(1.4);
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -1317,21 +1319,23 @@ function isQuotaError(message = '') {
             const dialog = document.createElement('div');
             dialog.style.cssText = `
                 width: min(420px, 100%);
-                background: #161b22;
-                border: 1px solid #30363d;
-                border-radius: 8px;
-                padding: 20px;
-                color: #f0f6fc;
-                box-shadow: 0 16px 48px rgba(0, 0, 0, 0.36);
+                background: var(--surface-strong);
+                border: 1px solid var(--border);
+                border-radius: var(--radius-lg, 18px);
+                padding: 22px;
+                color: var(--text);
+                box-shadow: var(--shadow-lg, 0 30px 60px -14px rgba(0, 0, 0, 0.6)), inset 0 1px 0 var(--glass-highlight, rgba(255, 255, 255, 0.16));
+                -webkit-backdrop-filter: blur(34px) saturate(1.8) brightness(1.03);
+                backdrop-filter: blur(34px) saturate(1.8) brightness(1.03);
             `;
 
             const title = document.createElement('h3');
             title.textContent = '有下载正在进行';
-            title.style.cssText = 'margin: 0 0 10px; font-size: 18px;';
+            title.style.cssText = 'margin: 0 0 10px; font-size: 18px; color: var(--accent);';
 
             const body = document.createElement('p');
             body.textContent = `当前有 ${count} 个下载任务正在进行。请选择退出方式。`;
-            body.style.cssText = 'margin: 0 0 18px; color: #8b949e; line-height: 1.6;';
+            body.style.cssText = 'margin: 0 0 18px; color: var(--text-sec); line-height: 1.6;';
 
             const actions = document.createElement('div');
             actions.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end;';
@@ -1349,14 +1353,10 @@ function isQuotaError(message = '') {
                 const button = document.createElement('button');
                 button.type = 'button';
                 button.textContent = text;
-                button.style.cssText = `
-                    border: 1px solid ${primary ? '#f85149' : '#30363d'};
-                    background: ${primary ? '#da3633' : '#21262d'};
-                    color: #f0f6fc;
-                    border-radius: 8px;
-                    padding: 9px 12px;
-                    cursor: pointer;
-                `;
+                button.style.cssText = primary
+                    ? `border: 1px solid transparent; background: linear-gradient(135deg, #ff6b78, #d84f63); color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 10px 22px -8px rgba(216, 79, 99, 0.5);`
+                    : `border: 1px solid var(--chip-border, rgba(222, 232, 255, 0.10)); background: var(--chip-bg, rgba(222, 232, 255, 0.04)); color: var(--text); box-shadow: inset 0 1px 0 var(--glass-highlight, rgba(255, 255, 255, 0.16));`;
+                button.style.cssText += 'border-radius: 999px; padding: 9px 16px; cursor: pointer; font-size: 13px; font-weight: 600;';
                 button.addEventListener('click', () => finish(action));
                 actions.appendChild(button);
             };

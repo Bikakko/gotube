@@ -1,9 +1,18 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GoTube - 下载</title>
+    <script>
+        // 主题引导：在样式生效前应用已保存的主题，避免闪烁（默认夜幕玻璃）
+        // 复用 admin 的 storage key，实现下载页与后台主题同步
+        (function () {
+            var theme = 'dark';
+            try { theme = localStorage.getItem('gotube_admin_theme') === 'light' ? 'light' : 'dark'; } catch (e) {}
+            document.documentElement.dataset.theme = theme;
+        })();
+    </script>
     <link rel="icon" href="/static/home/favicon.jpg" type="image/jpeg">
     <link rel="stylesheet" href="/static/download/page.css?v={{ASSET_VERSION}}">
 </head>
@@ -125,6 +134,31 @@
         </div>
     </div>
 
+    <!-- 主题切换按钮（柔光玻璃双主题：夜幕 / 晨雾）-->
+    <button type="button" id="dl-theme-toggle" class="theme-toggle" aria-label="切换明暗主题"><span id="dl-theme-icon">☾</span></button>
+    <script>
+        // 主题切换：复用 admin 的 storage key，跨页同步
+        (function () {
+            var btn = document.getElementById('dl-theme-toggle');
+            var icon = document.getElementById('dl-theme-icon');
+            if (!btn || !icon) return;
+            function currentTheme() {
+                return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+            }
+            function updateIcon() {
+                var t = currentTheme();
+                icon.textContent = t === 'dark' ? '☾' : '☀';
+                btn.title = t === 'dark' ? '切换到晨雾玻璃（浅色）' : '切换到夜幕玻璃（深色）';
+            }
+            btn.addEventListener('click', function () {
+                var next = currentTheme() === 'dark' ? 'light' : 'dark';
+                document.documentElement.dataset.theme = next;
+                try { localStorage.setItem('gotube_admin_theme', next); } catch (e) {}
+                updateIcon();
+            });
+            updateIcon();
+        })();
+    </script>
     <script type="module" src="/static/download/page.js?v={{ASSET_VERSION}}"></script>
 </body>
 </html>
